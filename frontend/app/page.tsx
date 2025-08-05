@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown, Activity, Bell, Settings, User } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface Token {
   symbol: string
@@ -94,9 +95,9 @@ export default function TradingPlatform() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="border-b bg-card">
+      <header className="border-b bg-card dark:bg-card">
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
@@ -119,6 +120,7 @@ export default function TradingPlatform() {
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">
+            <ThemeToggle />
             <Button variant="ghost" size="icon">
               <Bell className="h-4 w-4" />
             </Button>
@@ -146,13 +148,13 @@ export default function TradingPlatform() {
               <div key={item.step} className="flex items-center">
                 <div
                   className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
-                    currentStep >= item.step ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
+                    currentStep >= item.step ? "bg-blue-600 text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
                   }`}
                 >
                   {item.step}
                 </div>
                 <span
-                  className={`ml-2 text-sm font-medium ${currentStep >= item.step ? "text-blue-600" : "text-gray-500"}`}
+                  className={`ml-2 text-sm font-medium ${currentStep >= item.step ? "text-blue-600" : "text-gray-500 dark:text-gray-400"}`}
                 >
                   {item.title}
                 </span>
@@ -184,22 +186,22 @@ export default function TradingPlatform() {
               {/* Token Selection */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">From</Label>
+                  <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">From</Label>
                   <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-2">
                     {filteredTokens.map((token) => (
                       <div
                         key={`from-${token.symbol}`}
                         className={`p-3 rounded-lg cursor-pointer transition-colors ${
                           fromToken?.symbol === token.symbol
-                            ? "bg-blue-50 border-blue-200 border"
-                            : "hover:bg-gray-50 border border-transparent"
+                            ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 border"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent"
                         }`}
                         onClick={() => setFromToken(token)}
                       >
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-medium">{token.symbol}</div>
-                            <div className="text-sm text-gray-500">{token.name}</div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">{token.name}</div>
                           </div>
                           <div className="text-right">
                             <div className="font-medium">${token.price.toLocaleString()}</div>
@@ -215,22 +217,22 @@ export default function TradingPlatform() {
                 </div>
 
                 <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">To</Label>
+                  <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">To</Label>
                   <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-2">
                     {filteredTokens.map((token) => (
                       <div
                         key={`to-${token.symbol}`}
                         className={`p-3 rounded-lg cursor-pointer transition-colors ${
                           toToken?.symbol === token.symbol
-                            ? "bg-blue-50 border-blue-200 border"
-                            : "hover:bg-gray-50 border border-transparent"
+                            ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 border"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent"
                         }`}
                         onClick={() => setToToken(token)}
                       >
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-medium">{token.symbol}</div>
-                            <div className="text-sm text-gray-500">{token.name}</div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">{token.name}</div>
                           </div>
                           <div className="text-right">
                             <div className="font-medium">${token.price.toLocaleString()}</div>
@@ -263,16 +265,16 @@ export default function TradingPlatform() {
 
               {/* Selected Pair Display */}
               {fromToken && toToken && (
-                <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg">
                   <div className="flex items-center justify-center space-x-4">
                     <div className="text-center">
                       <div className="font-medium text-lg">{fromToken.symbol}</div>
-                      <div className="text-sm text-gray-600">{fromToken.name}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">{fromToken.name}</div>
                     </div>
                     <ArrowRight className="w-6 h-6 text-blue-600" />
                     <div className="text-center">
                       <div className="font-medium text-lg">{toToken.symbol}</div>
-                      <div className="text-sm text-gray-600">{toToken.name}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">{toToken.name}</div>
                     </div>
                   </div>
                 </div>
@@ -304,15 +306,15 @@ export default function TradingPlatform() {
                       key={condition.id}
                       className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
                         conditionType === condition.id
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-gray-200 hover:border-gray-300"
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
+                          : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
                       }`}
                       onClick={() => setConditionType(condition.id)}
                     >
                       <div className="flex items-start space-x-3">
                         <div
                           className={`p-2 rounded-lg ${
-                            conditionType === condition.id ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-600"
+                            conditionType === condition.id ? "bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                           }`}
                         >
                           <Icon className="w-5 h-5" />
@@ -326,7 +328,7 @@ export default function TradingPlatform() {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">{condition.description}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{condition.description}</p>
                         </div>
                       </div>
                     </div>
@@ -447,8 +449,8 @@ export default function TradingPlatform() {
                 </div>
               )}
 
-              <div className="bg-yellow-50 p-4 rounded-lg">
-                <h4 className="font-medium text-yellow-800 mb-2">Swap Amount</h4>
+              <div className="bg-yellow-50 dark:bg-yellow-950 p-4 rounded-lg">
+                <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">Swap Amount</h4>
                 <div className="space-y-2">
                   <Label>Amount to swap</Label>
                   <div className="flex space-x-2">
@@ -490,18 +492,18 @@ export default function TradingPlatform() {
               <CardDescription>Review your conditional swap configuration before creating</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg space-y-4">
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Swap Pair</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Swap Pair</h4>
                   <div className="flex items-center space-x-4">
                     <div className="text-center">
                       <div className="font-medium">{fromToken?.symbol}</div>
-                      <div className="text-sm text-gray-600">{fromToken?.name}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">{fromToken?.name}</div>
                     </div>
                     <ArrowRight className="w-4 h-4 text-gray-400" />
                     <div className="text-center">
                       <div className="font-medium">{toToken?.symbol}</div>
-                      <div className="text-sm text-gray-600">{toToken?.name}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">{toToken?.name}</div>
                     </div>
                   </div>
                 </div>
@@ -509,10 +511,10 @@ export default function TradingPlatform() {
                 <Separator />
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Condition</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Condition</h4>
                   <div className="flex items-center space-x-2">
                     <Badge variant="outline">{conditionTypes.find((c) => c.id === conditionType)?.name}</Badge>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
                       {conditionTypes.find((c) => c.id === conditionType)?.description}
                     </span>
                   </div>
@@ -521,8 +523,8 @@ export default function TradingPlatform() {
                 <Separator />
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Estimated Fees</h4>
-                  <div className="text-sm text-gray-600">
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Estimated Fees</h4>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
                     <div className="flex justify-between">
                       <span>Platform Fee:</span>
                       <span>0.1%</span>
