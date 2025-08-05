@@ -12,6 +12,10 @@ dependencies = [
     "uvicorn (>=0.35.0,<0.36.0)"
 ]
 
+[tool.poetry]
+packages = [
+    {include = "app"}
+]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

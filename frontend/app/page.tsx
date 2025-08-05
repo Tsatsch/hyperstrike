@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown, Activity, Bell, Settings, User } from "lucide-react"
+import { WalletButton } from "@/components/WalletButton"
 
 interface Token {
   symbol: string
@@ -124,10 +125,7 @@ export default function TradingPlatform() {
             <Button variant="ghost" size="icon">
               <Settings className="h-4 w-4" />
             </Button>
-            <Button variant="outline" className="hidden sm:flex bg-transparent">
-              <Wallet className="mr-2 h-4 w-4" />
-              Connect Wallet
-            </Button>
+            <WalletButton />
             <Button variant="ghost" size="icon">
               <User className="h-4 w-4" />
             </Button>
