@@ -95,9 +95,9 @@ export default function TradingPlatform() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card dark:bg-card">
+      <header className="border-b bg-card">
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
@@ -105,16 +105,16 @@ export default function TradingPlatform() {
               <span className="text-xl font-bold">HyperTrade</span>
             </div>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
-              <a href="#" className="font-medium">
+              <a href="#" className="font-medium text-primary">
                 Trade
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground">
+              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
                 Portfolio
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground">
+              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
                 Markets
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground">
+              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
                 Analytics
               </a>
             </nav>
@@ -147,18 +147,22 @@ export default function TradingPlatform() {
             ].map((item, index) => (
               <div key={item.step} className="flex items-center">
                 <div
-                  className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
-                    currentStep >= item.step ? "bg-blue-600 text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                  className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-all ${
+                    currentStep >= item.step 
+                      ? "bg-primary text-primary-foreground shadow-lg" 
+                      : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {item.step}
                 </div>
                 <span
-                  className={`ml-2 text-sm font-medium ${currentStep >= item.step ? "text-blue-600" : "text-gray-500 dark:text-gray-400"}`}
+                  className={`ml-2 text-sm font-medium transition-colors ${
+                    currentStep >= item.step ? "text-primary" : "text-muted-foreground"
+                  }`}
                 >
                   {item.title}
                 </span>
-                {index < 3 && <ArrowRight className="w-4 h-4 mx-4 text-gray-400" />}
+                {index < 3 && <ArrowRight className="w-4 h-4 mx-4 text-muted-foreground" />}
               </div>
             ))}
           </div>
@@ -166,45 +170,45 @@ export default function TradingPlatform() {
 
         {/* Step 1: Choose Swap Pair */}
         {currentStep === 1 && (
-          <Card className="max-w-2xl mx-auto">
+          <Card className="max-w-2xl mx-auto border-border/50 shadow-lg">
             <CardHeader>
-              <CardTitle>Choose Swap Pair</CardTitle>
+              <CardTitle className="text-foreground">Choose Swap Pair</CardTitle>
               <CardDescription>Select the tokens you want to swap when your condition is met</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Search */}
               <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search tokens..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 border-border/50 focus:ring-primary/20"
                 />
               </div>
 
               {/* Token Selection */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">From</Label>
-                  <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-2">
+                  <Label className="text-sm font-medium text-foreground mb-2 block">From</Label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto border border-border/50 rounded-lg p-2 bg-card">
                     {filteredTokens.map((token) => (
                       <div
                         key={`from-${token.symbol}`}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                        className={`p-3 rounded-lg cursor-pointer transition-all ${
                           fromToken?.symbol === token.symbol
-                            ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 border"
-                            : "hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent"
+                            ? "bg-primary/10 border-primary/30 border shadow-sm"
+                            : "hover:bg-accent/50 border border-transparent hover:border-border/50"
                         }`}
                         onClick={() => setFromToken(token)}
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <div className="font-medium">{token.symbol}</div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400">{token.name}</div>
+                            <div className="font-medium text-foreground">{token.symbol}</div>
+                            <div className="text-sm text-muted-foreground">{token.name}</div>
                           </div>
                           <div className="text-right">
-                            <div className="font-medium">${token.price.toLocaleString()}</div>
+                            <div className="font-medium text-foreground">${token.price.toLocaleString()}</div>
                             <div className={`text-sm ${token.change24h >= 0 ? "text-green-600" : "text-red-600"}`}>
                               {token.change24h >= 0 ? "+" : ""}
                               {token.change24h}%
@@ -217,25 +221,25 @@ export default function TradingPlatform() {
                 </div>
 
                 <div>
-                  <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">To</Label>
-                  <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-2">
+                  <Label className="text-sm font-medium text-foreground mb-2 block">To</Label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto border border-border/50 rounded-lg p-2 bg-card">
                     {filteredTokens.map((token) => (
                       <div
                         key={`to-${token.symbol}`}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                        className={`p-3 rounded-lg cursor-pointer transition-all ${
                           toToken?.symbol === token.symbol
-                            ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 border"
-                            : "hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent"
+                            ? "bg-primary/10 border-primary/30 border shadow-sm"
+                            : "hover:bg-accent/50 border border-transparent hover:border-border/50"
                         }`}
                         onClick={() => setToToken(token)}
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <div className="font-medium">{token.symbol}</div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400">{token.name}</div>
+                            <div className="font-medium text-foreground">{token.symbol}</div>
+                            <div className="text-sm text-muted-foreground">{token.name}</div>
                           </div>
                           <div className="text-right">
-                            <div className="font-medium">${token.price.toLocaleString()}</div>
+                            <div className="font-medium text-foreground">${token.price.toLocaleString()}</div>
                             <div className={`text-sm ${token.change24h >= 0 ? "text-green-600" : "text-red-600"}`}>
                               {token.change24h >= 0 ? "+" : ""}
                               {token.change24h}%
@@ -255,7 +259,7 @@ export default function TradingPlatform() {
                     variant="outline"
                     size="sm"
                     onClick={handleSwapTokens}
-                    className="flex items-center space-x-2 bg-transparent"
+                    className="flex items-center space-x-2 border-primary/30 text-primary hover:bg-primary/10"
                   >
                     <ArrowUpDown className="w-4 h-4" />
                     <span>Swap</span>
@@ -265,23 +269,27 @@ export default function TradingPlatform() {
 
               {/* Selected Pair Display */}
               {fromToken && toToken && (
-                <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg">
+                <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg">
                   <div className="flex items-center justify-center space-x-4">
                     <div className="text-center">
-                      <div className="font-medium text-lg">{fromToken.symbol}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">{fromToken.name}</div>
+                      <div className="font-medium text-lg text-foreground">{fromToken.symbol}</div>
+                      <div className="text-sm text-muted-foreground">{fromToken.name}</div>
                     </div>
-                    <ArrowRight className="w-6 h-6 text-blue-600" />
+                    <ArrowRight className="w-6 h-6 text-primary" />
                     <div className="text-center">
-                      <div className="font-medium text-lg">{toToken.symbol}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">{toToken.name}</div>
+                      <div className="font-medium text-lg text-foreground">{toToken.symbol}</div>
+                      <div className="text-sm text-muted-foreground">{toToken.name}</div>
                     </div>
                   </div>
                 </div>
               )}
 
               <div className="flex justify-end">
-                <Button onClick={() => setCurrentStep(2)} disabled={!fromToken || !toToken}>
+                <Button 
+                  onClick={() => setCurrentStep(2)} 
+                  disabled={!fromToken || !toToken}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                >
                   Continue
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
@@ -292,9 +300,9 @@ export default function TradingPlatform() {
 
         {/* Step 2: Choose Condition Type */}
         {currentStep === 2 && (
-          <Card className="max-w-4xl mx-auto">
+          <Card className="max-w-4xl mx-auto border-border/50 shadow-lg">
             <CardHeader>
-              <CardTitle>Choose Condition Type</CardTitle>
+              <CardTitle className="text-foreground">Choose Condition Type</CardTitle>
               <CardDescription>Select the type of condition that will trigger your swap</CardDescription>
             </CardHeader>
             <CardContent>
@@ -306,29 +314,31 @@ export default function TradingPlatform() {
                       key={condition.id}
                       className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
                         conditionType === condition.id
-                          ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
-                          : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                          ? "border-primary bg-primary/10 shadow-lg"
+                          : "border-border/50 hover:border-primary/30 hover:bg-accent/50"
                       }`}
                       onClick={() => setConditionType(condition.id)}
                     >
                       <div className="flex items-start space-x-3">
                         <div
-                          className={`p-2 rounded-lg ${
-                            conditionType === condition.id ? "bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                          className={`p-2 rounded-lg transition-colors ${
+                            conditionType === condition.id 
+                              ? "bg-primary text-primary-foreground" 
+                              : "bg-muted text-muted-foreground"
                           }`}
                         >
                           <Icon className="w-5 h-5" />
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center space-x-2">
-                            <h3 className="font-medium">{condition.name}</h3>
+                            <h3 className="font-medium text-foreground">{condition.name}</h3>
                             {condition.popular && (
-                              <Badge variant="secondary" className="text-xs">
+                              <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
                                 Popular
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{condition.description}</p>
+                          <p className="text-sm text-muted-foreground mt-1">{condition.description}</p>
                         </div>
                       </div>
                     </div>
@@ -339,10 +349,14 @@ export default function TradingPlatform() {
               <Separator className="my-6" />
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(1)}>
+                <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border/50">
                   Back
                 </Button>
-                <Button onClick={() => setCurrentStep(3)} disabled={!conditionType}>
+                <Button 
+                  onClick={() => setCurrentStep(3)} 
+                  disabled={!conditionType}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                >
                   Continue
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
@@ -353,9 +367,9 @@ export default function TradingPlatform() {
 
         {/* Step 3: Configure Condition */}
         {currentStep === 3 && (
-          <Card className="max-w-2xl mx-auto">
+          <Card className="max-w-2xl mx-auto border-border/50 shadow-lg">
             <CardHeader>
-              <CardTitle>Configure Condition</CardTitle>
+              <CardTitle className="text-foreground">Configure Condition</CardTitle>
               <CardDescription>
                 Set up the specific parameters for your{" "}
                 {conditionTypes.find((c) => c.id === conditionType)?.name.toLowerCase()}
@@ -365,9 +379,9 @@ export default function TradingPlatform() {
               {conditionType === "price_trigger" && (
                 <div className="space-y-4">
                   <div>
-                    <Label>Trigger Token</Label>
+                    <Label className="text-foreground">Trigger Token</Label>
                     <Select>
-                      <SelectTrigger>
+                      <SelectTrigger className="border-border/50 focus:ring-primary/20">
                         <SelectValue placeholder="Select token to monitor" />
                       </SelectTrigger>
                       <SelectContent>
@@ -380,9 +394,9 @@ export default function TradingPlatform() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Condition</Label>
+                    <Label className="text-foreground">Condition</Label>
                     <Select>
-                      <SelectTrigger>
+                      <SelectTrigger className="border-border/50 focus:ring-primary/20">
                         <SelectValue placeholder="Select condition" />
                       </SelectTrigger>
                       <SelectContent>
@@ -394,8 +408,8 @@ export default function TradingPlatform() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Target Value</Label>
-                    <Input placeholder="Enter price or percentage" />
+                    <Label className="text-foreground">Target Value</Label>
+                    <Input placeholder="Enter price or percentage" className="border-border/50 focus:ring-primary/20" />
                   </div>
                 </div>
               )}
@@ -403,13 +417,13 @@ export default function TradingPlatform() {
               {conditionType === "wallet_activity" && (
                 <div className="space-y-4">
                   <div>
-                    <Label>Wallet Address</Label>
-                    <Input placeholder="0x..." />
+                    <Label className="text-foreground">Wallet Address</Label>
+                    <Input placeholder="0x..." className="border-border/50 focus:ring-primary/20" />
                   </div>
                   <div>
-                    <Label>Activity Type</Label>
+                    <Label className="text-foreground">Activity Type</Label>
                     <Select>
-                      <SelectTrigger>
+                      <SelectTrigger className="border-border/50 focus:ring-primary/20">
                         <SelectValue placeholder="Select activity type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -421,8 +435,8 @@ export default function TradingPlatform() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Minimum Amount (Optional)</Label>
-                    <Input placeholder="Minimum transaction amount" />
+                    <Label className="text-foreground">Minimum Amount (Optional)</Label>
+                    <Input placeholder="Minimum transaction amount" className="border-border/50 focus:ring-primary/20" />
                   </div>
                 </div>
               )}
@@ -430,9 +444,9 @@ export default function TradingPlatform() {
               {conditionType === "time_based" && (
                 <div className="space-y-4">
                   <div>
-                    <Label>Trigger Type</Label>
+                    <Label className="text-foreground">Trigger Type</Label>
                     <Select>
-                      <SelectTrigger>
+                      <SelectTrigger className="border-border/50 focus:ring-primary/20">
                         <SelectValue placeholder="Select trigger type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -443,20 +457,20 @@ export default function TradingPlatform() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Date & Time</Label>
-                    <Input type="datetime-local" />
+                    <Label className="text-foreground">Date & Time</Label>
+                    <Input type="datetime-local" className="border-border/50 focus:ring-primary/20" />
                   </div>
                 </div>
               )}
 
-              <div className="bg-yellow-50 dark:bg-yellow-950 p-4 rounded-lg">
-                <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">Swap Amount</h4>
+              <div className="bg-accent/20 border border-accent/30 p-4 rounded-lg">
+                <h4 className="font-medium text-foreground mb-2">Swap Amount</h4>
                 <div className="space-y-2">
-                  <Label>Amount to swap</Label>
+                  <Label className="text-foreground">Amount to swap</Label>
                   <div className="flex space-x-2">
-                    <Input placeholder="0.0" className="flex-1" />
+                    <Input placeholder="0.0" className="flex-1 border-border/50 focus:ring-primary/20" />
                     <Select>
-                      <SelectTrigger className="w-32">
+                      <SelectTrigger className="w-32 border-border/50 focus:ring-primary/20">
                         <SelectValue placeholder="%" />
                       </SelectTrigger>
                       <SelectContent>
@@ -472,10 +486,13 @@ export default function TradingPlatform() {
               </div>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(2)}>
+                <Button variant="outline" onClick={() => setCurrentStep(2)} className="border-border/50">
                   Back
                 </Button>
-                <Button onClick={() => setCurrentStep(4)}>
+                <Button 
+                  onClick={() => setCurrentStep(4)}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                >
                   Continue
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
@@ -486,24 +503,24 @@ export default function TradingPlatform() {
 
         {/* Step 4: Review */}
         {currentStep === 4 && (
-          <Card className="max-w-2xl mx-auto">
+          <Card className="max-w-2xl mx-auto border-border/50 shadow-lg">
             <CardHeader>
-              <CardTitle>Review Conditional Swap</CardTitle>
+              <CardTitle className="text-foreground">Review Conditional Swap</CardTitle>
               <CardDescription>Review your conditional swap configuration before creating</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg space-y-4">
+              <div className="bg-muted/50 border border-border/50 p-4 rounded-lg space-y-4">
                 <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Swap Pair</h4>
+                  <h4 className="font-medium text-foreground mb-2">Swap Pair</h4>
                   <div className="flex items-center space-x-4">
                     <div className="text-center">
-                      <div className="font-medium">{fromToken?.symbol}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">{fromToken?.name}</div>
+                      <div className="font-medium text-foreground">{fromToken?.symbol}</div>
+                      <div className="text-sm text-muted-foreground">{fromToken?.name}</div>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
                     <div className="text-center">
-                      <div className="font-medium">{toToken?.symbol}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">{toToken?.name}</div>
+                      <div className="font-medium text-foreground">{toToken?.symbol}</div>
+                      <div className="text-sm text-muted-foreground">{toToken?.name}</div>
                     </div>
                   </div>
                 </div>
@@ -511,10 +528,12 @@ export default function TradingPlatform() {
                 <Separator />
 
                 <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Condition</h4>
+                  <h4 className="font-medium text-foreground mb-2">Condition</h4>
                   <div className="flex items-center space-x-2">
-                    <Badge variant="outline">{conditionTypes.find((c) => c.id === conditionType)?.name}</Badge>
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                    <Badge variant="outline" className="border-primary/30 text-primary">
+                      {conditionTypes.find((c) => c.id === conditionType)?.name}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
                       {conditionTypes.find((c) => c.id === conditionType)?.description}
                     </span>
                   </div>
@@ -523,8 +542,8 @@ export default function TradingPlatform() {
                 <Separator />
 
                 <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Estimated Fees</h4>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <h4 className="font-medium text-foreground mb-2">Estimated Fees</h4>
+                  <div className="text-sm text-muted-foreground">
                     <div className="flex justify-between">
                       <span>Platform Fee:</span>
                       <span>0.1%</span>
@@ -538,10 +557,12 @@ export default function TradingPlatform() {
               </div>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(3)}>
+                <Button variant="outline" onClick={() => setCurrentStep(3)} className="border-border/50">
                   Back
                 </Button>
-                <Button className="bg-green-600 hover:bg-green-700">Create Conditional Swap</Button>
+                <Button className="bg-green-600 hover:bg-green-700 text-white shadow-lg">
+                  Create Conditional Swap
+                </Button>
               </div>
             </CardContent>
           </Card>
