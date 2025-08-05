@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown } from "lucide-react"
+import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown, Activity, Bell, Settings, User } from "lucide-react"
 
 interface Token {
   symbol: string
@@ -95,22 +95,45 @@ export default function TradingPlatform() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="border-b bg-white">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-gray-900">Hyperliquid Pro</h1>
-              <Badge variant="secondary">Advanced Conditions</Badge>
+      <header className="border-b bg-card">
+        <div className="flex h-16 items-center px-6">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Activity className="h-6 w-6 text-primary" />
+              <span className="text-xl font-bold">HyperTrade</span>
             </div>
-            <div className="flex items-center space-x-4">
-              <Button variant="outline" size="sm">
-                Connect Wallet
-              </Button>
-              <Button size="sm">Portfolio</Button>
-            </div>
+            <nav className="hidden md:flex items-center space-x-6 text-sm">
+              <a href="#" className="font-medium">
+                Trade
+              </a>
+              <a href="#" className="text-muted-foreground hover:text-foreground">
+                Portfolio
+              </a>
+              <a href="#" className="text-muted-foreground hover:text-foreground">
+                Markets
+              </a>
+              <a href="#" className="text-muted-foreground hover:text-foreground">
+                Analytics
+              </a>
+            </nav>
+          </div>
+          <div className="ml-auto flex items-center space-x-4">
+            <Button variant="ghost" size="icon">
+              <Bell className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon">
+              <Settings className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" className="hidden sm:flex bg-transparent">
+              <Wallet className="mr-2 h-4 w-4" />
+              Connect Wallet
+            </Button>
+            <Button variant="ghost" size="icon">
+              <User className="h-4 w-4" />
+            </Button>
           </div>
         </div>
-      </div>
+      </header>
 
       <div className="container mx-auto px-4 py-8">
         {/* Progress Steps */}
