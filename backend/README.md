@@ -5,7 +5,7 @@
 Run the development server using Poetry:
 
 ```bash
-
+poetry run uvicorn app.main:app --reload
 ```
 
 ### Dependency management
