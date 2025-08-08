@@ -36,6 +36,19 @@ function PrivyProviderWithTheme({ children }: { children: React.ReactNode }) {
           accentColor: '#A076F9',
           showWalletLoginFirst: true,
         },
+        embeddedWallets: {
+          createOnLogin: 'users-without-wallets',
+        },
+        externalWallets: {
+          metaMask: {},
+          coinbaseWallet: {},
+          walletConnect: {
+            projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default-project-id',
+          },
+          rainbow: {},
+          trust: {},
+          safe: {},
+        },
       }}
     >
       {children}
