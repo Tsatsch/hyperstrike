@@ -13,6 +13,7 @@ import {
 import { Wallet, User, Copy, ExternalLink, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { exchangePrivyForBackendJwt, listOrders } from '@/lib/api';
 
 // Blockscout URLs for different networks
 const BLOCKSCOUT_URLS: { [key: string]: string } = {
@@ -29,13 +30,13 @@ const BLOCKSCOUT_URLS: { [key: string]: string } = {
 };
 
 export function WalletButton() {
-  const { login, logout, authenticated, user } = usePrivy();
+  const { login, logout, authenticated, user, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
   const [copyFeedback, setCopyFeedback] = useState(false);
 
   const currentWalletAddress = user?.wallet?.address;
 
-  // Notify backend when wallet connection status changes
+  // Notify backend when wallet connection status changes and register user
   useEffect(() => {
     const notifyBackend = async () => {
       if (authenticated && currentWalletAddress) {
@@ -52,7 +53,45 @@ export function WalletButton() {
       }
     };
 
+    const registerUser = async () => {
+      if (authenticated && currentWalletAddress) {
+        try {
+          const token = await getAccessToken?.();
+          if (!token) return;
+          await fetch(`http://localhost:8000/api/user?wallet=${currentWalletAddress}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+        } catch (error) {
+          console.error('Error registering user:', error);
+        }
+      }
+    };
+
+    const exchangeJwtAndPrefetchOrders = async () => {
+      if (authenticated && currentWalletAddress) {
+        try {
+          const jwt = await exchangePrivyForBackendJwt(getAccessToken, currentWalletAddress);
+          if (jwt) {
+            // Optional: prefetch orders to verify end-to-end and aid DX during hackathon
+            try {
+              const orders = await listOrders();
+              console.log('Orders (prefetched):', orders);
+            } catch (e) {
+              console.warn('Could not prefetch orders:', e);
+            }
+          }
+        } catch (error) {
+          console.error('Error exchanging Privy token for backend JWT:', error);
+        }
+      }
+    };
+
     notifyBackend();
+    registerUser();
+    exchangeJwtAndPrefetchOrders();
   }, [authenticated, currentWalletAddress]);
 
   const handleCopyAddress = async () => {

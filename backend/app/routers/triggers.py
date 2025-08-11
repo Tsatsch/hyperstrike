@@ -12,10 +12,14 @@ router = APIRouter()
 
 @router.post("/triggers")
 async def create_trigger(trigger: UniversalTrigger, current_user=Depends(get_current_user)):
-    trigger.registered_at = datetime.now(timezone.utc)
-    saved = register_trigger_db(trigger, current_user["user_id"])  # inject user_id securely
-    await ensure_subscription(trigger.condition.symbol, trigger.condition.interval)
-    return {"status": "ok", "trigger": saved}
+    try:
+        trigger.registered_at = datetime.now(timezone.utc)
+        saved = register_trigger_db(trigger, current_user["user_id"])  # inject user_id securely
+        await ensure_subscription(trigger.condition.symbol, trigger.condition.interval)
+        return {"status": "ok", "trigger": saved}
+    except Exception as exc:
+        # Surface detailed DB or validation errors to the client during hackathon
+        raise HTTPException(status_code=500, detail=str(exc))
 
 @router.get("/triggers", response_model=List[UniversalTrigger])
 async def get_triggers(userId: int = Query(...)):

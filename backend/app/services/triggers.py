@@ -3,7 +3,8 @@ from app.models.trigger import UniversalTrigger
 from typing import List
 
 def register_trigger_db(trigger: UniversalTrigger, user_id: int):
-    data = trigger.model_dump(exclude={"user_id"})  # ensure no override
+    # Exclude id so DB default can auto-increment; drop None values to avoid null violations
+    data = trigger.model_dump(exclude={"user_id", "id"}, exclude_none=True)
     data["user_id"] = user_id  # authoritative
     if 'registered_at' in data and data['registered_at']:
         data['registered_at'] = data['registered_at'].isoformat()

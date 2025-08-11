@@ -1,7 +1,11 @@
+
+
+
 "use client"
 
 import { useState, useEffect } from "react"
 import { usePrivy } from '@privy-io/react-auth'
+import { getBackendJwt, exchangePrivyForBackendJwt } from '@/lib/api'
 import { getUserIdFromWallet } from '@/lib/wallet-utils'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
 
@@ -82,8 +86,10 @@ const conditionTypes = [
   },
 ]
 
+
+
 export default function TradingPlatform() {
-  const { authenticated, login, user } = usePrivy();
+  const { authenticated, login, user, getAccessToken } = usePrivy();
   const [currentStep, setCurrentStep] = useState(1)
   const [showWalletPrompt, setShowWalletPrompt] = useState(false)
   const [pendingPlatform, setPendingPlatform] = useState<"hyperevm" | "hypercore" | null>(null)
@@ -335,35 +341,51 @@ export default function TradingPlatform() {
     }
 
     try {
-      // Prepare the swap data
-      const conditionObject = {
-        symbol: triggerToken,
-        interval: timeframe,
-        source: condition,
-        above: triggerWhen === "above",
-        threshold: parseFloat(targetValue), // Convert to number
-        lookback: 0
-      };
-      
-      // Generate a unique user ID based on wallet address
-      const userIdFromWallet = getUserIdFromWallet(user.wallet.address);
-      
-      const swapData = {
-        user_id: userIdFromWallet, // Use wallet-derived user ID
-        type: "ohlcvn",
-        condition: conditionObject,
-        platform: selectedPlatform,
-        chat_id: 15,
-        registered_at: new Date().toISOString()
+      // Ensure we have a backend JWT for authorized requests
+      let backendJwt = getBackendJwt();
+      if (!backendJwt && authenticated && user?.wallet?.address) {
+        backendJwt = await exchangePrivyForBackendJwt(getAccessToken, user.wallet.address) || null;
+      }
+      if (!backendJwt) {
+        console.error('Missing backend JWT. Please reconnect wallet.');
+        setIsCreating(false);
+        return;
+      }
+
+      // Build Order payload and call /api/order
+      const inputAmountNum = Number(fromAmount) || 0;
+      const outputAmountNum = Number(toAmount) || 1;
+      const orderPayload = {
+        platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
+        wallet: '0x0000000000000000000000000000000000000000',
+        swapData: {
+          inputToken: fromToken?.address || '0x0000000000000000000000000000000000000000',
+          inputAmount: Math.max(1, Math.floor(inputAmountNum)),
+          outputToken: toToken?.address || '0x0000000000000000000000000000000000000000',
+          outputAmount: Math.max(1, Math.floor(outputAmountNum)),
+        },
+        orderData: {
+          type: 'ohlcvTrigger',
+          ohlcvTrigger: {
+            pair: triggerToken || 'HYPE',
+            timeframe: timeframe || '1h',
+            source: condition || 'close',
+            trigger: triggerWhen || 'above',
+            triggerValue: targetValue || '0',
+          },
+          walletActivity: null,
+        },
+        signature: null,
+        time: Date.now(),
       };
 
-      // Send HTTP request to your backend endpoint
-      const response = await fetch('http://localhost:8000/api/triggers', {
+      const response = await fetch('http://localhost:8000/api/order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${backendJwt}`,
         },
-        body: JSON.stringify(swapData)
+        body: JSON.stringify(orderPayload),
       });
 
       if (response.ok) {

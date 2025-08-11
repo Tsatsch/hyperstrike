@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from app.auth.challenge import generate_nonce, get_nonce
 from app.auth.signature import verify_signature_and_get_wallet
 from app.auth.jwt import create_jwt
 from app.services.user import create_or_get_user
+from app.auth.privy import verify_privy_token
 
 router = APIRouter()
 
@@ -30,5 +31,23 @@ async def verify(data: VerifyRequest):
         raise HTTPException(401, "Signature invalid")
 
     user = create_or_get_user(data.wallet_address)  # returns {user_id, wallet}
+    token = create_jwt(user["user_id"], data.wallet_address)
+    return {"token": token}
+
+
+class ExchangePrivyRequest(BaseModel):
+    wallet_address: str
+
+
+@router.post("/auth/exchange_privy")
+async def exchange_privy_token(data: ExchangePrivyRequest, authorization: str = Header(None)):
+    """Validate Privy token and mint a backend JWT for Orders endpoints."""
+    if not authorization:
+        raise HTTPException(401, "Missing Authorization header")
+    try:
+        verify_privy_token(authorization)
+    except HTTPException as e:
+        raise e
+    user = create_or_get_user(data.wallet_address)
     token = create_jwt(user["user_id"], data.wallet_address)
     return {"token": token}
