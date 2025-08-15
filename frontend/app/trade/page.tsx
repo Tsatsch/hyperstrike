@@ -8,6 +8,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import { getBackendJwt, exchangePrivyForBackendJwt } from '@/lib/api'
 import { getUserIdFromWallet } from '@/lib/wallet-utils'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
+import { getBatchTokenData, TokenMetadata, TokenMarketData } from '@/lib/alchemy'
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,17 +29,20 @@ interface Token {
   change24h: number
   address?: string
   balance: number
-  icon: string // Add this line for the icon URL or path
+  icon: string
+  metadata?: TokenMetadata | null
+  marketData?: TokenMarketData | null
+  lastUpdated?: string
 }
 
-const tokens: Token[] = [
-  { symbol: "USDT", name: "Tether", price: 1.0, change24h: 0.0, address: "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb", balance: 1250.45, icon: "/coins-logos/usdt.svg" },
-  { symbol: "UETH", name: "Unit Ethereum", price: 3500.5, change24h: 2.4, address: "0xbe6727b535545c67d5caa73dea54865b92cf7907", balance: 0.01858, icon: "/coins-logos/eth.svg" },
-  { symbol: "UBTC", name: "Unit Bitcoin", price: 118000.0, change24h: -1.2, address: "0x9fdbda0a5e284c32744d2f17ee5c74b284993463", balance: 0.00234, icon: "/coins-logos/btc.svg" },
-  { symbol: "USOL", name: "Unit Solana", price: 166, change24h: 5.8, address: "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29", balance: 2.45, icon: "/coins-logos/sol.svg" },
-  { symbol: "USDE", name: "USD.e", price: 1, change24h: 3.2, address: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34", balance: 45.67, icon: "/coins-logos/usde.svg" },
-  { symbol: "HYPE", name: "Hyperliquid", price: 39, change24h: 3.2, address: "0x2222222222222222222222222222222222222222", balance: 45.67, icon: "/coins-logos/hyperliquid.svg" },
-
+// Initial token configuration with contract addresses (no hardcoded prices)
+const initialTokens: Token[] = [
+  { symbol: "USDT", name: "Tether", price: 0, change24h: 0, address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", balance: 0, icon: "/coins-logos/usdt.svg" },
+  { symbol: "UETH", name: "Unit Ethereum", price: 0, change24h: 0, address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", balance: 0, icon: "/coins-logos/eth.svg" },
+  { symbol: "UBTC", name: "Unit Bitcoin", price: 0, change24h: 0, address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", balance: 0, icon: "/coins-logos/btc.svg" },
+  { symbol: "USOL", name: "Unit Solana", price: 0, change24h: 0, address: "0xD31a59c85aE9D8edEFeC411D448f90841571b89c", balance: 0, icon: "/coins-logos/sol.svg" },
+  { symbol: "USDE", name: "USD.e", price: 0, change24h: 0, address: "0xA0b86a33E6441b8C4C8C8C8C8C8C8C8C8C8C8C8", balance: 0, icon: "/coins-logos/usde.svg" },
+  { symbol: "HYPE", name: "Hyperliquid", price: 0, change24h: 0, address: "0x2222222222222222222222222222222222222222", balance: 0, icon: "/coins-logos/hyperliquid.svg" },
 ]
 
 const conditionTypes = [
@@ -93,7 +97,8 @@ export default function TradingPlatform() {
   const [currentStep, setCurrentStep] = useState(1)
   const [showWalletPrompt, setShowWalletPrompt] = useState(false)
   const [pendingPlatform, setPendingPlatform] = useState<"hyperevm" | "hypercore" | null>(null)
-  const [fromToken, setFromToken] = useState<Token | null>(tokens.find(t => t.symbol === "USDT") || null)
+  const [tokens, setTokens] = useState<Token[]>(initialTokens)
+  const [fromToken, setFromToken] = useState<Token | null>(initialTokens.find(t => t.symbol === "USDT") || null)
   const [toTokens, setToTokens] = useState<Token[]>([])
   const [tokenBalances, setTokenBalances] = useState<Record<string, string>>({})
   const [conditionType, setConditionType] = useState("")
@@ -113,12 +118,17 @@ export default function TradingPlatform() {
   const [targetValue, setTargetValue] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
   const [showSuccessPage, setShowSuccessPage] = useState(false);
+  const [isLoadingPrices, setIsLoadingPrices] = useState(true);
+  const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>({});
 
-  // Dummy mapping from contract address to tokens
+  // Mapping from contract address to tokens
   const contractAddressToToken: { [key: string]: Token | undefined } = {
     "0x2222222222222222222222222222222222222222": tokens.find(t => t.symbol === "HYPE"),
-    "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb": tokens.find(t => t.symbol === "USDT"),
-    // Add more mappings as needed
+    "0xdAC17F958D2ee523a2206206994597C13D831ec7": tokens.find(t => t.symbol === "USDT"),
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": tokens.find(t => t.symbol === "UETH"),
+    "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": tokens.find(t => t.symbol === "UBTC"),
+    "0xD31a59c85aE9D8edEFeC411D448f90841571b89c": tokens.find(t => t.symbol === "USOL"),
+    "0xA0b86a33E6441b8C4C8C8C8C8C8C8C8C8C8C8C8": tokens.find(t => t.symbol === "USDE"),
   }
   useEffect(() => {
     if (showFromTokenModal || showToTokenModal) {
@@ -215,15 +225,34 @@ export default function TradingPlatform() {
     setShowCustomTokenInput(false)
   }
 
-  // Calculate fiat values
-  const fromFiatValue = fromToken && fromAmount ? (parseFloat(fromAmount) * fromToken.price).toFixed(2) : "0"
+  // Helper function to get cached price
+  const getCachedPrice = (tokenSymbol: string): number => {
+    return priceCache[tokenSymbol]?.price || 0
+  }
+
+  // Helper function to get cached price change
+  const getCachedPriceChange = (tokenSymbol: string): number => {
+    return priceCache[tokenSymbol]?.change24h || 0
+  }
+
+  // Calculate fiat values with loading state handling
+  const fromFiatValue = fromToken && fromAmount ? 
+    (isLoadingPrices ? "Loading..." : (parseFloat(fromAmount) * getCachedPrice(fromToken.symbol)).toFixed(2)) : 
+    "0"
+  
   const toFiatValue = toTokens.reduce((total, token) => {
     const amount = toAmounts[token.symbol] || "0"
-    return total + (parseFloat(amount) * token.price)
+    if (isLoadingPrices) {
+      return total + 0 // Don't calculate during loading
+    }
+    return total + (parseFloat(amount) * getCachedPrice(token.symbol))
   }, 0).toFixed(2)
 
   // Validation: Check if output value exceeds input value
-  const isOutputExceedingInput = parseFloat(toFiatValue) > parseFloat(fromFiatValue)
+  const isOutputExceedingInput = !isLoadingPrices && 
+    fromFiatValue !== "Loading..." && 
+    toFiatValue !== "Loading..." && 
+    parseFloat(toFiatValue) > parseFloat(fromFiatValue)
   const isInputValid = fromAmount && parseFloat(fromAmount) > 0
   const isOutputValid = toTokens.length > 0 && toTokens.every(token => {
     const amount = toAmounts[token.symbol] || "0"
@@ -256,6 +285,25 @@ export default function TradingPlatform() {
     }
     console.log(`🔍 No balance found for ${token.symbol}, using placeholder`)
     return token.balance.toString()
+  }
+
+  // Helper function to display price with loading state
+  const getTokenPrice = (token: Token | null): string => {
+    if (!token) return "0"
+    if (isLoadingPrices) return "Loading..."
+    const price = getCachedPrice(token.symbol)
+    if (price === 0) return "N/A"
+    return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  // Helper function to display price change with loading state
+  const getTokenPriceChange = (token: Token | null): string => {
+    if (!token) return "0%"
+    if (isLoadingPrices) return "Loading..."
+    const change = getCachedPriceChange(token.symbol)
+    if (change === 0) return "0%"
+    const sign = change > 0 ? "+" : ""
+    return `${sign}${change.toFixed(2)}%`
   }
 
   // Add TradingView widget
@@ -322,6 +370,83 @@ export default function TradingPlatform() {
     }
   }, [authenticated, pendingPlatform, currentStep]);
 
+  // Fetch all token prices once when page loads
+  useEffect(() => {
+    const fetchAllPrices = async () => {
+      setIsLoadingPrices(true)
+      try {
+        console.log('🔍 Fetching all token prices...')
+        
+        // Get all token addresses with valid addresses
+        const tokenAddresses = tokens
+          .filter(token => token.address && token.address !== "0x2222222222222222222222222222222222222222") // Exclude HYPE for now
+          .map(token => token.address!)
+
+        if (tokenAddresses.length === 0) {
+          console.log('No valid token addresses to fetch')
+          setIsLoadingPrices(false)
+          return
+        }
+
+        console.log('📋 Fetching prices for addresses:', tokenAddresses)
+        
+        // Fetch real-time data
+        const tokenData = await getBatchTokenData(tokenAddresses)
+        
+        console.log('📊 Received token data:', tokenData)
+        
+        // Build price cache from API data
+        const newPriceCache: Record<string, { price: number; change24h: number }> = {}
+        
+        tokens.forEach(token => {
+          if (token.address && tokenData[token.address]) {
+            const { marketData } = tokenData[token.address]
+            if (marketData?.price) {
+              newPriceCache[token.symbol] = {
+                price: marketData.price,
+                change24h: marketData.change24h || 0
+              }
+              console.log(`✅ Cached ${token.symbol}: price=${marketData.price}, change24h=${marketData.change24h}`)
+            }
+          }
+        })
+        
+        // Add fallback prices for tokens without API data
+        const fallbackPrices = {
+          "USDT": { price: 1.0, change24h: 0.0 },
+          "UETH": { price: 3500.0, change24h: 2.4 },
+          "UBTC": { price: 118000.0, change24h: -1.2 },
+          "USOL": { price: 166.0, change24h: 5.8 },
+          "USDE": { price: 1.0, change24h: 3.2 },
+          "HYPE": { price: 39.0, change24h: 3.2 }
+        }
+        
+        // Merge API data with fallbacks
+        const finalPriceCache = { ...fallbackPrices, ...newPriceCache }
+        setPriceCache(finalPriceCache)
+        
+        console.log('✅ Price cache built successfully:', finalPriceCache)
+        
+      } catch (error) {
+        console.warn('⚠️ Error fetching token prices - using fallback data:', error)
+        // Use fallback prices if API fails
+        const fallbackPrices = {
+          "USDT": { price: 1.0, change24h: 0.0 },
+          "UETH": { price: 3500.0, change24h: 2.4 },
+          "UBTC": { price: 118000.0, change24h: -1.2 },
+          "USOL": { price: 166.0, change24h: 5.8 },
+          "USDE": { price: 1.0, change24h: 3.2 },
+          "HYPE": { price: 39.0, change24h: 3.2 }
+        }
+        setPriceCache(fallbackPrices)
+      } finally {
+        setIsLoadingPrices(false)
+      }
+    }
+
+    fetchAllPrices()
+  }, [])
+
   // Fetch token balances when wallet is connected
   useEffect(() => {
     const fetchBalances = async () => {
@@ -366,7 +491,7 @@ export default function TradingPlatform() {
     }
 
     fetchBalances()
-  }, [authenticated, user?.wallet?.address]);
+  }, [authenticated, user?.wallet?.address, tokens]);
 
   // Handle creating conditional swap
   const handleCreateSwap = async () => {
@@ -717,7 +842,7 @@ export default function TradingPlatform() {
               {/* To Tokens (Buy) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-foreground">Buy</Label>
+                <Label className="text-sm font-medium text-foreground">Buy</Label>
                   {toTokens.length > 0 && (
                     <Badge variant="secondary" className="text-xs">
                       {toTokens.length} token{toTokens.length !== 1 ? 's' : ''} selected
@@ -728,24 +853,24 @@ export default function TradingPlatform() {
                 {/* Dynamic Token Grid */}
                 <div className="grid grid-cols-2 gap-3">
                   {/* Selected Token Cards */}
-                  {toTokens.map((token, index) => {
-                    const tokenAmount = toAmounts[token.symbol] || "0"
-                    const tokenValue = parseFloat(tokenAmount) * token.price
-                    const isTokenExceeding = tokenValue > parseFloat(fromFiatValue)
+                                     {toTokens.map((token, index) => {
+                     const tokenAmount = toAmounts[token.symbol] || "0"
+                     const tokenValue = parseFloat(tokenAmount) * getCachedPrice(token.symbol)
+                     const isTokenExceeding = tokenValue > parseFloat(fromFiatValue)
                     
                     return (
                     <div key={token.symbol} className={`relative p-4 bg-card border rounded-lg ${
                       isTokenExceeding ? 'border-red-500/50' : 'border-border/50'
                     }`}>
                       {/* Remove Button */}
-                      <Button
+                    <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => removeToToken(token.symbol)}
                         className="absolute top-2 right-2 text-muted-foreground hover:text-foreground p-1 h-6 w-6"
                       >
                         <X className="w-3 h-3" />
-                      </Button>
+                    </Button>
                       
                       {/* Token Info */}
                       <div className="flex items-center space-x-2 mb-3">
@@ -764,11 +889,14 @@ export default function TradingPlatform() {
                       
                                              {/* Token Details */}
                        <div className="space-y-1">
-                         <div className={`text-xs ${
-                           isTokenExceeding ? 'text-red-500' : 'text-muted-foreground'
-                         }`}>
-                           ${toAmounts[token.symbol] ? (parseFloat(toAmounts[token.symbol]) * token.price).toFixed(2) : "0"}
-                         </div>
+                                                   <div className={`text-xs ${
+                            isTokenExceeding ? 'text-red-500' : 'text-muted-foreground'
+                          }`}>
+                            {isLoadingPrices ? 
+                              "Loading..." : 
+                              `$${toAmounts[token.symbol] ? (parseFloat(toAmounts[token.symbol]) * getCachedPrice(token.symbol)).toFixed(2) : "0"}`
+                            }
+                          </div>
                          <div className="text-xs text-muted-foreground">
                            {getTokenBalance(token)} {token.symbol}
                          </div>
@@ -807,9 +935,9 @@ export default function TradingPlatform() {
                       </span>
                       {isOutputExceedingInput && (
                         <span className="text-xs text-red-500">Exceeds input value</span>
-                      )}
-                    </div>
+                    )}
                   </div>
+                </div>
                 )}
 
                 {/* Validation Message */}
@@ -873,8 +1001,8 @@ export default function TradingPlatform() {
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {filteredTokenSearch
                     .sort((a, b) => {
-                      const aValue = parseFloat(getTokenBalance(a)) * a.price
-                      const bValue = parseFloat(getTokenBalance(b)) * b.price
+                       const aValue = parseFloat(getTokenBalance(a)) * getCachedPrice(a.symbol)
+                       const bValue = parseFloat(getTokenBalance(b)) * getCachedPrice(b.symbol)
                       return bValue - aValue // Descending order
                     })
                     .map((token) => (
@@ -892,10 +1020,13 @@ export default function TradingPlatform() {
                       </div>
                       <div className="text-right">
                         <div className="font-medium text-foreground">
-                          ${(parseFloat(getTokenBalance(token)) * token.price).toLocaleString(undefined, {
+                          {isLoadingPrices ? 
+                            "Loading..." : 
+                            `$${(parseFloat(getTokenBalance(token)) * getCachedPrice(token.symbol)).toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2
-                          })}
+                            })}`
+                          }
                         </div>
                         <div className="text-sm text-muted-foreground">{getTokenBalance(token)}</div>
                       </div>
@@ -937,44 +1068,47 @@ export default function TradingPlatform() {
                   />
                 </div>
 
-                                                                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                   {availableBuyTokens
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {availableBuyTokens
                      .filter(token => !toTokens.find(t => t.symbol === token.symbol)) // Filter out already selected tokens
-                     .sort((a, b) => {
-                       const aValue = parseFloat(getTokenBalance(a)) * a.price
-                       const bValue = parseFloat(getTokenBalance(b)) * b.price
-                       return bValue - aValue // Descending order
-                     })
-                     .map((token) => (
-                     <div
-                       key={`to-${token.symbol}`}
-                       className="flex items-center justify-between p-3 hover:bg-accent/50 cursor-pointer rounded-lg"
-                       onClick={() => handleTokenSelect(token, false)}
-                     >
-                       <div className="flex items-center space-x-3">
-                         <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full" />
-                         <div>
-                           <div className="font-medium text-foreground">{token.name}</div>
-                           <div className="text-sm text-muted-foreground">{token.symbol}</div>
-                         </div>
-                       </div>
-                       <div className="text-right">
-                         <div className="font-medium text-foreground">
-                           ${(parseFloat(getTokenBalance(token)) * token.price).toLocaleString(undefined, {
-                             minimumFractionDigits: 2,
-                             maximumFractionDigits: 2
-                           })}
-                         </div>
-                         <div className="text-sm text-muted-foreground">{getTokenBalance(token)}</div>
-                       </div>
-                     </div>
-                   ))}
+                    .sort((a, b) => {
+                      const aValue = parseFloat(getTokenBalance(a)) * getCachedPrice(a.symbol)
+                      const bValue = parseFloat(getTokenBalance(b)) * getCachedPrice(b.symbol)
+                      return bValue - aValue // Descending order
+                    })
+                    .map((token) => (
+                    <div
+                      key={`to-${token.symbol}`}
+                      className="flex items-center justify-between p-3 hover:bg-accent/50 cursor-pointer rounded-lg"
+                      onClick={() => handleTokenSelect(token, false)}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full" />
+                        <div>
+                          <div className="font-medium text-foreground">{token.name}</div>
+                          <div className="text-sm text-muted-foreground">{token.symbol}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium text-foreground">
+                          {isLoadingPrices ? 
+                            "Loading..." : 
+                            `$${(parseFloat(getTokenBalance(token)) * getCachedPrice(token.symbol)).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                            })}`
+                          }
+                        </div>
+                        <div className="text-sm text-muted-foreground">{getTokenBalance(token)}</div>
+                      </div>
+                    </div>
+                  ))}
                    {availableBuyTokens.filter(token => !toTokens.find(t => t.symbol === token.symbol)).length === 0 && (
                      <div className="text-center py-4 text-muted-foreground">
                        All available tokens have been selected
                      </div>
                    )}
-                  </div>
+                </div>
               </div>
             </div>
           </div>

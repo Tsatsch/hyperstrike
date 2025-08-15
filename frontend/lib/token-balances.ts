@@ -40,7 +40,7 @@ const ERC20_ABI = parseAbi([
 // Create public client using environment variable
 const client = createPublicClient({
   chain: hyperEvm,
-  transport: http(process.env.NEXT_PUBLIC_ETH_RPC_URL),
+  transport: http(process.env.NEXT_PUBLIC_ETH_RPC_URL || 'https://rpc.hyperliquid.xyz/evm'),
 })
 
 export interface TokenBalance {
@@ -55,7 +55,7 @@ export async function fetchTokenBalances(
 ): Promise<Record<string, string>> {
   try {
     console.log('🔧 fetchTokenBalances called with:', { walletAddress, tokenAddresses })
-    console.log('🔧 RPC URL:', process.env.NEXT_PUBLIC_ETH_RPC_URL)
+    console.log('🔧 RPC URL:', process.env.NEXT_PUBLIC_ETH_RPC_URL || 'https://rpc.hyperliquid.xyz/evm (fallback)')
     console.log('🔧 Client chain:', client.chain)
     console.log('🔧 Client transport:', client.transport)
     
