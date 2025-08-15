@@ -27,21 +27,20 @@ poetry run python ...
 ### Env
 create a local .env.local (dont push!) based on template .env
 
-Add the following variables:
-
-- Frontend (`frontend/.env.local`):
-
-```
-NEXT_PUBLIC_PRIVY_APP_ID=
-```
+Add the following files:
 
 - Backend (`backend/.env.local`):
 
 ```
-SUPABASE_URL=
-SUPABASE_KEY=
 PRIVY_APP_ID=
 PRIVY_JWKS_URL=
+```
+
+- Backend (`backend/.env`):
+
+```
+SUPABASE_URL=
+SUPABASE_KEY=
 ```
 
 ### Database setup
