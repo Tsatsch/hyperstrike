@@ -32,12 +32,12 @@ interface Token {
 }
 
 const tokens: Token[] = [
-  { symbol: "USDT", name: "Tether", price: 1.0, change24h: 0.0, address: "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb", balance: 1250.45, icon: "https://i.imgur.com/ERZzJcK.png" },
-  { symbol: "UETH", name: "Unit Ethereum", price: 3500.5, change24h: 2.4, address: "0xbe6727b535545c67d5caa73dea54865b92cf7907", balance: 0.01858, icon: "https://i.imgur.com/ERZzJcK.png" },
-  { symbol: "UBTC", name: "Unit Bitcoin", price: 118000.0, change24h: -1.2, address: "0x9fdbda0a5e284c32744d2f17ee5c74b284993463", balance: 0.00234, icon: "https://i.imgur.com/ERZzJcK.png" },
-  { symbol: "USOL", name: "Unit Solana", price: 166, change24h: 5.8, address: "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29", balance: 2.45, icon: "https://i.imgur.com/jh8AZo0.png" },
-  { symbol: "USDE", name: "USD.e", price: 1, change24h: 3.2, address: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34", balance: 45.67, icon: "https://i.imgur.com/jh8AZo0.png" },
-  { symbol: "HYPE", name: "Hyperliquid", price: 39, change24h: 3.2, address: "0x2222222222222222222222222222222222222222", balance: 45.67, icon: "https://i.imgur.com/jh8AZo0.png" },
+  { symbol: "USDT", name: "Tether", price: 1.0, change24h: 0.0, address: "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb", balance: 1250.45, icon: "/coins-logos/usdt.svg" },
+  { symbol: "UETH", name: "Unit Ethereum", price: 3500.5, change24h: 2.4, address: "0xbe6727b535545c67d5caa73dea54865b92cf7907", balance: 0.01858, icon: "/coins-logos/eth.svg" },
+  { symbol: "UBTC", name: "Unit Bitcoin", price: 118000.0, change24h: -1.2, address: "0x9fdbda0a5e284c32744d2f17ee5c74b284993463", balance: 0.00234, icon: "/coins-logos/btc.svg" },
+  { symbol: "USOL", name: "Unit Solana", price: 166, change24h: 5.8, address: "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29", balance: 2.45, icon: "/coins-logos/sol.svg" },
+  { symbol: "USDE", name: "USD.e", price: 1, change24h: 3.2, address: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34", balance: 45.67, icon: "/coins-logos/usde.svg" },
+  { symbol: "HYPE", name: "Hyperliquid", price: 39, change24h: 3.2, address: "0x2222222222222222222222222222222222222222", balance: 45.67, icon: "/coins-logos/hyperliquid.svg" },
 
 ]
 
@@ -221,6 +221,14 @@ export default function TradingPlatform() {
     const amount = toAmounts[token.symbol] || "0"
     return total + (parseFloat(amount) * token.price)
   }, 0).toFixed(2)
+
+  // Validation: Check if output value exceeds input value
+  const isOutputExceedingInput = parseFloat(toFiatValue) > parseFloat(fromFiatValue)
+  const isInputValid = fromAmount && parseFloat(fromAmount) > 0
+  const isOutputValid = toTokens.length > 0 && toTokens.every(token => {
+    const amount = toAmounts[token.symbol] || "0"
+    return amount && parseFloat(amount) > 0
+  })
 
   // Helper function to remove a token from toTokens
   const removeToToken = (tokenSymbol: string) => {
@@ -716,66 +724,103 @@ export default function TradingPlatform() {
                     </Badge>
                   )}
                 </div>
-                <div className="space-y-3">
-                  {/* Add Token Button */}
-                  <div className="flex justify-center">
-                    <Button
-                      variant="outline"
-                      className="flex items-center space-x-2 bg-card border-border/50 hover:bg-accent/50 px-3 py-2"
-                      onClick={() => setShowToTokenModal(true)}
-                    >
-                      <span className="text-foreground">
-                        {toTokens.length === 0 ? "Select tokens" : "Add more tokens"}
-                      </span>
-                      <ArrowRight className="w-4 h-4 rotate-90" />
-                    </Button>
-                  </div>
-
-                  {/* Selected Tokens */}
-                  {toTokens.map((token) => (
-                    <div key={token.symbol} className="flex items-center space-x-3 p-4 bg-card border border-border/50 rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center space-x-2">
-                            <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full" />
-                            <span className="text-foreground font-medium text-base">{token.symbol}</span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeToToken(token.symbol)}
-                            className="text-muted-foreground hover:text-foreground p-1"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <Input
-                          type="number"
-                          placeholder="0"
-                          value={toAmounts[token.symbol] || ""}
-                          onChange={(e) => updateToTokenAmount(token.symbol, e.target.value)}
-                          className="text-lg font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground"
-                        />
-                        <div className="flex items-center justify-between mt-1">
-                          <div className="text-sm text-muted-foreground">
-                            ${toAmounts[token.symbol] ? (parseFloat(toAmounts[token.symbol]) * token.price).toFixed(2) : "0"}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {getTokenBalance(token)} {token.symbol}
-                          </div>
-                        </div>
+                
+                {/* Dynamic Token Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Selected Token Cards */}
+                  {toTokens.map((token, index) => {
+                    const tokenAmount = toAmounts[token.symbol] || "0"
+                    const tokenValue = parseFloat(tokenAmount) * token.price
+                    const isTokenExceeding = tokenValue > parseFloat(fromFiatValue)
+                    
+                    return (
+                    <div key={token.symbol} className={`relative p-4 bg-card border rounded-lg ${
+                      isTokenExceeding ? 'border-red-500/50' : 'border-border/50'
+                    }`}>
+                      {/* Remove Button */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeToToken(token.symbol)}
+                        className="absolute top-2 right-2 text-muted-foreground hover:text-foreground p-1 h-6 w-6"
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                      
+                      {/* Token Info */}
+                      <div className="flex items-center space-x-2 mb-3">
+                        <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
+                        <span className="text-foreground font-medium text-sm">{token.symbol}</span>
                       </div>
+                      
+                      {/* Amount Input */}
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={toAmounts[token.symbol] || ""}
+                        onChange={(e) => updateToTokenAmount(token.symbol, e.target.value)}
+                        className="text-base font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground mb-2"
+                      />
+                      
+                                             {/* Token Details */}
+                       <div className="space-y-1">
+                         <div className={`text-xs ${
+                           isTokenExceeding ? 'text-red-500' : 'text-muted-foreground'
+                         }`}>
+                           ${toAmounts[token.symbol] ? (parseFloat(toAmounts[token.symbol]) * token.price).toFixed(2) : "0"}
+                         </div>
+                         <div className="text-xs text-muted-foreground">
+                           {getTokenBalance(token)} {token.symbol}
+                         </div>
+                       </div>
+                     </div>
+                   )
+                   })}
+                  
+                  {/* Add Token Button - Always show one plus button */}
+                  <div
+                    className="p-4 bg-muted/30 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:bg-muted/50 hover:border-border transition-all"
+                    onClick={() => setShowToTokenModal(true)}
+                  >
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                      <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center mb-2">
+                        <span className="text-lg font-bold text-muted-foreground">+</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {toTokens.length === 0 ? "Select token" : "Add token"}
+                      </span>
                     </div>
-                  ))}
-
-                  {/* Total Value Display */}
-                  {toTokens.length > 0 && (
-                    <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                      <span className="text-sm font-medium text-foreground">Total Value:</span>
-                      <span className="text-sm font-medium text-foreground">${toFiatValue}</span>
-                    </div>
-                  )}
+                  </div>
                 </div>
+
+                {/* Total Value Display */}
+                {toTokens.length > 0 && (
+                  <div className={`flex justify-between items-center p-3 rounded-lg ${
+                    isOutputExceedingInput ? 'bg-red-500/10 border border-red-500/20' : 'bg-muted/50'
+                  }`}>
+                    <span className="text-sm font-medium text-foreground">Total Value:</span>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-sm font-medium ${
+                        isOutputExceedingInput ? 'text-red-500' : 'text-foreground'
+                      }`}>
+                        ${toFiatValue}
+                      </span>
+                      {isOutputExceedingInput && (
+                        <span className="text-xs text-red-500">Exceeds input value</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Validation Message */}
+                {isOutputExceedingInput && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <p className="text-xs text-red-500 text-center">
+                      Total output value (${toFiatValue}) cannot exceed input value (${fromFiatValue}). 
+                      Please reduce token amounts or increase your input amount.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-between">
@@ -784,7 +829,7 @@ export default function TradingPlatform() {
                 </Button>
                 <Button 
                   onClick={() => setCurrentStep(3)} 
-                  disabled={!fromToken || toTokens.length === 0 || !fromAmount}
+                  disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid || isOutputExceedingInput}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
                 >
                   Continue
@@ -892,44 +937,44 @@ export default function TradingPlatform() {
                   />
                 </div>
 
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {availableBuyTokens
-                    .filter(token => !toTokens.find(t => t.symbol === token.symbol)) // Filter out already selected tokens
-                    .sort((a, b) => {
-                      const aValue = parseFloat(getTokenBalance(a)) * a.price
-                      const bValue = parseFloat(getTokenBalance(b)) * b.price
-                      return bValue - aValue // Descending order
-                    })
-                    .map((token) => (
-                    <div
-                      key={`to-${token.symbol}`}
-                      className="flex items-center justify-between p-3 hover:bg-accent/50 cursor-pointer rounded-lg"
-                      onClick={() => handleTokenSelect(token, false)}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full" />
-                        <div>
-                          <div className="font-medium text-foreground">{token.name}</div>
-                          <div className="text-sm text-muted-foreground">{token.symbol}</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-medium text-foreground">
-                          ${(parseFloat(getTokenBalance(token)) * token.price).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                          })}
-                        </div>
-                        <div className="text-sm text-muted-foreground">{getTokenBalance(token)}</div>
-                      </div>
-                    </div>
-                  ))}
-                  {availableBuyTokens.filter(token => !toTokens.find(t => t.symbol === token.symbol)).length === 0 && (
-                    <div className="text-center py-4 text-muted-foreground">
-                      All available tokens have been selected
-                    </div>
-                  )}
-                </div>
+                                                                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                   {availableBuyTokens
+                     .filter(token => !toTokens.find(t => t.symbol === token.symbol)) // Filter out already selected tokens
+                     .sort((a, b) => {
+                       const aValue = parseFloat(getTokenBalance(a)) * a.price
+                       const bValue = parseFloat(getTokenBalance(b)) * b.price
+                       return bValue - aValue // Descending order
+                     })
+                     .map((token) => (
+                     <div
+                       key={`to-${token.symbol}`}
+                       className="flex items-center justify-between p-3 hover:bg-accent/50 cursor-pointer rounded-lg"
+                       onClick={() => handleTokenSelect(token, false)}
+                     >
+                       <div className="flex items-center space-x-3">
+                         <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full" />
+                         <div>
+                           <div className="font-medium text-foreground">{token.name}</div>
+                           <div className="text-sm text-muted-foreground">{token.symbol}</div>
+                         </div>
+                       </div>
+                       <div className="text-right">
+                         <div className="font-medium text-foreground">
+                           ${(parseFloat(getTokenBalance(token)) * token.price).toLocaleString(undefined, {
+                             minimumFractionDigits: 2,
+                             maximumFractionDigits: 2
+                           })}
+                         </div>
+                         <div className="text-sm text-muted-foreground">{getTokenBalance(token)}</div>
+                       </div>
+                     </div>
+                   ))}
+                   {availableBuyTokens.filter(token => !toTokens.find(t => t.symbol === token.symbol)).length === 0 && (
+                     <div className="text-center py-4 text-muted-foreground">
+                       All available tokens have been selected
+                     </div>
+                   )}
+                  </div>
               </div>
             </div>
           </div>
