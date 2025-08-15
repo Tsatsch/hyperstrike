@@ -11,3 +11,13 @@ start application with
 Frontend: http://localhost:3000
 
 Backend: http://localhost:8000
+
+## Prod
+start application with
+```bash
+./start-prod.sh
+```
+
+Frontend: http://localhost:3000
+
+Backend: http://localhost:8000
