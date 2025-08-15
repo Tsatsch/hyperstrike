@@ -145,7 +145,7 @@ export default function Dashboard() {
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">
                 Trade
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+              <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">
                 Portfolio
               </a>
               <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
