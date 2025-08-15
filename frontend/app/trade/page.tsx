@@ -94,7 +94,7 @@ export default function TradingPlatform() {
   const [showWalletPrompt, setShowWalletPrompt] = useState(false)
   const [pendingPlatform, setPendingPlatform] = useState<"hyperevm" | "hypercore" | null>(null)
   const [fromToken, setFromToken] = useState<Token | null>(tokens.find(t => t.symbol === "USDT") || null)
-  const [toToken, setToToken] = useState<Token | null>(tokens.find(t => t.symbol === "HYPE") || null)
+  const [toTokens, setToTokens] = useState<Token[]>([])
   const [tokenBalances, setTokenBalances] = useState<Record<string, string>>({})
   const [conditionType, setConditionType] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
@@ -105,7 +105,7 @@ export default function TradingPlatform() {
   const [showFromTokenModal, setShowFromTokenModal] = useState(false)
   const [showToTokenModal, setShowToTokenModal] = useState(false)
   const [fromAmount, setFromAmount] = useState("")
-  const [toAmount, setToAmount] = useState("")
+  const [toAmounts, setToAmounts] = useState<Record<string, string>>({})
   const [triggerToken, setTriggerToken] = useState<string>("");
   const [timeframe, setTimeframe] = useState<string>("");
   const [condition, setCondition] = useState<string>("");
@@ -153,23 +153,29 @@ export default function TradingPlatform() {
   const handleSwapTokens = () => {
     const temp = fromToken
     const tempAmount = fromAmount
-    setFromToken(toToken)
-    setToToken(temp)
-    setFromAmount(toAmount)
-    setToAmount(tempAmount)
+    setFromToken(toTokens[0] || null)
+    setToTokens(fromToken ? [fromToken] : [])
+    setFromAmount(toAmounts[toTokens[0]?.symbol || ''] || '')
+    setToAmounts(fromToken ? { [fromToken.symbol]: tempAmount } : {})
   }
 
   const handleTokenSelect = (token: Token, isFrom: boolean) => {
     if (isFrom) {
       setFromToken(token)
       setShowFromTokenModal(false)
-      // Clear toToken if it's the same as the new fromToken
-      if (toToken && toToken.symbol === token.symbol) {
-        setToToken(null)
-        setToAmount("")
-      }
+      // Clear toTokens if they contain the same token as the new fromToken
+      setToTokens(prev => prev.filter(t => t.symbol !== token.symbol))
+      const newToAmounts = { ...toAmounts }
+      delete newToAmounts[token.symbol]
+      setToAmounts(newToAmounts)
     } else {
-      setToToken(token)
+      // Add token to toTokens array if not already present
+      setToTokens(prev => {
+        if (prev.find(t => t.symbol === token.symbol)) {
+          return prev // Token already exists
+        }
+        return [...prev, token]
+      })
       setShowToTokenModal(false)
     }
     setTokenSearchTerm("")
@@ -189,14 +195,20 @@ export default function TradingPlatform() {
       // Add icon property to match Token type
       setFromToken({...token, icon: ''}) 
       setShowFromTokenModal(false)
-      // Clear toToken if it's the same as the new fromToken
-      if (toToken && toToken.symbol === token.symbol) {
-        setToToken(null)
-        setToAmount("")
-      }
+      // Clear toTokens if they contain the same token as the new fromToken
+      setToTokens(prev => prev.filter(t => t.symbol !== token.symbol))
+      const newToAmounts = { ...toAmounts }
+      delete newToAmounts[token.symbol]
+      setToAmounts(newToAmounts)
     } else {
       // Add icon property to match Token type
-      setToToken({...token, icon: ''})
+      const tokenWithIcon = {...token, icon: ''}
+      setToTokens(prev => {
+        if (prev.find(t => t.symbol === token.symbol)) {
+          return prev // Token already exists
+        }
+        return [...prev, tokenWithIcon]
+      })
       setShowToTokenModal(false)
     }
     setCustomTokenAddress("")
@@ -205,7 +217,26 @@ export default function TradingPlatform() {
 
   // Calculate fiat values
   const fromFiatValue = fromToken && fromAmount ? (parseFloat(fromAmount) * fromToken.price).toFixed(2) : "0"
-  const toFiatValue = toToken && toAmount ? (parseFloat(toAmount) * toToken.price).toFixed(2) : "0"
+  const toFiatValue = toTokens.reduce((total, token) => {
+    const amount = toAmounts[token.symbol] || "0"
+    return total + (parseFloat(amount) * token.price)
+  }, 0).toFixed(2)
+
+  // Helper function to remove a token from toTokens
+  const removeToToken = (tokenSymbol: string) => {
+    setToTokens(prev => prev.filter(t => t.symbol !== tokenSymbol))
+    const newToAmounts = { ...toAmounts }
+    delete newToAmounts[tokenSymbol]
+    setToAmounts(newToAmounts)
+  }
+
+  // Helper function to update amount for a specific token
+  const updateToTokenAmount = (tokenSymbol: string, amount: string) => {
+    setToAmounts(prev => ({
+      ...prev,
+      [tokenSymbol]: amount
+    }))
+  }
 
   // Helper function to get real balance or fallback to placeholder
   const getTokenBalance = (token: Token | null): string => {
@@ -354,15 +385,25 @@ export default function TradingPlatform() {
 
       // Build Order payload and call /api/order
       const inputAmountNum = Number(fromAmount) || 0;
-      const outputAmountNum = Number(toAmount) || 1;
+      
+      // For multiple tokens, we'll create multiple orders or modify the payload structure
+      // For now, we'll use the first token as the primary output
+      const primaryOutputToken = toTokens[0];
+      const primaryOutputAmount = Number(toAmounts[primaryOutputToken?.symbol || ''] || 1);
+      
       const orderPayload = {
         platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
         wallet: '0x0000000000000000000000000000000000000000',
         swapData: {
           inputToken: fromToken?.address || '0x0000000000000000000000000000000000000000',
           inputAmount: Math.max(1, Math.floor(inputAmountNum)),
-          outputToken: toToken?.address || '0x0000000000000000000000000000000000000000',
-          outputAmount: Math.max(1, Math.floor(outputAmountNum)),
+          outputToken: primaryOutputToken?.address || '0x0000000000000000000000000000000000000000',
+          outputAmount: Math.max(1, Math.floor(primaryOutputAmount)),
+          // Add additional output tokens if needed
+          additionalOutputs: toTokens.slice(1).map(token => ({
+            token: token.address || '0x0000000000000000000000000000000000000000',
+            amount: Math.max(1, Math.floor(Number(toAmounts[token.symbol] || 0)))
+          }))
         },
         orderData: {
           type: 'ohlcvTrigger',
@@ -659,38 +700,81 @@ export default function TradingPlatform() {
                     size="sm"
                     onClick={handleSwapTokens}
                   className="w-10 h-10 p-0 rounded-full border-border/50 hover:bg-accent/50"
-                  disabled={!fromToken || !toToken}
+                  disabled={!fromToken || toTokens.length === 0}
                   >
                     <ArrowUpDown className="w-4 h-4" />
                   </Button>
                 </div>
 
-              {/* To Token (Buy) */}
+              {/* To Tokens (Buy) */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-foreground">Buy</Label>
-                <div className="flex justify-center p-4 bg-card border border-border/50 rounded-lg">
-                  <div className="flex flex-col items-center">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-foreground">Buy</Label>
+                  {toTokens.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {toTokens.length} token{toTokens.length !== 1 ? 's' : ''} selected
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  {/* Add Token Button */}
+                  <div className="flex justify-center">
                     <Button
                       variant="outline"
                       className="flex items-center space-x-2 bg-card border-border/50 hover:bg-accent/50 px-3 py-2"
                       onClick={() => setShowToTokenModal(true)}
                     >
-                      {toToken ? (
-                        <>
-                          <img src={toToken.icon} alt={toToken.symbol} className="w-6 h-6 rounded-full" />
-                          <span className="text-foreground font-medium text-base">{toToken.symbol}</span>
-                        </>
-                      ) : (
-                        <span className="text-foreground">Select token</span>
-                      )}
+                      <span className="text-foreground">
+                        {toTokens.length === 0 ? "Select tokens" : "Add more tokens"}
+                      </span>
                       <ArrowRight className="w-4 h-4 rotate-90" />
                     </Button>
-                    {toToken && (
-                      <span className="text-xs text-muted-foreground mt-1">
-                        {getTokenBalance(toToken)} {toToken.symbol}
-                      </span>
-                    )}
                   </div>
+
+                  {/* Selected Tokens */}
+                  {toTokens.map((token) => (
+                    <div key={token.symbol} className="flex items-center space-x-3 p-4 bg-card border border-border/50 rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full" />
+                            <span className="text-foreground font-medium text-base">{token.symbol}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeToToken(token.symbol)}
+                            className="text-muted-foreground hover:text-foreground p-1"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={toAmounts[token.symbol] || ""}
+                          onChange={(e) => updateToTokenAmount(token.symbol, e.target.value)}
+                          className="text-lg font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground"
+                        />
+                        <div className="flex items-center justify-between mt-1">
+                          <div className="text-sm text-muted-foreground">
+                            ${toAmounts[token.symbol] ? (parseFloat(toAmounts[token.symbol]) * token.price).toFixed(2) : "0"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {getTokenBalance(token)} {token.symbol}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Total Value Display */}
+                  {toTokens.length > 0 && (
+                    <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                      <span className="text-sm font-medium text-foreground">Total Value:</span>
+                      <span className="text-sm font-medium text-foreground">${toFiatValue}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -700,7 +784,7 @@ export default function TradingPlatform() {
                 </Button>
                 <Button 
                   onClick={() => setCurrentStep(3)} 
-                  disabled={!fromToken || !toToken || !fromAmount}
+                  disabled={!fromToken || toTokens.length === 0 || !fromAmount}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
                 >
                   Continue
@@ -810,6 +894,7 @@ export default function TradingPlatform() {
 
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {availableBuyTokens
+                    .filter(token => !toTokens.find(t => t.symbol === token.symbol)) // Filter out already selected tokens
                     .sort((a, b) => {
                       const aValue = parseFloat(getTokenBalance(a)) * a.price
                       const bValue = parseFloat(getTokenBalance(b)) * b.price
@@ -839,6 +924,11 @@ export default function TradingPlatform() {
                       </div>
                     </div>
                   ))}
+                  {availableBuyTokens.filter(token => !toTokens.find(t => t.symbol === token.symbol)).length === 0 && (
+                    <div className="text-center py-4 text-muted-foreground">
+                      All available tokens have been selected
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1162,9 +1252,17 @@ export default function TradingPlatform() {
                     </div>
                     <ArrowRight className="w-4 h-4 text-muted-foreground" />
                     <div className="text-center">
-                      <div className="font-medium text-foreground">{toToken?.symbol}</div>
-                      <div className="text-sm text-muted-foreground">{toToken?.name}</div>
-                      <div className="text-sm text-muted-foreground">{toAmount} {toToken?.symbol}</div>
+                      <div className="space-y-2">
+                        {toTokens.map((token) => (
+                          <div key={token.symbol} className="text-center">
+                            <div className="font-medium text-foreground">{token.symbol}</div>
+                            <div className="text-sm text-muted-foreground">{token.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {toAmounts[token.symbol] || "0"} {token.symbol}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1263,8 +1361,9 @@ export default function TradingPlatform() {
                       // Reset all form data
                       setSelectedPlatform(null);
                       setFromToken(tokens.find(t => t.symbol === "USDT") || null);
-                      setToToken(tokens.find(t => t.symbol === "HYPE") || null);
+                      setToTokens([]);
                       setFromAmount("");
+                      setToAmounts({});
                       setTriggerToken("");
                       setTimeframe("");
                       setCondition("");
