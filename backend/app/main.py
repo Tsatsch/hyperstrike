@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import triggers, wallet
+from app.routers import wallet
 from app.routers import orders as orders_router
 from app.auth import routers as auth_router
 from app.services.candle_watcher import ensure_subscription
@@ -20,7 +20,6 @@ app.add_middleware(
 
 # Include routers
 app.include_router(wallet.router, prefix="/api", tags=["wallet"])
-app.include_router(triggers.router, prefix="/api", tags=["triggers"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
 app.include_router(auth_router.router, prefix="/api", tags=["auth"])
 

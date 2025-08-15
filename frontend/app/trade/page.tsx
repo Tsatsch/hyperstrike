@@ -384,25 +384,25 @@ export default function TradingPlatform() {
       }
 
       // Build Order payload and call /api/order
-      const inputAmountNum = Number(fromAmount) || 0;
+      const inputAmountNum = Number(fromAmount);
       
       // For multiple tokens, we'll create multiple orders or modify the payload structure
       // For now, we'll use the first token as the primary output
       const primaryOutputToken = toTokens[0];
-      const primaryOutputAmount = Number(toAmounts[primaryOutputToken?.symbol || ''] || 1);
+      const primaryOutputAmount = Number(toAmounts[primaryOutputToken?.symbol || '']);
       
       const orderPayload = {
         platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
         wallet: '0x0000000000000000000000000000000000000000',
         swapData: {
           inputToken: fromToken?.address || '0x0000000000000000000000000000000000000000',
-          inputAmount: Math.max(1, Math.floor(inputAmountNum)),
+          inputAmount: isFinite(inputAmountNum) ? inputAmountNum : 0,
           outputToken: primaryOutputToken?.address || '0x0000000000000000000000000000000000000000',
-          outputAmount: Math.max(1, Math.floor(primaryOutputAmount)),
+          outputAmount: isFinite(primaryOutputAmount) ? primaryOutputAmount : 0,
           // Add additional output tokens if needed
           additionalOutputs: toTokens.slice(1).map(token => ({
             token: token.address || '0x0000000000000000000000000000000000000000',
-            amount: Math.max(1, Math.floor(Number(toAmounts[token.symbol] || 0)))
+            amount: (() => { const n = Number(toAmounts[token.symbol]); return isFinite(n) ? n : 0; })()
           }))
         },
         orderData: {
@@ -462,7 +462,7 @@ export default function TradingPlatform() {
               <a href="/trade" className="font-medium text-primary">
                 Trade
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+              <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">
                 Portfolio
               </a>
               <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">

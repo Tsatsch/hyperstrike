@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 # ---- Core nested models ----
 class SwapData(BaseModel):
     inputToken: str
-    inputAmount: int
+    inputAmount: float
     outputToken: str
-    outputAmount: int
+    outputAmount: float
 
 
 class OhlcvTriggerData(BaseModel):

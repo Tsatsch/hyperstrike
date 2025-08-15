@@ -144,6 +144,7 @@ export function WalletButton() {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem 
           className="py-3 cursor-pointer"
+          onClick={() => { window.location.href = '/portfolio' }}
         >
           <User className="mr-2 h-4 w-4" />
           <span>Portfolio</span>
