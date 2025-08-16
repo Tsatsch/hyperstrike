@@ -1,6 +1,6 @@
 {
-  "name": "HyperTrade - Conditional Trading Platform",
-  "short_name": "HyperTrade",
+  "name": "Hyperstrike - Conditional Trading Platform",
+  "short_name": "Hyperstrike",
   "description": "Revolutionary crypto trading platform offering conditional token swapping based on external signals, wallet activities, and market events.",
   "start_url": "/",
   "display": "standalone",

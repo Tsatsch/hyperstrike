@@ -119,7 +119,7 @@ export default function LandingPage() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <Activity className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold">HyperTrade</span>
+              <span className="text-xl font-bold">Hyperstrike</span>
             </div>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">

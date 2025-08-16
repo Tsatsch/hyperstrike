@@ -204,7 +204,7 @@ export default function PortfolioPage() {
           <div className="flex items-center space-x-4">
             <a href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
               <Activity className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold">HyperTrade</span>
+              <span className="text-xl font-bold">Hyperstrike</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>

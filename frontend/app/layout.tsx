@@ -5,7 +5,7 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata: Metadata = {
-  title: 'HyperTrade - Conditional Trading Platform',
+  title: 'Hyperstrike - Conditional Trading Platform',
   description: 'Revolutionary crypto trading platform offering conditional token swapping based on external signals, wallet activities, and market events.',
   icons: {
     icon: '/logo.png',

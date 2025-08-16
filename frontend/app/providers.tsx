@@ -64,7 +64,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       defaultTheme="system"
       enableSystem
       disableTransitionOnChange
-      storageKey="hypertrade-theme"
+      storageKey="Hyperstrike-theme"
     >
       <PrivyProviderWithTheme>
         {children}
