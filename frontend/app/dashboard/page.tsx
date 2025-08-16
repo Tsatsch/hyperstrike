@@ -12,6 +12,7 @@ import { Activity, Bell, Settings, User, ArrowRight, TrendingUp, Clock, AlertCir
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Footer } from "@/components/footer"
+import { Logo } from "@/components/Logo"
 
 interface Trigger {
   user: string
@@ -137,8 +138,8 @@ export default function Dashboard() {
       <header className="border-b bg-card">
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
-            <a href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-              <Activity className="h-6 w-6 text-primary" />
+            <a href="/" className="flex items-center space-x-1 hover:opacity-80 transition-opacity">
+              <Logo width={24} height={24} />
               <span className="text-xl font-bold">Hyperstrike</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">

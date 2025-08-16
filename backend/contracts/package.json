@@ -1,7 +1,7 @@
 {
-  "name": "hypertrade-smart-contracts",
+  "name": "hyperstrike-smart-contracts",
   "version": "1.0.0",
-  "description": "Smart contracts for Hypertrade protocol on HyperEVM",
+  "description": "Smart contracts for Hyperstrike protocol on HyperEVM",
   "main": "index.js",
   "scripts": {
     "compile": "hardhat compile",
@@ -19,7 +19,7 @@
     "ethereum",
     "trading"
   ],
-  "author": "Hypertrade Team",
+  "author": "Hyperstrike Team",
   "license": "MIT",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",

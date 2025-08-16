@@ -8,9 +8,18 @@ export const metadata: Metadata = {
   title: 'Hyperstrike - Conditional Trading Platform',
   description: 'Revolutionary crypto trading platform offering conditional token swapping based on external signals, wallet activities, and market events.',
   icons: {
-    icon: '/logo.png',
-    shortcut: '/logo.png',
-    apple: '/logo.png',
+    icon: [
+      { url: '/logo-dark.png', media: '(prefers-color-scheme: light)' },
+      { url: '/logo-light.png', media: '(prefers-color-scheme: dark)' }
+    ],
+    shortcut: [
+      { url: '/logo-dark.png', media: '(prefers-color-scheme: light)' },
+      { url: '/logo-light.png', media: '(prefers-color-scheme: dark)' }
+    ],
+    apple: [
+      { url: '/logo-dark.png', media: '(prefers-color-scheme: light)' },
+      { url: '/logo-light.png', media: '(prefers-color-scheme: dark)' }
+    ],
   },
   manifest: '/manifest.json',
   viewport: {

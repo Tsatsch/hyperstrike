@@ -1,4 +1,5 @@
-import { Activity, Heart } from 'lucide-react'
+import { Heart } from 'lucide-react'
+import { Logo } from './Logo'
 
 export function Footer() {
   return (
@@ -6,8 +7,8 @@ export function Footer() {
       <div className="container mx-auto px-6 py-8">
         <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Activity className="h-5 w-5 text-primary" />
+            <div className="flex items-center space-x-1">
+              <Logo width={20} height={20} />
               <span className="text-lg font-semibold">Hyperstrike</span>
             </div>
             <span className="text-sm text-muted-foreground">Conditional Trading Platform</span>

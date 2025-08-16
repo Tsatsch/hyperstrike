@@ -31,4 +31,4 @@ app.include_router(auth_router.router, prefix="/api", tags=["auth"])
 
 @app.get("/")
 def read_root():
-    return {"message": "FastAPI + Hyperliquid triggers are live!"}
+    return {"message": "FastAPI + Hyperstrike triggers are live!"}

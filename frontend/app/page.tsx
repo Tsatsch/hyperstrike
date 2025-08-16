@@ -34,6 +34,7 @@ import {
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Footer } from "@/components/footer"
+import { Logo } from "@/components/Logo"
 
 const features = [
   {
@@ -117,8 +118,8 @@ export default function LandingPage() {
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Activity className="h-6 w-6 text-primary" />
+            <div className="flex items-center space-x-1">
+              <Logo width={24} height={24} />
               <span className="text-xl font-bold">Hyperstrike</span>
             </div>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
