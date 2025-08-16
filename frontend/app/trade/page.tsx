@@ -586,7 +586,7 @@ export default function TradingPlatform() {
           <div className="flex items-center space-x-4">
             <a href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
               <Activity className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold">HyperTrade</span>
+              <span className="text-xl font-bold">Hyperstrike</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/trade" className="font-medium text-primary">
@@ -1581,7 +1581,7 @@ export default function TradingPlatform() {
               <div className="space-y-2">
                 <h3 className="text-2xl font-bold text-foreground">Connect Your Wallet</h3>
                 <p className="text-muted-foreground">
-                  Please connect your wallet to start trading on HyperTrade
+                  Please connect your wallet to start trading on Hyperstrike
                 </p>
               </div>
               

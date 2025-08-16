@@ -6,7 +6,7 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}🚀 Starting Hypertrade Development Environment${NC}"
+echo -e "${BLUE}🚀 Starting Hyperstrike Development Environment${NC}"
 
 # Function to handle cleanup on script exit
 cleanup() {

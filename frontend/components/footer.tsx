@@ -8,7 +8,7 @@ export function Footer() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <Activity className="h-5 w-5 text-primary" />
-              <span className="text-lg font-semibold">HyperTrade</span>
+              <span className="text-lg font-semibold">Hyperstrike</span>
             </div>
             <span className="text-sm text-muted-foreground">Conditional Trading Platform</span>
           </div>
