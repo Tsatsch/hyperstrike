@@ -65,8 +65,8 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
     // GlueX Router address (placeholder - replace with actual address)
     address public constant GLUEX_ROUTER = 0x0000000000000000000000000000000000000000; // TODO: Set actual GlueX Router address
     
-    // HYPE is the native token, so we don't need a token address
-    // address public constant HYPE_TOKEN = 0x...; // Removed - HYPE is native
+    // Wrapped HYPE token address (placeholder - replace with actual address)
+    address public constant WHYPE_TOKEN = 0x5555555555555555555555555555555555555555; // TODO: Set actual WHYPE token address
     
     // Native token representation (ETH, MATIC, etc.)
     address public constant NATIVE_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
