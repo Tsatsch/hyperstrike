@@ -132,9 +132,7 @@ export default function LandingPage() {
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">
                 Trade
               </a>
-              <a href="#docs" className="text-muted-foreground hover:text-foreground transition-colors">
-                Docs
-              </a>
+              {/* Hide XP on landing header per request */}
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">

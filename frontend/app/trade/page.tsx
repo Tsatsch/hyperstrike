@@ -599,8 +599,8 @@ export default function TradingPlatform() {
               <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
                 Markets
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                Analytics
+              <a href="/xp" className="text-muted-foreground hover:text-foreground transition-colors">
+                XP
               </a>
             </nav>
           </div>

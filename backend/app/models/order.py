@@ -57,3 +57,8 @@ class DeleteOrderRequest(BaseModel):
     orderId: int
 
 
+
+class OrderTriggeredRequest(BaseModel):
+    orderId: int
+    inputValueUsd: float = Field(..., description="Executed input notional in USD")
+

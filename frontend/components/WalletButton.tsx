@@ -58,7 +58,15 @@ export function WalletButton() {
         try {
           const token = await getAccessToken?.();
           if (!token) return;
-          await fetch(`http://localhost:8000/api/user?wallet=${currentWalletAddress}`, {
+          // Read referral code from URL if present
+          let referralParam = '';
+          try {
+            const url = new URL(window.location.href);
+            const ref = url.searchParams.get('ref');
+            if (ref) referralParam = `&referral=${encodeURIComponent(ref)}`;
+          } catch {}
+
+          await fetch(`http://localhost:8000/api/user?wallet=${currentWalletAddress}${referralParam}`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,

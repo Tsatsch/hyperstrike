@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { usePrivy } from '@privy-io/react-auth'
-import { exchangePrivyForBackendJwt, getBackendJwt, listOrders } from '@/lib/api'
+import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, getUserXp } from '@/lib/api'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
 
 import { Button } from "@/components/ui/button"
@@ -100,6 +100,7 @@ export default function PortfolioPage() {
   const [balances, setBalances] = useState<Record<string, string>>({})
   const [loadingBalances, setLoadingBalances] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
+  const [xp, setXp] = useState<number>(0)
 
   // Done state (ephemeral) to briefly show newly closed orders
   const { doneIds, clearDone } = useEphemeralDoneState(orders)
@@ -130,6 +131,12 @@ export default function PortfolioPage() {
       if (!authenticated || !user?.wallet?.address) return
       setLoadingBalances(true)
       try {
+        // fetch user XP
+        try {
+          const jwt = getBackendJwt() || await exchangePrivyForBackendJwt(getAccessToken, user.wallet.address)
+          if (jwt) setXp(await getUserXp())
+        } catch {}
+
         const erc20Addresses = TOKENS.map(t => t.address).filter(Boolean) as string[]
         const withoutHype = erc20Addresses.filter(addr => addr !== '0x2222222222222222222222222222222222222222')
         const [erc20Balances, hype] = await Promise.all([
@@ -211,6 +218,7 @@ export default function PortfolioPage() {
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>
               <a href="/portfolio" className="font-medium text-primary">Portfolio</a>
               <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">Markets</a>
+              <a href="/xp" className="text-muted-foreground hover:text-foreground transition-colors">XP</a>
               <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
             </nav>
           </div>
@@ -387,14 +395,20 @@ export default function PortfolioPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/50">
+            <Card className="border-border/50 cursor-pointer" onClick={() => window.location.href = '/xp'}>
               <CardHeader>
-                <CardTitle className="text-foreground">Quick Actions</CardTitle>
-                <CardDescription>Manage portfolio</CardDescription>
+                <CardTitle className="text-foreground">Your XP</CardTitle>
+                <CardDescription>Track rewards you earn on HyperTrade</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button variant="outline" className="w-full" onClick={() => window.location.href = '/trade'}>Create Order</Button>
-                <Button variant="outline" className="w-full" onClick={() => { setLoadingOrders(true); setTimeout(() => setLoadingOrders(false), 600); }}>Refresh Orders <RefreshCw className="w-4 h-4 ml-2" /></Button>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">Total XP</div>
+                  <div className="text-foreground font-semibold">{xp}</div>
+                </div>
+                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-primary" style={{ width: `${Math.min(100, (xp % 1000) / 10)}%` }} />
+                </div>
+                <div className="text-xs text-muted-foreground">Click to see how to earn more XP</div>
               </CardContent>
             </Card>
           </div>

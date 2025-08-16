@@ -47,4 +47,77 @@ export async function listOrders(): Promise<unknown> {
   return response.json();
 }
 
+export async function getUserXp(): Promise<number> {
+  const jwt = getBackendJwt();
+  if (!jwt) throw new Error('Missing backend JWT');
+  const response = await fetch('http://localhost:8000/api/xp', {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!response.ok) throw new Error('Failed to fetch XP');
+  const data = await response.json();
+  return Number(data?.xp || 0);
+}
+
+export interface UserMe {
+  user_id: number;
+  wallet: string;
+  xp: number;
+  referral_code?: string;
+}
+
+export async function getOrCreateUser(getAccessToken?: () => Promise<string | null>, walletAddress?: string): Promise<UserMe | null> {
+  try {
+    if (!getAccessToken || !walletAddress) return null;
+    const token = await getAccessToken();
+    if (!token) return null;
+    // include referral from URL if present
+    let referralParam = '';
+    try {
+      const url = new URL(window.location.href);
+      const ref = url.searchParams.get('ref');
+      if (ref) referralParam = `&referral=${encodeURIComponent(ref)}`;
+    } catch {}
+    const response = await fetch(`http://localhost:8000/api/user?wallet=${walletAddress}${referralParam}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function getUserMe(): Promise<UserMe | null> {
+  try {
+    const jwt = getBackendJwt();
+    if (!jwt) return null;
+    const response = await fetch('http://localhost:8000/api/user/me', {
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function getLeaderboard(limit = 50): Promise<Array<{ user_id: number; wallet_address: string; xp: number }>> {
+  const response = await fetch(`http://localhost:8000/api/xp/leaderboard?limit=${limit}`);
+  if (!response.ok) return [];
+  const data = await response.json();
+  return Array.isArray(data?.leaders) ? data.leaders : [];
+}
+
+export async function claimDailyXp(): Promise<{ awarded: number; nextEligibleAt?: string } | null> {
+  const jwt = getBackendJwt();
+  if (!jwt) return null;
+  const response = await fetch('http://localhost:8000/api/xp/daily_claim', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!response.ok) return null;
+  return response.json();
+}
+
 

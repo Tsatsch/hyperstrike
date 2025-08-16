@@ -1,8 +1,9 @@
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from app.auth.session import get_current_user
-from app.models.order import OrderCreateRequest, OrderOut, DeleteOrderRequest
+from app.models.order import OrderCreateRequest, OrderOut, DeleteOrderRequest, OrderTriggeredRequest
 from app.services.orders import create_order, list_orders_for_user, delete_order_for_user
+from app.services.user import ensure_user_has_xp_column_default, increment_user_xp
 
 
 router = APIRouter()
@@ -37,4 +38,20 @@ async def delete_order(payload: DeleteOrderRequest, current_user=Depends(get_cur
             raise HTTPException(status_code=404, detail=detail)
         raise HTTPException(status_code=500, detail=detail)
 
+
+@router.post("/order/triggered")
+async def order_triggered(payload: OrderTriggeredRequest, current_user=Depends(get_current_user)):
+    """Called when an order gets executed; awards 1% of input USD value as XP and marks closed."""
+    try:
+        user_id = current_user["user_id"]
+        ensure_user_has_xp_column_default(user_id)
+        xp_delta = int(max(0.0, float(payload.inputValueUsd)) * 0.01)
+        if xp_delta > 0:
+            increment_user_xp(user_id, xp_delta)
+        # mark order as closed for this user
+        from app.db.sb import supabase
+        supabase.table("orders").update({"state": "closed"}).eq("id", payload.orderId).eq("user_id", user_id).execute()
+        return {"xp_awarded": xp_delta}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
