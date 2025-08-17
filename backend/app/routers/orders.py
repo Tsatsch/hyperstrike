@@ -1,8 +1,8 @@
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from app.auth.session import get_current_user
-from app.models.order import OrderCreateRequest, OrderOut, DeleteOrderRequest, OrderTriggeredRequest
-from app.services.orders import create_order, list_orders_for_user, delete_order_for_user
+from app.models.order import OrderCreateRequest, OrderOut, DeleteOrderRequest, OrderTriggeredRequest, UpdateOrderStateRequest
+from app.services.orders import create_order, list_orders_for_user, delete_order_for_user, close_order_for_user, update_order_state_for_user
 from app.services.user import ensure_user_has_xp_column_default, increment_user_xp
 
 
@@ -50,8 +50,32 @@ async def order_triggered(payload: OrderTriggeredRequest, current_user=Depends(g
             increment_user_xp(user_id, xp_delta)
         # mark order as closed for this user
         from app.db.sb import supabase
-        supabase.table("orders").update({"state": "closed"}).eq("id", payload.orderId).eq("user_id", user_id).execute()
+        supabase.table("orders").update({"state": "closed", "termination_message": None}).eq("id", payload.orderId).eq("user_id", user_id).execute()
         return {"xp_awarded": xp_delta}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/order/expire")
+async def order_expire(orderId: int, reason: str = "time ran out", current_user=Depends(get_current_user)):
+    try:
+        closed = close_order_for_user(orderId, current_user["user_id"], reason)
+        return {"status": "closed", "order": closed}
+    except Exception as exc:
+        detail = str(exc)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=500, detail=detail)
+
+
+@router.post("/order/state", response_model=OrderOut)
+async def update_order_state(payload: UpdateOrderStateRequest, current_user=Depends(get_current_user)):
+    try:
+        updated = update_order_state_for_user(payload.orderId, current_user["user_id"], payload.state, payload.termination_message)
+        return updated
+    except Exception as exc:
+        detail = str(exc)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=500, detail=detail)
 

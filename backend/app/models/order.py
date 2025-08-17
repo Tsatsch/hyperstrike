@@ -1,13 +1,28 @@
 from typing import Literal, Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---- Core nested models ----
+class OutputSplit(BaseModel):
+    token: str
+    percentage: float
+
+
 class SwapData(BaseModel):
     inputToken: str
     inputAmount: float
-    outputToken: str
-    outputAmount: float
+    # Legacy single-output fields (kept optional for backward compatibility)
+    outputToken: Optional[str] = None
+    outputAmount: Optional[float] = None  # deprecated, no longer populated by frontend
+    # New multi-output percentage-based splits (max 4)
+    outputs: Optional[List[OutputSplit]] = None
+
+    @field_validator("outputs")
+    @classmethod
+    def validate_outputs_max_len(cls, v):
+        if v is not None and len(v) > 4:
+            raise ValueError("outputs must have at most 4 items")
+        return v
 
 
 class OhlcvTriggerData(BaseModel):
@@ -42,7 +57,8 @@ class OrderOut(BaseModel):
     orderData: OrderData
     signature: Optional[str] = None
     time: int
-    state: Literal["open", "closed", "deleted"] = "open"
+    state: Literal["open", "done", "closed", "deleted"] = "open"
+    termination_message: Optional[str] = None
     created_at: Optional[str] = None
 
     model_config = {
@@ -61,4 +77,10 @@ class DeleteOrderRequest(BaseModel):
 class OrderTriggeredRequest(BaseModel):
     orderId: int
     inputValueUsd: float = Field(..., description="Executed input notional in USD")
+
+
+class UpdateOrderStateRequest(BaseModel):
+    orderId: int
+    state: Literal["open", "done", "closed", "deleted"]
+    termination_message: Optional[str] = None
 

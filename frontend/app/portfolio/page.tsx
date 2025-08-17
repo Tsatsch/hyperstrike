@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { usePrivy } from '@privy-io/react-auth'
-import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, getUserXp } from '@/lib/api'
+import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, getUserXp, expireOrder } from '@/lib/api'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
 import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getNativeToken } from '@/lib/tokens'
 import { updateAllTokenPrices } from '@/lib/hyperliquid-prices'
@@ -25,17 +25,37 @@ interface OrderOut {
   user_id: number
   wallet: string
   platform: string
-  swapData: { inputToken: string; inputAmount: number; outputToken: string; outputAmount: number }
+  swapData: {
+    inputToken: string
+    inputAmount: number
+    outputToken?: string
+    outputAmount?: number
+    outputs?: { token: string; percentage: number }[]
+  }
   orderData?: any
   signature?: string
   time: number
-  state: "open" | "closed" | "deleted"
+  state: "open" | "done" | "closed" | "deleted"
   created_at?: string
+  termination_message?: string
 }
 
 // Using centralized token configuration
 const TOKENS = HYPERLIQUID_TOKENS
 const HYPE_ADDRESS = getNativeToken().address
+
+// Address → symbol mapping aligned with Trade page selections (lowercased keys)
+const ADDRESS_TO_SYMBOL: Record<string, string> = {
+  "0x2222222222222222222222222222222222222222": "HYPE",
+  "0xdac17f958d2ee523a2206206994597c13d831ec7": "USDT",
+  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": "UETH",
+  "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": "UBTC",
+  "0xd31a59c85ae9d8edefec411d448f90841571b89c": "USOL",
+  "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34": "USDE",
+  "0x52e444545fbe9e5972a7a371299522f7871aec1f": "JEFF",
+  "0xa320d9f65ec992eff38622c63627856382db726c": "HFUN",
+  "0x3b4575e689ded21caad31d64c4df1f10f3b2cedf": "UFART",
+}
 
 function useEphemeralDoneState(orders: OrderOut[]) {
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set())
@@ -73,14 +93,23 @@ function useEphemeralDoneState(orders: OrderOut[]) {
 }
 
 export default function PortfolioPage() {
-  const { authenticated, user, getAccessToken } = usePrivy()
+  const { ready, authenticated, user, getAccessToken, login } = usePrivy()
   const [orders, setOrders] = useState<OrderOut[]>([])
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [balances, setBalances] = useState<Record<string, string>>({})
   const [loadingBalances, setLoadingBalances] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
   const [xp, setXp] = useState<number>(0)
+  const [showConnectPrompt, setShowConnectPrompt] = useState(false)
+  const [hideCanceledClosed, setHideCanceledClosed] = useState(false)
   const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>(DEFAULT_TOKEN_PRICES)
+
+  // Current time ticker for countdowns
+  const [nowMs, setNowMs] = useState<number>(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   // Done state (ephemeral) to briefly show newly closed orders
   const { doneIds, clearDone } = useEphemeralDoneState(orders)
@@ -104,6 +133,43 @@ export default function PortfolioPage() {
     }
     run()
   }, [authenticated, user?.wallet?.address])
+
+  // Auto-expire orders when timeframe elapsed
+  useEffect(() => {
+    if (!authenticated || orders.length === 0) return
+    const open = orders.filter(o => o.state === 'open')
+    if (open.length === 0) return
+    const checkAndExpire = async () => {
+      const toClose: number[] = []
+      for (const o of open) {
+        const od: any = (o as any).orderData || {}
+        const trig: any = od.ohlcvTrigger || {}
+        const tf = trig.timeframe || trig.interval || ''
+        const tfMs = timeframeToMs(tf)
+        if (!tfMs) continue
+        const created = new Date(o.time).getTime()
+        const expiresAt = created + tfMs
+        if (nowMs >= expiresAt) toClose.push(o.id)
+      }
+      if (toClose.length > 0) {
+        // Close in sequence to keep it simple
+        for (const id of toClose) {
+          await expireOrder(id, 'time ran out')
+        }
+        // Refresh orders
+        try {
+          const data = await listOrders() as OrderOut[]
+          setOrders(Array.isArray(data) ? data : [])
+        } catch {}
+      }
+    }
+    checkAndExpire()
+  }, [authenticated, orders, nowMs])
+
+  useEffect(() => {
+    if (!ready) return
+    setShowConnectPrompt(!authenticated)
+  }, [ready, authenticated])
 
   // Fetch balances
   useEffect(() => {
@@ -164,50 +230,119 @@ export default function PortfolioPage() {
     const closed: OrderOut[] = []
     for (const o of orders) {
       if (o.state === 'open') open.push(o)
-      else if (o.state === 'closed') {
-        if (doneIds.has(o.id)) done.push(o)
-        else closed.push(o)
-      }
+      else if (o.state === 'done') done.push(o)
+      else if (o.state === 'closed') closed.push(o)
     }
     return { open, done, closed }
-  }, [orders, doneIds])
+  }, [orders])
 
   const addressToSymbol = (address?: string) => {
     if (!address) return 'UNKNOWN'
-    if (address.toLowerCase() === HYPE_ADDRESS.toLowerCase()) return 'HYPE'
-    const found = TOKENS.find(t => t.address?.toLowerCase() === address.toLowerCase())
+    const lower = address.toLowerCase()
+    if (ADDRESS_TO_SYMBOL[lower]) return ADDRESS_TO_SYMBOL[lower]
+    if (lower === HYPE_ADDRESS.toLowerCase()) return 'HYPE'
+    const found = TOKENS.find(t => t.address?.toLowerCase() === lower)
     return found?.symbol || address.slice(0, 6) + '...' + address.slice(-4)
   }
 
+  // ---
+
+  const timeframeToMs = (tf?: string): number | null => {
+    if (!tf) return null
+    const m = String(tf).toLowerCase().trim()
+    if (m.endsWith('m')) return Number(m.replace('m', '')) * 60 * 1000
+    if (m.endsWith('h')) return Number(m.replace('h', '')) * 60 * 60 * 1000
+    if (m.endsWith('d')) return Number(m.replace('d', '')) * 24 * 60 * 60 * 1000
+    return null
+  }
+
+  const tfHuman = (tf?: string): string => {
+    if (!tf) return ''
+    const m = String(tf).toLowerCase()
+    if (m.endsWith('m')) return `${m.replace('m', '')}min`
+    return m
+  }
+
+  const formatDate = (ts: number) => {
+    try {
+      const d = new Date(ts)
+      const day = d.getDate()
+      const month = d.getMonth() + 1
+      const year = d.getFullYear()
+      const hh = String(d.getHours()).padStart(2, '0')
+      const mm = String(d.getMinutes()).padStart(2, '0')
+      const ss = String(d.getSeconds()).padStart(2, '0')
+      return `${day}.${month}.${year}, ${hh}:${mm}:${ss}`
+    } catch { return String(new Date(ts)) }
+  }
+
+  // Countdown is computed inline per order using created_at + timeframe
+
   const formatOrderSummary = (o: OrderOut) => {
     const inSym = addressToSymbol((o.swapData as any)?.inputToken)
-    const outSym = addressToSymbol((o.swapData as any)?.outputToken)
     const inAmt = (o.swapData as any)?.inputAmount
+
+    const outputs = ((o.swapData as any)?.outputs || []) as { token: string; percentage: number }[]
+    const hasSplits = Array.isArray(outputs) && outputs.length > 0
+    const outSym = addressToSymbol((o.swapData as any)?.outputToken)
     const outAmt = (o.swapData as any)?.outputAmount
+    const legacyOutText = `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
+    const splitsText = hasSplits
+      ? outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
+      : legacyOutText
 
     const od = (o as any).orderData || {}
     const trig = od.ohlcvTrigger || {}
     const tf = trig.timeframe || trig.interval || ''
-    const source = trig.source || 'close'
-    const dir = (trig.trigger || trig.above) ? (trig.trigger === 'above' || trig.above ? 'Above' : 'Below') : ''
+    const source = (trig.source || 'close') as string
+    const dir = (trig.trigger || trig.above) ? ((trig.trigger === 'above' || trig.above) ? 'above' : 'below') : ''
     const trigVal = trig.triggerValue ?? trig.threshold
+    const pair = trig.pair || od.pair || ''
+    const metricLabel = (() => {
+      const s = (source || '').toLowerCase()
+      if (s === 'close') return 'price'
+      if (s === 'open') return 'open price'
+      if (s === 'high') return 'high price'
+      if (s === 'low') return 'low price'
+      if (s === 'volume') return 'volume'
+      if (s === 'trades') return 'trades'
+      return s
+    })()
+    const usesDollar = ['price', 'open price', 'high price', 'low price', 'volume'].includes(metricLabel)
+    const valueText = usesDollar ? `$${formatAmount(trigVal)}` : `${formatAmount(trigVal)}`
+    const ruleText = (dir && trigVal && pair)
+      ? `${pair} ${metricLabel} ${dir} ${valueText}`
+      : ''
 
     const inVal = (priceCache[inSym]?.price || 0) * (Number(inAmt) || 0)
-    const outVal = (priceCache[outSym]?.price || 0) * (Number(outAmt) || 0)
+    const outVal = hasSplits
+      ? outputs.reduce((sum, s) => {
+          const sym = addressToSymbol(s.token)
+          const pct = Number(s.percentage) || 0
+          const val = (priceCache[sym]?.price || 0) * (Number(inAmt) || 0) * (pct / 100)
+          return sum + val
+        }, 0)
+      : (priceCache[outSym]?.price || 0) * (Number(outAmt) || 0)
 
     return {
-      inSym, outSym, inAmt, outAmt, tf, source, dir, trigVal, inVal, outVal
+      inSym, inAmt, outText: splitsText, tf, source, dir, trigVal, pair, inVal, outVal,
+      ruleText,
+      tfLabel: tfHuman(tf),
+      whenText: formatDate(o.time),
     }
   }
 
-  const formatAmount = (amount: number) => {
+  const formatAmount = (amount: number | string) => {
     try {
-      return Number(amount).toLocaleString(undefined, { maximumFractionDigits: 6 })
+      const num = Number(amount)
+      if (!isFinite(num)) return String(amount)
+      return new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 }).format(num).replace(/,/g, ' ')
     } catch { return String(amount) }
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
+      <div className={!authenticated && ready && showConnectPrompt ? "blur-sm" : ""}>
       <header className="border-b bg-card">
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
@@ -262,23 +397,35 @@ export default function PortfolioPage() {
                   {categorized.open.map(o => {
                     const s = formatOrderSummary(o)
                     return (
-                      <div key={o.id} className="border border-border/50 rounded-lg p-3">
+                      <div key={o.id} className="border rounded-lg p-3 bg-blue-500/10 border-blue-500/20">
                         <div className="flex items-center justify-between">
                           <div className="text-foreground font-medium">
-                            {formatAmount(s.inAmt)} {s.inSym} → {formatAmount(s.outAmt)} {s.outSym}
+                            {formatAmount(s.inAmt)} {s.inSym} → {s.outText}
                           </div>
-                          <Badge variant="outline">open</Badge>
+                          {s.ruleText && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {s.ruleText}
+                            </div>
+                          )}
+                          <Badge variant="outline" className="bg-blue-500/10 border-blue-500/40 text-blue-500">open</Badge>
                         </div>
-                        {(s.dir && s.trigVal) ? (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {s.dir} {s.trigVal} {s.source} price
-                          </div>
-                        ) : null}
-                        
-                        {s.tf ? (
-                          <div className="text-xs text-muted-foreground mt-1">Timeframe: {s.tf}</div>
-                        ) : null}
-                        <div className="text-[11px] text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}</div>
+                        <div className="text-[11px] text-muted-foreground mt-1">
+                          {(() => {
+                            const tfMs = timeframeToMs(s.tf)
+                            if (!tfMs) return `#${o.id} • ${s.whenText}`
+                            const created = new Date(o.time).getTime()
+                            const expiresAt = created + tfMs
+                            const remMs = Math.max(0, expiresAt - nowMs)
+                            const totalSeconds = Math.floor(remMs / 1000)
+                            const hours = Math.floor(totalSeconds / 3600)
+                            const minutes = Math.floor((totalSeconds % 3600) / 60)
+                            const seconds = totalSeconds % 60
+                            const cd = hours > 0
+                              ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+                              : `${minutes}:${String(seconds).padStart(2, '0')}`
+                            return `#${o.id} • ${s.whenText}: ${s.tfLabel} • ${cd}`
+                          })()}
+                        </div>
                       </div>
                     )
                   })}
@@ -288,7 +435,7 @@ export default function PortfolioPage() {
 
             <Separator className="my-4" />
 
-            {/* Done (ephemeral) */}
+            {/* Done */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm font-semibold text-foreground">Done ({categorized.done.length})</div>
@@ -298,17 +445,51 @@ export default function PortfolioPage() {
               ) : (
                 <div className="space-y-2">
                   {categorized.done.map(o => (
-                    <div key={o.id} className="border border-border/50 rounded-lg p-3">
+                    <div key={o.id} className="border rounded-lg p-3 bg-yellow-500/10 border-yellow-500/20">
                       <div className="flex items-center justify-between">
                         <div className="text-foreground font-medium">
-                          {o.swapData.inputAmount} {o.swapData.inputToken} → {o.swapData.outputAmount} {o.swapData.outputToken}
+                          {formatAmount((o.swapData as any).inputAmount)} {addressToSymbol((o.swapData as any).inputToken)} → {(() => {
+                            const outputs = ((o.swapData as any)?.outputs || []) as { token: string; percentage: number }[]
+                            if (Array.isArray(outputs) && outputs.length > 0) {
+                              return outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
+                            }
+                            const outSym = addressToSymbol((o.swapData as any)?.outputToken)
+                            const outAmt = (o.swapData as any)?.outputAmount
+                            return `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
+                          })()}
                         </div>
+                        {(() => {
+                          const od = (o as any).orderData || {}
+                          const trig = od.ohlcvTrigger || {}
+                          const tf = trig.timeframe || trig.interval || ''
+                          const source = (trig.source || 'close') as string
+                          const dir = (trig.trigger || trig.above) ? ((trig.trigger === 'above' || trig.above) ? 'above' : 'below') : ''
+                          const trigVal = trig.triggerValue ?? trig.threshold
+                          const pair = trig.pair || od.pair || ''
+                          const metricLabel = (() => {
+                            const s = (source || '').toLowerCase()
+                            if (s === 'close') return 'price'
+                            if (s === 'open') return 'open price'
+                            if (s === 'high') return 'high price'
+                            if (s === 'low') return 'low price'
+                            if (s === 'volume') return 'volume'
+                            if (s === 'trades') return 'trades'
+                            return s
+                          })()
+                          const usesDollar = ['price', 'open price', 'high price', 'low price', 'volume'].includes(metricLabel)
+                          const valueText = usesDollar ? `$${formatAmount(trigVal)}` : `${formatAmount(trigVal)}`
+                          const ruleText = (dir && trigVal && pair)
+                            ? `${pair} ${metricLabel} ${dir} ${valueText}`
+                            : ''
+                          return ruleText ? (
+                            <div className="text-xs text-muted-foreground mt-1">{ruleText}</div>
+                          ) : null
+                        })()}
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline">done</Badge>
-                          <Button size="sm" variant="outline" onClick={() => clearDone(o.id)}>Move to closed</Button>
+                          <Badge variant="outline" className="bg-yellow-500/10 border-yellow-500/40 text-yellow-500">done</Badge>
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}{o.termination_message ? ` • ${o.termination_message}` : ''}</div>
                     </div>
                   ))}
                 </div>
@@ -321,24 +502,66 @@ export default function PortfolioPage() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm font-semibold text-foreground">Closed ({categorized.closed.length})</div>
-                <Button variant="ghost" size="sm" onClick={() => setShowClosed(v => !v)} className="cursor-pointer">
-                  {showClosed ? <>Hide <ChevronUp className="w-4 h-4 ml-1" /></> : <>Show <ChevronDown className="w-4 h-4 ml-1" /></>}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {showClosed && (
+                    <Button variant="outline" size="sm" onClick={() => setHideCanceledClosed(v => !v)} className="cursor-pointer">
+                      {hideCanceledClosed ? 'Show canceled' : 'Hide canceled'}
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setShowClosed(v => !v)} className="cursor-pointer">
+                    {showClosed ? <>Hide <ChevronUp className="w-4 h-4 ml-1" /></> : <>Show <ChevronDown className="w-4 h-4 ml-1" /></>}
+                  </Button>
+                </div>
               </div>
               {showClosed && (
                 categorized.closed.length === 0 ? (
                   <div className="text-muted-foreground text-sm">No closed orders</div>
                 ) : (
                   <div className="space-y-2">
-                    {categorized.closed.map(o => (
-                      <div key={o.id} className="border border-border/50 rounded-lg p-3">
+                    {(hideCanceledClosed ? categorized.closed.filter(o => !o.termination_message) : categorized.closed).map(o => (
+                      <div key={o.id} className={`border rounded-lg p-3 ${o.termination_message ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
                         <div className="flex items-center justify-between">
                           <div className="text-foreground font-medium">
-                            {o.swapData.inputAmount} {o.swapData.inputToken} → {o.swapData.outputAmount} {o.swapData.outputToken}
+                            {formatAmount((o.swapData as any).inputAmount)} {addressToSymbol((o.swapData as any).inputToken)} → {(() => {
+                              const outputs = ((o.swapData as any)?.outputs || []) as { token: string; percentage: number }[]
+                              if (Array.isArray(outputs) && outputs.length > 0) {
+                                return outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
+                              }
+                              const outSym = addressToSymbol((o.swapData as any)?.outputToken)
+                              const outAmt = (o.swapData as any)?.outputAmount
+                              return `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
+                            })()}
                           </div>
-                          <Badge variant="outline">closed</Badge>
+                          {(() => {
+                            const od = (o as any).orderData || {}
+                            const trig = od.ohlcvTrigger || {}
+                            const tf = trig.timeframe || trig.interval || ''
+                            const source = (trig.source || 'close') as string
+                            const dir = (trig.trigger || trig.above) ? ((trig.trigger === 'above' || trig.above) ? 'above' : 'below') : ''
+                            const trigVal = trig.triggerValue ?? trig.threshold
+                            const pair = trig.pair || od.pair || ''
+                            const metricLabel = (() => {
+                              const s = (source || '').toLowerCase()
+                              if (s === 'close') return 'price'
+                              if (s === 'open') return 'open price'
+                              if (s === 'high') return 'high price'
+                              if (s === 'low') return 'low price'
+                              if (s === 'volume') return 'volume'
+                              if (s === 'trades') return 'trades'
+                              return ''
+                            })()
+                            const usesDollar = ['price', 'open price', 'high price', 'low price', 'volume'].includes(metricLabel)
+                            const valueText = usesDollar ? `$${formatAmount(trigVal)}` : `${formatAmount(trigVal)}`
+                            const ruleText = (dir && trigVal && pair)
+                              ? `${pair} ${metricLabel} ${dir} ${valueText}`
+                              : ''
+                            return ruleText ? (
+                              <div className="text-xs text-muted-foreground mt-1">{ruleText}</div>
+                            ) : null
+                          })()}
+                          <Badge variant="outline" className={`${o.termination_message ? 'bg-red-500/10 border-red-500/40 text-red-500' : 'bg-green-500/10 border-green-500/40 text-green-500'}`}>closed</Badge>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}{o.termination_message ? ` • ${o.termination_message}` : ''}</div>
                       </div>
                     ))}
                   </div>
@@ -416,6 +639,39 @@ export default function PortfolioPage() {
       </div>
 
       <Footer />
+      </div>
+
+      {!authenticated && ready && showConnectPrompt && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card border border-border/50 rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <div className="text-center space-y-6">
+              <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                <Wallet className="w-8 h-8 text-primary" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-foreground">Connect Your Wallet</h3>
+                <p className="text-muted-foreground">Please connect your wallet to view your portfolio and orders.</p>
+              </div>
+              <div className="space-y-3">
+                <Button 
+                  onClick={login}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
+                >
+                  Connect Wallet
+                  <Wallet className="w-4 w-4 ml-2" />
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowConnectPrompt(false)}
+                  className="w-full border-border/50 cursor-pointer"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

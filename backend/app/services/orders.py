@@ -9,7 +9,8 @@ def _normalize_wallet(wallet: str) -> str:
 
 def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet: str) -> OrderOut:
     """Insert order into Supabase and return saved record."""
-    data = order_req.model_dump()
+    # Exclude None values so JSON payloads remain compact (and omit legacy fields when unused)
+    data = order_req.model_dump(exclude_none=True)
     # Authoritative wallet comes from session, not client payload
     data["wallet"] = _normalize_wallet(user_wallet)
     data["user_id"] = user_id
@@ -40,5 +41,29 @@ def delete_order_for_user(order_id: int, user_id: int) -> None:
     if not response.data:
         # nothing updated -> either not found, not owner, or already deleted
         raise Exception("Order not found or already deleted")
+
+
+def close_order_for_user(order_id: int, user_id: int, message: Optional[str] = None) -> OrderOut:
+    update: Dict[str, Any] = {"state": "closed"}
+    if message is not None:
+        update["termination_message"] = message
+    response = supabase.table("orders").update(update).eq("id", order_id).eq("user_id", user_id).execute()
+    if getattr(response, "error", None):
+        raise Exception(f"Failed to close order: {response.error}")
+    if not response.data:
+        raise Exception("Order not found or not owned by user")
+    return OrderOut(**response.data[0])
+
+
+def update_order_state_for_user(order_id: int, user_id: int, state: str, message: Optional[str] = None) -> OrderOut:
+    update: Dict[str, Any] = {"state": state}
+    if message is not None:
+        update["termination_message"] = message
+    response = supabase.table("orders").update(update).eq("id", order_id).eq("user_id", user_id).execute()
+    if getattr(response, "error", None):
+        raise Exception(f"Failed to update order state: {response.error}")
+    if not response.data:
+        raise Exception("Order not found or not owned by user")
+    return OrderOut(**response.data[0])
 
 

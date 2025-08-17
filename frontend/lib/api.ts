@@ -49,6 +49,28 @@ export async function listOrders(): Promise<unknown> {
   return response.json();
 }
 
+export async function expireOrder(orderId: number, reason = "time ran out"): Promise<boolean> {
+  const jwt = getBackendJwt();
+  if (!jwt) return false;
+  const params = new URLSearchParams({ orderId: String(orderId), reason });
+  const response = await fetch(`http://localhost:8000/api/order/expire?${params.toString()}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  return response.ok;
+}
+
+export async function setOrderState(orderId: number, state: 'open' | 'done' | 'closed' | 'deleted', termination_message?: string): Promise<boolean> {
+  const jwt = getBackendJwt();
+  if (!jwt) return false;
+  const response = await fetch('http://localhost:8000/api/order/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+    body: JSON.stringify({ orderId, state, termination_message }),
+  });
+  return response.ok;
+}
+
 export async function getUserXp(): Promise<number> {
   const jwt = getBackendJwt();
   if (!jwt) throw new Error('Missing backend JWT');

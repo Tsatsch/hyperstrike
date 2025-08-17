@@ -240,6 +240,9 @@ export default function TradingPlatform() {
         if (prev.find(t => t.symbol === token.symbol)) {
           return prev // Token already exists
         }
+        if (prev.length >= 4) {
+          return prev // Enforce max of 4 output tokens
+        }
         return [...prev, token]
       })
       setShowToTokenModal(false)
@@ -571,30 +574,24 @@ export default function TradingPlatform() {
 
       // Build Order payload and call /api/order
       const inputAmountNum = Number(fromAmount);
-      
-      // For multiple tokens, we'll create multiple orders or modify the payload structure
-      // For now, we'll use the first token as the primary output
-      const primaryOutputToken = toTokens[0];
-      const primaryOutputPercentage = Number(toPercentages[primaryOutputToken?.symbol || '']);
-      const primaryOutputAmount = (primaryOutputPercentage / 100) * inputAmountNum;
-      
+      // Prepare outputs array (percentage-based) limited to 4
+      const selectedOutputs = toTokens.slice(0, 4).map(token => ({
+        token: token.address || '0x0000000000000000000000000000000000000000',
+        percentage: Number(toPercentages[token.symbol] || '0'),
+      }));
+
+      const primaryOutputToken = selectedOutputs[0];
+
       const orderPayload = {
         platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
         wallet: '0x0000000000000000000000000000000000000000',
         swapData: {
           inputToken: fromToken?.address || '0x0000000000000000000000000000000000000000',
           inputAmount: isFinite(inputAmountNum) ? inputAmountNum : 0,
-          outputToken: primaryOutputToken?.address || '0x0000000000000000000000000000000000000000',
-          outputAmount: isFinite(primaryOutputAmount) ? primaryOutputAmount : 0,
-          // Add additional output tokens if needed
-          additionalOutputs: toTokens.slice(1).map(token => {
-            const percentage = Number(toPercentages[token.symbol] || '0');
-            const amount = (percentage / 100) * inputAmountNum;
-            return {
-              token: token.address || '0x0000000000000000000000000000000000000000',
-              amount: isFinite(amount) ? amount : 0
-            };
-          })
+          // Legacy single-output fields populated from first split for compatibility
+          outputToken: primaryOutputToken?.token || '0x0000000000000000000000000000000000000000',
+          // New percentage-based outputs for up to 4 tokens
+          outputs: selectedOutputs,
         },
         orderData: {
           type: 'ohlcvTrigger',
@@ -973,20 +970,22 @@ export default function TradingPlatform() {
                    )
                    })}
                   
-                  {/* Add Token Button - Always show one plus button */}
-                  <div
-                    className="p-4 bg-muted/30 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:bg-muted/50 hover:border-border transition-all"
-                    onClick={() => setShowToTokenModal(true)}
-                  >
-                    <div className="flex flex-col items-center justify-center h-full text-center">
-                      <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center mb-2">
-                        <span className="text-lg font-bold text-muted-foreground">+</span>
+                  {/* Add Token Button - only show if fewer than 4 outputs selected */}
+                  {toTokens.length < 4 && (
+                    <div
+                      className="p-4 bg-muted/30 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:bg-muted/50 hover:border-border transition-all"
+                      onClick={() => setShowToTokenModal(true)}
+                    >
+                      <div className="flex flex-col items-center justify-center h-full text-center">
+                        <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center mb-2">
+                          <span className="text-lg font-bold text-muted-foreground">+</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {toTokens.length === 0 ? "Select token" : "Add token"}
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {toTokens.length === 0 ? "Select token" : "Add token"}
-                      </span>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Total Percentage Display */}
@@ -1622,10 +1621,10 @@ export default function TradingPlatform() {
                   </Button>
                   <Button 
                     variant="outline" 
-                    onClick={() => window.location.href = '/dashboard'}
+                    onClick={() => window.location.href = '/portfolio'}
                     className="w-full border-border/50 cursor-pointer"
                   >
-                    My Dashboard
+                    My Portfolio
                   </Button>
                 </div>
               </CardContent>

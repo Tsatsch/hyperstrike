@@ -14,13 +14,14 @@ import { XpButton } from "@/components/XpButton"
 import { Footer } from "@/components/footer"
 
 export default function XpPage() {
-  const { authenticated, user, getAccessToken, login } = usePrivy()
+  const { ready, authenticated, user, getAccessToken, login } = usePrivy()
   const [xp, setXp] = useState<number>(0)
   const [refCode, setRefCode] = useState<string>("")
   const [copied, setCopied] = useState<boolean>(false)
   const [leaders, setLeaders] = useState<Array<{ user_id: number; wallet_address: string; xp: number }>>([])
   const [claiming, setClaiming] = useState(false)
   const [claimMsg, setClaimMsg] = useState<string>("")
+  const [showConnectPrompt, setShowConnectPrompt] = useState(false)
 
   useEffect(() => {
     const run = async () => {
@@ -41,6 +42,11 @@ export default function XpPage() {
     }
     run()
   }, [authenticated, user?.wallet?.address])
+
+  useEffect(() => {
+    if (!ready) return
+    setShowConnectPrompt(!authenticated)
+  }, [ready, authenticated])
 
   const copyReferral = async () => {
     const base = typeof window !== 'undefined' ? window.location.origin : ''
@@ -71,7 +77,7 @@ export default function XpPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
-      <div className={!authenticated ? "blur-sm" : ""}>
+      <div className={!authenticated && ready && showConnectPrompt ? "blur-sm" : ""}>
       <header className="border-b bg-card">
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
@@ -195,7 +201,7 @@ export default function XpPage() {
       <Footer />
       </div>
 
-      {!authenticated && (
+      {!authenticated && ready && showConnectPrompt && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-card border border-border/50 rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
             <div className="text-center space-y-6">
@@ -209,10 +215,17 @@ export default function XpPage() {
               <div className="space-y-3">
                 <Button 
                   onClick={login}
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
                 >
                   Connect Wallet
                   <Wallet className="w-4 h-4 ml-2" />
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowConnectPrompt(false)}
+                  className="w-full border-border/50 cursor-pointer"
+                >
+                  Cancel
                 </Button>
               </div>
             </div>
