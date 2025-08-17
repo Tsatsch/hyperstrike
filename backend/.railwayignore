@@ -1,0 +1,9 @@
+# Ignore any Docker files if they exist
+Dockerfile
+.dockerignore
+
+# Ignore development files
+.venv/
+__pycache__/
+*.pyc
+.env.local
