@@ -1,6 +1,6 @@
-// Alchemy API integration for real-time token data
-const ALCHEMY_API_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
-const ALCHEMY_BASE_URL = 'https://eth-mainnet.g.alchemy.com/v2'
+// Token data API integration for Hyperliquid
+// Note: Alchemy metadata API only works for Ethereum mainnet, not Hyperliquid
+// For Hyperliquid tokens, we'll need to use on-chain data or Hyperliquid's API
 
 export interface TokenMetadata {
   name: string
@@ -43,74 +43,49 @@ export interface TokenMarketData {
   lastUpdated?: string
 }
 
-// Fetch token metadata from Alchemy
+// Fetch token metadata for Hyperliquid tokens
 export async function getTokenMetadata(contractAddress: string): Promise<TokenMetadata | null> {
   try {
-    if (!ALCHEMY_API_KEY) {
-      console.warn('Alchemy API key not found - skipping metadata fetch')
-      return null
-    }
-
-    // Use Alchemy's getTokenMetadata endpoint
-    const response = await fetch(`${ALCHEMY_BASE_URL}/${ALCHEMY_API_KEY}/getTokenMetadata?contractAddress=${contractAddress}`)
+    // For Hyperliquid, we'll need to use on-chain calls or Hyperliquid's API
+    // Alchemy's metadata API doesn't support Hyperliquid tokens
+    console.warn('Token metadata API not implemented for Hyperliquid tokens')
     
-    if (!response.ok) {
-      if (response.status === 403) {
-        console.warn('Alchemy API key invalid or missing permissions - skipping metadata fetch')
-      } else {
-        console.warn(`Alchemy API returned ${response.status} - skipping metadata fetch`)
-      }
-      return null
-    }
-
-    const data = await response.json()
-    
+    // Return default metadata for now
     return {
-      name: data.name || 'Unknown Token',
-      symbol: data.symbol || 'UNKNOWN',
-      decimals: data.decimals || 18,
-      logo: data.logo,
-      totalSupply: data.totalSupply
+      name: 'Unknown Token',
+      symbol: 'UNKNOWN',
+      decimals: 18,
+      logo: undefined,
+      totalSupply: undefined
     }
   } catch (error) {
-    console.warn('Error fetching token metadata from Alchemy:', error)
+    console.warn('Error fetching token metadata:', error)
     return null
   }
 }
 
-// Fetch token price data from CoinGecko (as fallback since Alchemy doesn't provide price data)
+// Fetch token price data for Hyperliquid tokens
 export async function getTokenPriceData(contractAddress: string): Promise<TokenMarketData | null> {
   try {
-    // Use CoinGecko API as Alchemy doesn't provide price data
-    const response = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${contractAddress}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true`)
+    // For Hyperliquid tokens, we'll need to use Hyperliquid's API or on-chain data
+    // CoinGecko doesn't have Hyperliquid token prices
+    console.warn('Token price API not implemented for Hyperliquid tokens')
     
-    if (!response.ok) {
-      console.warn(`CoinGecko API returned ${response.status} - skipping price data fetch`)
-      return null
-    }
-
-    const data = await response.json()
-    const tokenData = data[contractAddress.toLowerCase()]
-    
-    if (!tokenData) {
-      console.warn(`No price data found for token ${contractAddress}`)
-      return null
-    }
-
+    // Return default price data for now
     return {
-      price: tokenData.usd || 0,
-      change24h: tokenData.usd_24h_change || 0,
-      volume24h: tokenData.usd_24h_vol || 0,
-      marketCap: tokenData.usd_market_cap || 0,
+      price: 0,
+      change24h: 0,
+      volume24h: 0,
+      marketCap: 0,
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.warn('Error fetching token price data from CoinGecko:', error)
+    console.warn('Error fetching token price data:', error)
     return null
   }
 }
 
-// Get comprehensive token data (metadata + price)
+// Get comprehensive token data (metadata + price) for Hyperliquid tokens
 export async function getTokenData(contractAddress: string): Promise<{
   metadata: TokenMetadata | null
   marketData: TokenMarketData | null
