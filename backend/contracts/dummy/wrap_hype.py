@@ -11,7 +11,7 @@ from eth_account import Account
 import os
 
 # Configuration
-WHYPE_CONTRACT_ADDRESS = "0x0ef133cAe6DF3a0b899d299660CE0115F0Ea4A53"
+WHYPE_CONTRACT_ADDRESS = "0x62832DAA7B3E925e0bDCEcE457a665878FD3BF36"
 HYPER_TESTNET_RPC = "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm"
 CHAIN_ID = 998
 
