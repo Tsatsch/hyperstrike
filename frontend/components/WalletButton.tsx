@@ -86,7 +86,7 @@ export function WalletButton() {
             // Optional: prefetch orders to verify end-to-end and aid DX during hackathon
             try {
               const orders = await listOrders();
-              console.log('Orders (prefetched):', orders);
+
             } catch (e) {
               console.warn('Could not prefetch orders:', e);
             }

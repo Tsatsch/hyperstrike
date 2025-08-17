@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import { usePrivy } from '@privy-io/react-auth'
 import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, getUserXp } from '@/lib/api'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
+import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getNativeToken } from '@/lib/tokens'
+import { updateAllTokenPrices } from '@/lib/hyperliquid-prices'
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,33 +33,9 @@ interface OrderOut {
   created_at?: string
 }
 
-interface TokenInfo {
-  symbol: string
-  name: string
-  address?: string
-  icon: string
-}
-
-const TOKENS: TokenInfo[] = [
-  { symbol: "USDT", name: "Tether", address: "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb", icon: "/coins-logos/usdt.svg" },
-  { symbol: "UETH", name: "Unit Ethereum", address: "0xbe6727b535545c67d5caa73dea54865b92cf7907", icon: "/coins-logos/eth.svg" },
-  { symbol: "UBTC", name: "Unit Bitcoin", address: "0x9fdbda0a5e284c32744d2f17ee5c74b284993463", icon: "/coins-logos/btc.svg" },
-  { symbol: "USOL", name: "Unit Solana", address: "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29", icon: "/coins-logos/sol.svg" },
-  { symbol: "USDE", name: "USD.e", address: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34", icon: "/coins-logos/usde.svg" },
-  { symbol: "HYPE", name: "Hyperliquid", icon: "/coins-logos/hyperliquid.svg" },
-]
-
-// Simple price map in USDT for sorting and valuation; extend as needed
-const PRICE_USD_BY_SYMBOL: Record<string, number> = {
-  USDT: 1,
-  USDE: 1,
-  HYPE: 39,
-  UETH: 3500.5,
-  UBTC: 118000,
-  USOL: 166,
-}
-
-const HYPE_ADDRESS = '0x2222222222222222222222222222222222222222'
+// Using centralized token configuration
+const TOKENS = HYPERLIQUID_TOKENS
+const HYPE_ADDRESS = getNativeToken().address
 
 function useEphemeralDoneState(orders: OrderOut[]) {
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set())
@@ -102,6 +80,7 @@ export default function PortfolioPage() {
   const [loadingBalances, setLoadingBalances] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
   const [xp, setXp] = useState<number>(0)
+  const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>(DEFAULT_TOKEN_PRICES)
 
   // Done state (ephemeral) to briefly show newly closed orders
   const { doneIds, clearDone } = useEphemeralDoneState(orders)
@@ -157,6 +136,28 @@ export default function PortfolioPage() {
     run()
   }, [authenticated, user?.wallet?.address])
 
+  // Fetch real-time prices
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        const realTimePrices = await updateAllTokenPrices()
+        
+        if (realTimePrices && Object.keys(realTimePrices).length > 0) {
+          const finalPriceCache = { ...DEFAULT_TOKEN_PRICES, ...realTimePrices }
+          setPriceCache(finalPriceCache)
+        }
+      } catch (error) {
+        console.warn('Error fetching portfolio prices:', error)
+      }
+    }
+
+    fetchPrices()
+    
+    // Update prices every 30 seconds
+    const interval = setInterval(fetchPrices, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
   const categorized = useMemo(() => {
     const open: OrderOut[] = []
     const done: OrderOut[] = []
@@ -191,9 +192,8 @@ export default function PortfolioPage() {
     const dir = (trig.trigger || trig.above) ? (trig.trigger === 'above' || trig.above ? 'Above' : 'Below') : ''
     const trigVal = trig.triggerValue ?? trig.threshold
 
-    const priceMap = PRICE_USD_BY_SYMBOL
-    const inVal = (priceMap[inSym] || 0) * (Number(inAmt) || 0)
-    const outVal = (priceMap[outSym] || 0) * (Number(outAmt) || 0)
+    const inVal = (priceCache[inSym]?.price || 0) * (Number(inAmt) || 0)
+    const outVal = (priceCache[outSym]?.price || 0) * (Number(outAmt) || 0)
 
     return {
       inSym, outSym, inAmt, outAmt, tf, source, dir, trigVal, inVal, outVal
@@ -369,7 +369,7 @@ export default function PortfolioPage() {
                           ? balances['0x2222222222222222222222222222222222222222']
                           : (t.address ? balances[t.address] : undefined)
                         const balanceNum = parseFloat(balanceStr || '0') || 0
-                        const price = PRICE_USD_BY_SYMBOL[t.symbol] ?? 0
+                        const price = priceCache[t.symbol]?.price ?? 0
                         const valueUsd = balanceNum * price
                         return { token: t, balanceStr: (balanceStr ?? '0'), balanceNum, price, valueUsd }
                       }).sort((a, b) => b.valueUsd - a.valueUsd)

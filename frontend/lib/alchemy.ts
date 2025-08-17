@@ -43,12 +43,18 @@ export interface TokenMarketData {
   lastUpdated?: string
 }
 
+// Cache to prevent repeated warnings
+let hasWarnedMetadata = false
+
 // Fetch token metadata for Hyperliquid tokens
 export async function getTokenMetadata(contractAddress: string): Promise<TokenMetadata | null> {
   try {
     // For Hyperliquid, we'll need to use on-chain calls or Hyperliquid's API
     // Alchemy's metadata API doesn't support Hyperliquid tokens
-    console.warn('Token metadata API not implemented for Hyperliquid tokens')
+    if (!hasWarnedMetadata) {
+      console.warn('Token metadata API not implemented for Hyperliquid tokens')
+      hasWarnedMetadata = true
+    }
     
     // Return default metadata for now
     return {
@@ -64,12 +70,18 @@ export async function getTokenMetadata(contractAddress: string): Promise<TokenMe
   }
 }
 
+// Cache to prevent repeated warnings
+let hasWarnedPrice = false
+
 // Fetch token price data for Hyperliquid tokens
 export async function getTokenPriceData(contractAddress: string): Promise<TokenMarketData | null> {
   try {
     // For Hyperliquid tokens, we'll need to use Hyperliquid's API or on-chain data
     // CoinGecko doesn't have Hyperliquid token prices
-    console.warn('Token price API not implemented for Hyperliquid tokens')
+    if (!hasWarnedPrice) {
+      console.warn('Token price API not implemented for Hyperliquid tokens')
+      hasWarnedPrice = true
+    }
     
     // Return default price data for now
     return {

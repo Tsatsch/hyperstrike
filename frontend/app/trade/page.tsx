@@ -6,6 +6,8 @@ import { getBackendJwt, exchangePrivyForBackendJwt } from '@/lib/api'
 import { getUserIdFromWallet } from '@/lib/wallet-utils'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
 import { getBatchTokenData, TokenMetadata, TokenMarketData } from '@/lib/alchemy'
+import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getTokenByAddress } from '@/lib/tokens'
+import { updateAllTokenPrices } from '@/lib/hyperliquid-prices'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -33,18 +35,19 @@ interface Token {
   lastUpdated?: string
 }
 
-// Initial token configuration with contract addresses (no hardcoded prices)
-const initialTokens: Token[] = [
-  { symbol: "USDT", name: "Tether", price: 0, change24h: 0, address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", balance: 0, icon: "/coins-logos/usdt.svg" },
-  { symbol: "UETH", name: "Unit Ethereum", price: 0, change24h: 0, address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", balance: 0, icon: "/coins-logos/eth.svg" },
-  { symbol: "UBTC", name: "Unit Bitcoin", price: 0, change24h: 0, address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", balance: 0, icon: "/coins-logos/btc.svg" },
-  { symbol: "USOL", name: "Unit Solana", price: 0, change24h: 0, address: "0xD31a59c85aE9D8edEFeC411D448f90841571b89c", balance: 0, icon: "/coins-logos/sol.svg" },
-  { symbol: "USDE", name: "USD.e", price: 0, change24h: 0, address: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34", balance: 0, icon: "/coins-logos/usde.svg" },
-  { symbol: "HYPE", name: "Hype", price: 0, change24h: 0, address: "0x2222222222222222222222222222222222222222", balance: 0, icon: "/coins-logos/hyperliquid.svg" },
-  { symbol: "UFART", name: "Unit Fartcoin", price: 0, change24h: 0, address: "0x3b4575e689ded21caad31d64c4df1f10f3b2cedf", balance: 0, icon: "/coins-logos/ufart.jpg" },
-  { symbol: "JEFF", name: "JEFF", price: 0, change24h: 0, address: "0x52e444545fbe9e5972a7a371299522f7871aec1f", balance: 0, icon: "https://app.hyperliquid.xyz/coins/JEFF_USDC.svg" },
-  { symbol: "HFART", name: "HFUN", price: 0, change24h: 0, address: "0xa320d9f65ec992eff38622c63627856382db726c", balance: 0, icon: "https://app.hyperliquid.xyz/coins/HFUN_USDC.svg" },
-]
+// Convert centralized token config to local Token interface
+const initialTokens: Token[] = HYPERLIQUID_TOKENS.map(token => ({
+  symbol: token.symbol,
+  name: token.name,
+  price: DEFAULT_TOKEN_PRICES[token.symbol]?.price || 0,
+  change24h: DEFAULT_TOKEN_PRICES[token.symbol]?.change24h || 0,
+  address: token.address,
+  balance: 0,
+  icon: token.icon,
+  metadata: undefined,
+  marketData: undefined,
+  lastUpdated: undefined
+}))
 
 const conditionTypes = [
   {
@@ -120,56 +123,15 @@ export default function TradingPlatform() {
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
   const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>({});
 
-  // Mapping from contract address to tokens
-  const contractAddressToToken: { [key: string]: Token | undefined } = {
-    "0x2222222222222222222222222222222222222222": tokens.find(t => t.symbol === "HYPE"),
-    "0xdAC17F958D2ee523a2206206994597C13D831ec7": tokens.find(t => t.symbol === "USDT"),
-    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": tokens.find(t => t.symbol === "UETH"),
-    "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": tokens.find(t => t.symbol === "UBTC"),
-    "0xD31a59c85aE9D8edEFeC411D448f90841571b89c": tokens.find(t => t.symbol === "USOL"),
-    "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34": tokens.find(t => t.symbol === "USDE"),
-    // Additional token mappings
-    "0x9b498c3c8a0b8cd8ba1d9851d40d186f1872b44e": { symbol: "PURR", name: "PURR", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xa320d9f65ec992eff38622c63627856382db726c": { symbol: "HFUN", name: "HFUN", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x52e444545fbe9e5972a7a371299522f7871aec1f": { symbol: "JEFF", name: "JEFF", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xb09158c8297acee00b900dc1f8715df46b7246a6": { symbol: "VEGAS", name: "VEGAS", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xe3d5f45d97fee83b48c85e00c8359a2e07d68fee": { symbol: "ADHD", name: "ADHD", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x11735dbd0b97cfa7accf47d005673ba185f7fd49": { symbol: "CATBAL", name: "CATBAL", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x45ec8f63fe934c0213476cfb5870835e61dd11fa": { symbol: "OMNIX", name: "OMNIX", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xd2fe47eed2d52725d9e3ae6df45593837f57c1a2": { symbol: "SPH", name: "SPH", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x1bee6762f0b522c606dc2ffb106c0bb391b2e309": { symbol: "PIP", name: "PIP", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x7280cc1f369ab574c35cb8a8d0885e9486e3b733": { symbol: "YEETI", name: "YEETI", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xc1631903081b19f0b7117f34192c7db48960989c": { symbol: "NIGGO", name: "NIGGO", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x6f7e96c0267cd22fe04346af21f8c6ff54372939": { symbol: "GENESY", name: "GENESY", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x04d02cb2e963b4490ee02b1925223d04f9d83fc6": { symbol: "CAT", name: "CAT", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x710a6c044d23949ba3b98ce13d762503c9708ba3": { symbol: "BEATS", name: "BEATS", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x1ecd15865d7f8019d546f76d095d9c93cc34edfa": { symbol: "LIQD", name: "LIQD", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x78c3791ea49a7c6f41e87ba96c7d09a493febb1e": { symbol: "H", name: "H", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x3f244819a8359145a8e7cf0272955e4918a50627": { symbol: "FLY", name: "FLY", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x266a2491f782eb03b369760889fff8785efb3e46": { symbol: "TIME", name: "TIME", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x5804bf271d9e691611eea1267b24c1f3d0723639": { symbol: "HWTR", name: "HWTR", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x9fdbda0a5e284c32744d2f17ee5c74b284993463": { symbol: "UBTC", name: "UBTC", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xc12b4dd5268322ddbe3d6f65ebb1ce37a9951315": { symbol: "VORTX", name: "VORTX", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xc11579f984d07af75b0164ac458583a0d39d619a": { symbol: "JPEG", name: "JPEG", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xbe6727b535545c67d5caa73dea54865b92cf7907": { symbol: "UETH", name: "UETH", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xca79db4b49f608ef54a5cb813fbed3a6387bc645": { symbol: "USDXL", name: "USDXL", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x02c6a2fa58cc01a18b8d9e00ea48d65e4df26c70": { symbol: "FEUSD", name: "FEUSD", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29": { symbol: "USOL", name: "USOL", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x47bb061c0204af921f43dc73c7d7768d2672ddee": { symbol: "BUDDY", name: "BUDDY", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x3b4575e689ded21caad31d64c4df1f10f3b2cedf": { symbol: "UFART", name: "UFART", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xf0c82d188ee54958813e7ac650e119135fc35e94": { symbol: "PENIS", name: "PENIS", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb": { symbol: "USDT0", name: "USDT0", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x28245ab01298eaef7933bc90d35bd9dbca5c89db": { symbol: "PEG", name: "PEG", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x8ff0dd9f9c40a0d76ef1bcfaf5f98c1610c74bd8": { symbol: "USH", name: "USH", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x7dcffcb06b40344eeced2d1cbf096b299fe4b405": { symbol: "RUB", name: "RUB", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xd2567ee20d75e8b74b44875173054365f6eb5052": { symbol: "PERP", name: "PERP", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x0ad339d66bf4aed5ce31c64bc37b3244b6394a77": { symbol: "USR", name: "USR", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xb50a96253abdf803d85efcdce07ad8becbc52bd5": { symbol: "USDHL", name: "USDHL", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xf4d9235269a96aadafc9adae454a0618ebe37949": { symbol: "XAUT0", name: "XAUT0", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x27ec642013bcb3d80ca3706599d3cda04f6f4452": { symbol: "UPUMP", name: "UPUMP", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0x502ee789b448aa692901fe27ab03174c90f07dd1": { symbol: "STLOOP", name: "STLOOP", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-    "0xe7eaa46c2ac8470d622ada1538fede6242cebe53": { symbol: "LATINA", name: "LATINA", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
-  };
+  // Generate mapping from contract address to tokens using centralized config
+  const contractAddressToToken: { [key: string]: Token | undefined } = {}
+  tokens.forEach(token => {
+    if (token.address) {
+      contractAddressToToken[token.address] = token
+    }
+  })
+  
+  // All tokens from HYPERLIQUID_TOKENS are now properly mapped
 
   useEffect(() => {
     if (showFromTokenModal || showToTokenModal) {
@@ -236,7 +198,7 @@ export default function TradingPlatform() {
     }
 
     try {
-      console.log(`🔍 Fetching balance for ${token.symbol} at ${token.address}`)
+
       
       if (token.address === "0x2222222222222222222222222222222222222222") {
         // Handle HYPE token separately
@@ -245,7 +207,7 @@ export default function TradingPlatform() {
           ...prev,
           [token.address!]: balance
         }))
-        console.log(`💰 Fetched ${token.symbol} balance:`, balance)
+
       } else {
         // Handle ERC20 token
         const balances = await fetchTokenBalances(user.wallet.address, [token.address])
@@ -253,10 +215,10 @@ export default function TradingPlatform() {
           ...prev,
           ...balances
         }))
-        console.log(`💰 Fetched ${token.symbol} balance:`, balances[token.address])
+
       }
     } catch (error) {
-      console.error(`❌ Error fetching balance for ${token.symbol}:`, error)
+      console.error(`Error fetching balance for ${token.symbol}:`, error)
     }
   }
 
@@ -397,10 +359,10 @@ export default function TradingPlatform() {
     if (!token) return "99999999999"
     if (authenticated && token.address && tokenBalances[token.address]) {
       const balance = parseFloat(tokenBalances[token.address])
-      console.log(`🔍 Token ${token.symbol} balance found: ${balance}`)
+
       return balance.toFixed(6)
     }
-    console.log(`🔍 No balance found for ${token.symbol}, using placeholder`)
+
     return token.balance.toString()
   }
 
@@ -481,109 +443,75 @@ export default function TradingPlatform() {
     }
   }, [authenticated, pendingPlatform, currentStep]);
 
-  // Fetch all token prices once when page loads
+  // Fetch real-time token prices from Hyperliquid on page load
   useEffect(() => {
     const fetchAllPrices = async () => {
       setIsLoadingPrices(true)
       try {
-        console.log('🔍 Fetching all token prices...')
+        // Fetch real-time prices from Hyperliquid API
+        const realTimePrices = await updateAllTokenPrices()
         
-        // Get all token addresses with valid addresses
-        const tokenAddresses = tokens
-          .filter(token => token.address && token.address !== "0x2222222222222222222222222222222222222222") // Exclude HYPE for now
-          .map(token => token.address!)
-
-        if (tokenAddresses.length === 0) {
-          console.log('No valid token addresses to fetch')
-          setIsLoadingPrices(false)
-          return
+        if (realTimePrices && Object.keys(realTimePrices).length > 0) {
+          // Use real-time prices, fallback to default for missing tokens
+          const finalPriceCache = { ...DEFAULT_TOKEN_PRICES, ...realTimePrices }
+          setPriceCache(finalPriceCache)
+        } else {
+          // Fallback to default prices if API fails
+          console.warn('Failed to fetch real-time prices, using fallback data')
+          setPriceCache(DEFAULT_TOKEN_PRICES)
         }
-
-        console.log('📋 Fetching prices for addresses:', tokenAddresses)
-        
-        // Fetch real-time data
-        const tokenData = await getBatchTokenData(tokenAddresses)
-        
-        console.log('📊 Received token data:', tokenData)
-        
-        // Build price cache from API data
-        const newPriceCache: Record<string, { price: number; change24h: number }> = {}
-        
-        tokens.forEach(token => {
-          if (token.address && tokenData[token.address]) {
-            const { marketData } = tokenData[token.address]
-            if (marketData?.price) {
-              newPriceCache[token.symbol] = {
-                price: marketData.price,
-                change24h: marketData.change24h || 0
-              }
-              console.log(`✅ Cached ${token.symbol}: price=${marketData.price}, change24h=${marketData.change24h}`)
-            }
-          }
-        })
-        
-        // Add fallback prices for tokens without API data
-        const fallbackPrices = {
-          "USDT": { price: 1.0, change24h: 0.0 },
-          "UETH": { price: 3500.0, change24h: 2.4 },
-          "UBTC": { price: 118000.0, change24h: -1.2 },
-          "USOL": { price: 166.0, change24h: 5.8 },
-          "USDE": { price: 1.0, change24h: 3.2 },
-          "HYPE": { price: 39.0, change24h: 3.2 }
-        }
-        
-        // Merge API data with fallbacks
-        const finalPriceCache = { ...fallbackPrices, ...newPriceCache }
-        setPriceCache(finalPriceCache)
-        
-        console.log('✅ Price cache built successfully:', finalPriceCache)
         
       } catch (error) {
-        console.warn('⚠️ Error fetching token prices - using fallback data:', error)
-        // Use fallback prices if API fails
-        const fallbackPrices = {
-          "USDT": { price: 1.0, change24h: 0.0 },
-          "UETH": { price: 3500.0, change24h: 2.4 },
-          "UBTC": { price: 118000.0, change24h: -1.2 },
-          "USOL": { price: 166.0, change24h: 5.8 },
-          "USDE": { price: 1.0, change24h: 3.2 },
-          "HYPE": { price: 39.0, change24h: 3.2 }
-        }
-        setPriceCache(fallbackPrices)
+        console.warn('Error fetching real-time prices - using fallback data:', error)
+        setPriceCache(DEFAULT_TOKEN_PRICES)
       } finally {
         setIsLoadingPrices(false)
       }
     }
 
     fetchAllPrices()
+    
+    // Set up periodic price updates every 30 seconds
+    const priceUpdateInterval = setInterval(async () => {
+      try {
+        const realTimePrices = await updateAllTokenPrices()
+        
+        if (realTimePrices && Object.keys(realTimePrices).length > 0) {
+          const finalPriceCache = { ...DEFAULT_TOKEN_PRICES, ...realTimePrices }
+          setPriceCache(finalPriceCache)
+        }
+      } catch (error) {
+        console.warn('Error refreshing prices:', error)
+      }
+    }, 30000) // 30 seconds
+    
+    // Cleanup interval on component unmount
+    return () => {
+      clearInterval(priceUpdateInterval)
+    }
   }, [])
 
   // Fetch token balances when wallet is connected
   useEffect(() => {
     const fetchBalances = async () => {
       if (authenticated && user?.wallet?.address) {
-        console.log('🔍 Fetching balances for wallet:', user.wallet.address)
+
         try {
           // Get all token addresses from the tokens array
           const tokenAddresses = tokens
             .filter(token => token.address) // Include all tokens with addresses
             .map(token => token.address!)
 
-          console.log('📋 Token addresses to fetch:', tokenAddresses)
-
           // Fetch ERC20 token balances and HYPE balance
           // exclude HYPE from the fetchTokenBalances function
           const tokenAddressesWithoutHYPE = tokenAddresses.filter(address => address !== "0x2222222222222222222222222222222222222222")
-          console.log('🔍 ERC20 addresses (without HYPE):', tokenAddressesWithoutHYPE)
-          console.log('🔍 Fetching HYPE balance separately...')
           
           const [erc20Balances, ethBalance] = await Promise.all([
             fetchTokenBalances(user.wallet.address, tokenAddressesWithoutHYPE),
             fetchHYPEBalance(user.wallet.address)
           ])
 
-          console.log('💰 Fetched ERC20 balances:', erc20Balances)
-          console.log('💰 Fetched HYPE balance:', ethBalance)
+
 
                     // Combine all balances - use the token addresses as keys
           const allBalances = {
@@ -591,12 +519,11 @@ export default function TradingPlatform() {
             "0x2222222222222222222222222222222222222222": ethBalance, // Special case for native HYPE token
           }
            
-          console.log('✅ All balances combined:', allBalances)
-          console.log('🔍 HYPE balance in combined:', allBalances["0x2222222222222222222222222222222222222222"])
-          console.log('🔍 All balance keys:', Object.keys(allBalances))
+
+
           setTokenBalances(allBalances)
         } catch (error) {
-          console.error('❌ Error fetching token balances:', error)
+          console.error('Error fetching token balances:', error)
         }
       }
     }
@@ -698,7 +625,7 @@ export default function TradingPlatform() {
         setShowSuccessPage(true);
       } else {
         // Handle error
-        console.log(response);
+
         console.error('Failed to create conditional swap');
         // You can add error handling here (e.g., show error message)
       }
