@@ -59,17 +59,7 @@ async function main() {
   console.log("Deployer/Owner:", await priceTriggerSwap.owner());
   
   console.log("\n🎉 ALL CONTRACTS SUCCESSFULLY DEPLOYED ON HYPEREVM TESTNET! 🎉");
-  console.log("\nNext Steps:");
-  console.log("1. Verify both contracts on HyperEVM testnet explorer");
-  console.log("2. Test basic functionality of both contracts");
-  console.log("3. Configure PriceTriggerSwap with WHYPE address");
-  console.log("4. Test integration between contracts");
-  console.log("5. Gradually add more features and test each one");
   
-  console.log("\nContract Details:");
-  console.log("- WHYPE: Wrapped HYPE token implementation");
-  console.log("- PriceTriggerSwap: Automated swap contract with GlueX Router integration");
-  console.log("- Both contracts are now ready for testing and configuration");
 }
 
 main()
