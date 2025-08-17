@@ -2,7 +2,7 @@
 nixPkgs = ["python311", "poetry"]
 
 [phases.install]
-cmds = ["poetry install --no-dev --no-interaction --no-ansi"]
+cmds = ["poetry install --only main --no-interaction --no-ansi"]
 
 [phases.build]
 cmds = ["poetry run python -m pip install --upgrade pip"]

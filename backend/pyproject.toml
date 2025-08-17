@@ -15,7 +15,7 @@ uvicorn = ">=0.35.0,<0.36.0"
 websockets = ">=15.0.1,<16.0.0"
 aiohttp = ">=3.12.15,<4.0.0"
 supabase = {git = "https://github.com/supabase-community/supabase-py.git"}
-python-dotenv = ">=0.9.9,<0.10.0"
+python-dotenv = "^1.0.0"
 pyjwt = ">=2.10,<3.0"
 requests = ">=2.31,<3.0"
 cryptography = ">=42,<45"
