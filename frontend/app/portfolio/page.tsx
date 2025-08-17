@@ -38,12 +38,12 @@ interface TokenInfo {
 }
 
 const TOKENS: TokenInfo[] = [
-  { symbol: "USDT", name: "Tether", address: "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb", icon: "https://i.imgur.com/ERZzJcK.png" },
-  { symbol: "UETH", name: "Unit Ethereum", address: "0xbe6727b535545c67d5caa73dea54865b92cf7907", icon: "https://i.imgur.com/ERZzJcK.png" },
-  { symbol: "UBTC", name: "Unit Bitcoin", address: "0x9fdbda0a5e284c32744d2f17ee5c74b284993463", icon: "https://i.imgur.com/ERZzJcK.png" },
-  { symbol: "USOL", name: "Unit Solana", address: "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29", icon: "https://i.imgur.com/jh8AZo0.png" },
-  { symbol: "USDE", name: "USD.e", address: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34", icon: "https://i.imgur.com/jh8AZo0.png" },
-  { symbol: "HYPE", name: "Hyperliquid", icon: "https://i.imgur.com/jh8AZo0.png" },
+  { symbol: "USDT", name: "Tether", address: "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb", icon: "/coins-logos/usdt.svg" },
+  { symbol: "UETH", name: "Unit Ethereum", address: "0xbe6727b535545c67d5caa73dea54865b92cf7907", icon: "/coins-logos/eth.svg" },
+  { symbol: "UBTC", name: "Unit Bitcoin", address: "0x9fdbda0a5e284c32744d2f17ee5c74b284993463", icon: "/coins-logos/btc.svg" },
+  { symbol: "USOL", name: "Unit Solana", address: "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29", icon: "/coins-logos/sol.svg" },
+  { symbol: "USDE", name: "USD.e", address: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34", icon: "/coins-logos/usde.svg" },
+  { symbol: "HYPE", name: "Hyperliquid", icon: "/coins-logos/hyperliquid.svg" },
 ]
 
 // Simple price map in USDT for sorting and valuation; extend as needed
