@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator"
 import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown, Activity, Bell, Settings, User, Copy, ExternalLink, X } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { XpButton } from "@/components/XpButton"
 import { Footer } from "@/components/footer"
 import { Logo } from "@/components/Logo"
 
@@ -731,9 +732,6 @@ export default function TradingPlatform() {
               <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
                 Markets
               </a>
-              <a href="/xp" className="text-muted-foreground hover:text-foreground transition-colors">
-                XP
-              </a>
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">
@@ -744,6 +742,7 @@ export default function TradingPlatform() {
             <Button variant="ghost" size="icon">
               <Settings className="h-4 w-4" />
             </Button>
+            <XpButton />
             <WalletButton />
             <Button variant="ghost" size="icon">
               <User className="h-4 w-4" />
