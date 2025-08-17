@@ -40,14 +40,7 @@ function PrivyProviderWithTheme({ children }: { children: React.ReactNode }) {
           createOnLogin: 'users-without-wallets',
         },
         externalWallets: {
-          metaMask: {},
-          coinbaseWallet: {},
-          walletConnect: {
-            projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default-project-id',
-          },
-          rainbow: {},
-          trust: {},
-          safe: {},
+          // MetaMask and other popular wallets work without additional config
         },
       }}
     >

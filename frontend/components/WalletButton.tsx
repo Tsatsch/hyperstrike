@@ -110,14 +110,9 @@ export function WalletButton() {
     }
   };
 
-  const handleViewOnBlockscout = () => {
+  const handleViewOnHypurrScan = () => {
     if (currentWalletAddress) {
-      // Get the connected wallet that matches the user's wallet address
-      const connectedWallet = wallets.find(w => w.address.toLowerCase() === currentWalletAddress.toLowerCase());
-      // Get the chain ID in CAIP-2 format (e.g., 'eip155:1' for Ethereum mainnet)
-      const chainId = connectedWallet?.chainId || 'eip155:1';
-      const baseUrl = BLOCKSCOUT_URLS[chainId] || 'https://eth.blockscout.com';
-      window.open(`${baseUrl}/address/${currentWalletAddress}`, '_blank');
+      window.open(`https://hypurrscan.io/address/${currentWalletAddress}`, '_blank');
     }
   };
 
@@ -167,10 +162,10 @@ export function WalletButton() {
         </DropdownMenuItem>
         <DropdownMenuItem 
           className="py-3 cursor-pointer"
-          onClick={handleViewOnBlockscout}
+          onClick={handleViewOnHypurrScan}
         >
           <ExternalLink className="mr-2 h-4 w-4" />
-          <span>View on Blockscout</span>
+          <span>View on HypurrScan</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem 

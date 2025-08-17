@@ -1,3 +1,5 @@
+import { config } from './config';
+
 export async function exchangePrivyForBackendJwt(
   getAccessToken?: () => Promise<string | null>,
   walletAddress?: string
@@ -7,7 +9,7 @@ export async function exchangePrivyForBackendJwt(
     const privyToken = await getAccessToken();
     if (!privyToken) return null;
 
-    const response = await fetch('http://localhost:8000/api/auth/exchange_privy', {
+    const response = await fetch(`${config.apiUrl}/api/auth/exchange_privy`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${privyToken}`,
@@ -38,7 +40,7 @@ export function getBackendJwt(): string | null {
 export async function listOrders(): Promise<unknown> {
   const jwt = getBackendJwt();
   if (!jwt) throw new Error('Missing backend JWT');
-  const response = await fetch('http://localhost:8000/api/orders', {
+  const response = await fetch(`${config.apiUrl}/api/orders`, {
     headers: {
       Authorization: `Bearer ${jwt}`,
     },
@@ -50,7 +52,7 @@ export async function listOrders(): Promise<unknown> {
 export async function getUserXp(): Promise<number> {
   const jwt = getBackendJwt();
   if (!jwt) throw new Error('Missing backend JWT');
-  const response = await fetch('http://localhost:8000/api/xp', {
+  const response = await fetch(`${config.apiUrl}/api/xp`, {
     headers: { Authorization: `Bearer ${jwt}` },
   });
   if (!response.ok) throw new Error('Failed to fetch XP');
@@ -77,7 +79,7 @@ export async function getOrCreateUser(getAccessToken?: () => Promise<string | nu
       const ref = url.searchParams.get('ref');
       if (ref) referralParam = `&referral=${encodeURIComponent(ref)}`;
     } catch {}
-    const response = await fetch(`http://localhost:8000/api/user?wallet=${walletAddress}${referralParam}`, {
+    const response = await fetch(`${config.apiUrl}/api/user?wallet=${walletAddress}${referralParam}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
     });
@@ -92,7 +94,7 @@ export async function getUserMe(): Promise<UserMe | null> {
   try {
     const jwt = getBackendJwt();
     if (!jwt) return null;
-    const response = await fetch('http://localhost:8000/api/user/me', {
+    const response = await fetch(`${config.apiUrl}/api/user/me`, {
       headers: { Authorization: `Bearer ${jwt}` },
     });
     if (!response.ok) return null;
@@ -103,7 +105,7 @@ export async function getUserMe(): Promise<UserMe | null> {
 }
 
 export async function getLeaderboard(limit = 50): Promise<Array<{ user_id: number; wallet_address: string; xp: number }>> {
-  const response = await fetch(`http://localhost:8000/api/xp/leaderboard?limit=${limit}`);
+  const response = await fetch(`${config.apiUrl}/api/xp/leaderboard?limit=${limit}`);
   if (!response.ok) return [];
   const data = await response.json();
   return Array.isArray(data?.leaders) ? data.leaders : [];
@@ -112,7 +114,7 @@ export async function getLeaderboard(limit = 50): Promise<Array<{ user_id: numbe
 export async function claimDailyXp(): Promise<{ awarded: number; nextEligibleAt?: string } | null> {
   const jwt = getBackendJwt();
   if (!jwt) return null;
-  const response = await fetch('http://localhost:8000/api/xp/daily_claim', {
+  const response = await fetch(`${config.apiUrl}/api/xp/daily_claim`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${jwt}` },
   });
