@@ -4,21 +4,24 @@ require("dotenv").config();
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    version: "0.8.19",
+    version: "0.8.20",
     settings: {
       optimizer: {
         enabled: true,
         runs: 200,
       },
+      viaIR: true,
     },
   },
   networks: {
     // HyperEVM testnet (replace with actual network details)
     hyperevmTestnet: {
-      url: process.env.HYPER_TESTNET_RPC || "https://testnet-rpc.hyperevm.com",
+      url: process.env.HYPER_TESTNET_RPC || "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 1337, // Replace with actual HyperEVM testnet chain ID
+      chainId: 998, // Replace with actual HyperEVM testnet chain ID
       gasPrice: 20000000000, // 20 gwei
+      gas: 3000000, // Set explicit gas limit
+      blockGasLimit: 3000000, // Set block gas limit
     },
     // HyperEVM mainnet (replace with actual network details)
     hyperevmMainnet: {
