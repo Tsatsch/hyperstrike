@@ -1,0 +1,4 @@
+cd /Users/kerem/hypertrade/backend/contracts
+.quit
+exit
+npm run deploy:testnet
