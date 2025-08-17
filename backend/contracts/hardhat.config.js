@@ -4,7 +4,7 @@ require("dotenv").config();
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    version: "0.8.19",
+    version: "0.8.20",
     settings: {
       optimizer: {
         enabled: true,
@@ -13,19 +13,19 @@ module.exports = {
     },
   },
   networks: {
-    // HyperEVM testnet (replace with actual network details)
+    // HyperEVM testnet (actual network details)
     hyperevmTestnet: {
-      url: process.env.HYPER_TESTNET_RPC || "https://testnet-rpc.hyperevm.com",
+      url: process.env.HYPER_TESTNET_RPC || "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 1337, // Replace with actual HyperEVM testnet chain ID
-      gasPrice: 20000000000, // 20 gwei
+      chainId: 998, // Actual HyperEVM testnet chain ID
+      gasPrice: 20000000000, // 20 gwei - removed for dynamic pricing
     },
-    // HyperEVM mainnet (replace with actual network details)
+    // HyperEVM mainnet (actual network details)
     hyperevmMainnet: {
       url: process.env.HYPER_MAINNET_RPC || "https://withered-delicate-sailboat.hype-mainnet.quiknode.pro/edb38026d62fb1de9d51e057b4b720a455f8b9d8/evm",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 1, // Replace with actual HyperEVM mainnet chain ID
-      gasPrice: 20000000000, // 20 gwei
+      chainId: 1, // Actual HyperEVM mainnet chain ID
+      gasPrice: 20000000000, // 20 gwei - removed for dynamic pricing
     },
     // Local development
     hardhat: {
@@ -37,16 +37,8 @@ module.exports = {
     apiKey: process.env.ETHERSCAN_API_KEY,
     customChains: [
       {
-        network: "hyperevmTestnet",
-        chainId: 1337, // Replace with actual chain ID
-        urls: {
-          apiURL: "https://testnet-explorer.hyperevm.com/api", // Replace with actual URL
-          browserURL: "https://testnet-explorer.hyperevm.com", // Replace with actual URL
-        },
-      },
-      {
         network: "hyperevmMainnet",
-        chainId: 1, // Replace with actual chain ID
+        chainId: 1, // Actual chain ID
         urls: {
           apiURL: "https://explorer.hyperevm.com/api", // Replace with actual URL
           browserURL: "https://explorer.hyperevm.com", // Replace with actual URL

@@ -17,13 +17,14 @@ async function main() {
   // Get the WHYPE contract factory
   const WHYPE = await ethers.getContractFactory("WHYPE");
   
-  // Deploy WHYPE with explicit gas settings
+  // Deploy WHYPE with hardcoded gas settings
   const whype = await WHYPE.deploy({
-    gasLimit: 1000000, // 1M gas limit
+    gasLimit: 2000000, // 2M gas limit
     gasPrice: ethers.parseUnits("20", "gwei") // 20 gwei
   });
   
   // Wait for deployment to complete
+  console.log("Waiting for WHYPE deployment confirmation...");
   await whype.waitForDeployment();
   const whypeAddress = await whype.getAddress();
   
@@ -35,13 +36,14 @@ async function main() {
   // Get the PriceTriggerSwap contract factory
   const PriceTriggerSwap = await ethers.getContractFactory("PriceTriggerSwap");
 
-  // Deploy PriceTriggerSwap with explicit gas settings
+  // Deploy PriceTriggerSwap with hardcoded gas settings
   const priceTriggerSwap = await PriceTriggerSwap.deploy({
-    gasLimit: 2000000, // 1M gas limit
+    gasLimit: 2000000, // 2M gas limit
     gasPrice: ethers.parseUnits("20", "gwei") // 20 gwei
   });
   
   // Wait for deployment to complete
+  console.log("Waiting for PriceTriggerSwap deployment confirmation...");
   await priceTriggerSwap.waitForDeployment();
   const priceTriggerSwapAddress = await priceTriggerSwap.getAddress();
 

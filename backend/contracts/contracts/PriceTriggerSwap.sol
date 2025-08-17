@@ -385,13 +385,13 @@ contract PriceTriggerSwap is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Emergency function to withdraw stuck ETH
-     * @param amount Amount of ETH to withdraw
+     * @dev Emergency function to withdraw stuck HYPE
+     * @param amount Amount of HYPE to withdraw
      */
     function emergencyWithdrawETH(uint256 amount) external onlyOwner whenNotPaused {
-        require(amount <= address(this).balance, "Insufficient ETH balance");
+        require(amount <= address(this).balance, "Insufficient HYPE balance");
         (bool success, ) = payable(owner()).call{value: amount}("");
-        require(success, "ETH transfer failed");
+        require(success, "HYPE transfer failed");
     }
     
     /**
