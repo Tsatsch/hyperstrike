@@ -6,7 +6,6 @@ import { getBackendJwt, exchangePrivyForBackendJwt } from '@/lib/api'
 import { getUserIdFromWallet } from '@/lib/wallet-utils'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
 import { getBatchTokenData, TokenMetadata, TokenMarketData } from '@/lib/alchemy'
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -39,8 +38,11 @@ const initialTokens: Token[] = [
   { symbol: "UETH", name: "Unit Ethereum", price: 0, change24h: 0, address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", balance: 0, icon: "/coins-logos/eth.svg" },
   { symbol: "UBTC", name: "Unit Bitcoin", price: 0, change24h: 0, address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", balance: 0, icon: "/coins-logos/btc.svg" },
   { symbol: "USOL", name: "Unit Solana", price: 0, change24h: 0, address: "0xD31a59c85aE9D8edEFeC411D448f90841571b89c", balance: 0, icon: "/coins-logos/sol.svg" },
-  { symbol: "USDE", name: "USD.e", price: 0, change24h: 0, address: "0xA0b86a33E6441b8C4C8C8C8C8C8C8C8C8C8C8C8", balance: 0, icon: "/coins-logos/usde.svg" },
-  { symbol: "HYPE", name: "Hyperliquid", price: 0, change24h: 0, address: "0x2222222222222222222222222222222222222222", balance: 0, icon: "/coins-logos/hyperliquid.svg" },
+  { symbol: "USDE", name: "USD.e", price: 0, change24h: 0, address: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34", balance: 0, icon: "/coins-logos/usde.svg" },
+  { symbol: "HYPE", name: "Hype", price: 0, change24h: 0, address: "0x2222222222222222222222222222222222222222", balance: 0, icon: "/coins-logos/hyperliquid.svg" },
+  { symbol: "UFART", name: "Unit Fartcoin", price: 0, change24h: 0, address: "0x3b4575e689ded21caad31d64c4df1f10f3b2cedf", balance: 0, icon: "/coins-logos/ufart.jpg" },
+  { symbol: "JEFF", name: "JEFF", price: 0, change24h: 0, address: "0x52e444545fbe9e5972a7a371299522f7871aec1f", balance: 0, icon: "https://app.hyperliquid.xyz/coins/JEFF_USDC.svg" },
+  { symbol: "HFART", name: "HFUN", price: 0, change24h: 0, address: "0xa320d9f65ec992eff38622c63627856382db726c", balance: 0, icon: "https://app.hyperliquid.xyz/coins/HFUN_USDC.svg" },
 ]
 
 const conditionTypes = [
@@ -88,8 +90,6 @@ const conditionTypes = [
   },
 ]
 
-
-
 export default function TradingPlatform() {
   const { authenticated, login, user, getAccessToken } = usePrivy();
   const [currentStep, setCurrentStep] = useState(1)
@@ -108,7 +108,7 @@ export default function TradingPlatform() {
   const [showFromTokenModal, setShowFromTokenModal] = useState(false)
   const [showToTokenModal, setShowToTokenModal] = useState(false)
   const [fromAmount, setFromAmount] = useState("")
-  const [toAmounts, setToAmounts] = useState<Record<string, string>>({})
+  const [toPercentages, setToPercentages] = useState<Record<string, string>>({})
   const [triggerToken, setTriggerToken] = useState<string>("");
   const [timeframe, setTimeframe] = useState<string>("");
   const [condition, setCondition] = useState<string>("");
@@ -126,15 +126,56 @@ export default function TradingPlatform() {
     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": tokens.find(t => t.symbol === "UETH"),
     "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": tokens.find(t => t.symbol === "UBTC"),
     "0xD31a59c85aE9D8edEFeC411D448f90841571b89c": tokens.find(t => t.symbol === "USOL"),
-    "0xA0b86a33E6441b8C4C8C8C8C8C8C8C8C8C8C8C8": tokens.find(t => t.symbol === "USDE"),
-  }
+    "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34": tokens.find(t => t.symbol === "USDE"),
+    // Additional token mappings
+    "0x9b498c3c8a0b8cd8ba1d9851d40d186f1872b44e": { symbol: "PURR", name: "PURR", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xa320d9f65ec992eff38622c63627856382db726c": { symbol: "HFUN", name: "HFUN", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x52e444545fbe9e5972a7a371299522f7871aec1f": { symbol: "JEFF", name: "JEFF", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xb09158c8297acee00b900dc1f8715df46b7246a6": { symbol: "VEGAS", name: "VEGAS", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xe3d5f45d97fee83b48c85e00c8359a2e07d68fee": { symbol: "ADHD", name: "ADHD", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x11735dbd0b97cfa7accf47d005673ba185f7fd49": { symbol: "CATBAL", name: "CATBAL", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x45ec8f63fe934c0213476cfb5870835e61dd11fa": { symbol: "OMNIX", name: "OMNIX", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xd2fe47eed2d52725d9e3ae6df45593837f57c1a2": { symbol: "SPH", name: "SPH", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x1bee6762f0b522c606dc2ffb106c0bb391b2e309": { symbol: "PIP", name: "PIP", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x7280cc1f369ab574c35cb8a8d0885e9486e3b733": { symbol: "YEETI", name: "YEETI", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xc1631903081b19f0b7117f34192c7db48960989c": { symbol: "NIGGO", name: "NIGGO", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x6f7e96c0267cd22fe04346af21f8c6ff54372939": { symbol: "GENESY", name: "GENESY", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x04d02cb2e963b4490ee02b1925223d04f9d83fc6": { symbol: "CAT", name: "CAT", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x710a6c044d23949ba3b98ce13d762503c9708ba3": { symbol: "BEATS", name: "BEATS", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x1ecd15865d7f8019d546f76d095d9c93cc34edfa": { symbol: "LIQD", name: "LIQD", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x78c3791ea49a7c6f41e87ba96c7d09a493febb1e": { symbol: "H", name: "H", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x3f244819a8359145a8e7cf0272955e4918a50627": { symbol: "FLY", name: "FLY", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x266a2491f782eb03b369760889fff8785efb3e46": { symbol: "TIME", name: "TIME", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x5804bf271d9e691611eea1267b24c1f3d0723639": { symbol: "HWTR", name: "HWTR", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x9fdbda0a5e284c32744d2f17ee5c74b284993463": { symbol: "UBTC", name: "UBTC", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xc12b4dd5268322ddbe3d6f65ebb1ce37a9951315": { symbol: "VORTX", name: "VORTX", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xc11579f984d07af75b0164ac458583a0d39d619a": { symbol: "JPEG", name: "JPEG", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xbe6727b535545c67d5caa73dea54865b92cf7907": { symbol: "UETH", name: "UETH", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xca79db4b49f608ef54a5cb813fbed3a6387bc645": { symbol: "USDXL", name: "USDXL", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x02c6a2fa58cc01a18b8d9e00ea48d65e4df26c70": { symbol: "FEUSD", name: "FEUSD", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29": { symbol: "USOL", name: "USOL", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x47bb061c0204af921f43dc73c7d7768d2672ddee": { symbol: "BUDDY", name: "BUDDY", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x3b4575e689ded21caad31d64c4df1f10f3b2cedf": { symbol: "UFART", name: "UFART", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xf0c82d188ee54958813e7ac650e119135fc35e94": { symbol: "PENIS", name: "PENIS", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb": { symbol: "USDT0", name: "USDT0", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x28245ab01298eaef7933bc90d35bd9dbca5c89db": { symbol: "PEG", name: "PEG", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x8ff0dd9f9c40a0d76ef1bcfaf5f98c1610c74bd8": { symbol: "USH", name: "USH", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x7dcffcb06b40344eeced2d1cbf096b299fe4b405": { symbol: "RUB", name: "RUB", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xd2567ee20d75e8b74b44875173054365f6eb5052": { symbol: "PERP", name: "PERP", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x0ad339d66bf4aed5ce31c64bc37b3244b6394a77": { symbol: "USR", name: "USR", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xb50a96253abdf803d85efcdce07ad8becbc52bd5": { symbol: "USDHL", name: "USDHL", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xf4d9235269a96aadafc9adae454a0618ebe37949": { symbol: "XAUT0", name: "XAUT0", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x27ec642013bcb3d80ca3706599d3cda04f6f4452": { symbol: "UPUMP", name: "UPUMP", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0x502ee789b448aa692901fe27ab03174c90f07dd1": { symbol: "STLOOP", name: "STLOOP", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+    "0xe7eaa46c2ac8470d622ada1538fede6242cebe53": { symbol: "LATINA", name: "LATINA", price: 0, change24h: 0, balance: 0, icon: "/coins-logos/unknown.jpg" },
+  };
+
   useEffect(() => {
     if (showFromTokenModal || showToTokenModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
     }
-
     return () => {
       document.body.style.overflow = 'auto';
     };
@@ -146,12 +187,32 @@ export default function TradingPlatform() {
       token.name.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const filteredTokenSearch = tokens.filter(
-    (token) =>
-      token.symbol.toLowerCase().includes(tokenSearchTerm.toLowerCase()) ||
-      token.name.toLowerCase().includes(tokenSearchTerm.toLowerCase()) ||
-      (token.address && token.address.toLowerCase().includes(tokenSearchTerm.toLowerCase())),
-  )
+  const filteredTokenSearch = (() => {
+    // Start with tokens that match search term by symbol, name, or address
+    let filtered = tokens.filter(
+      (token) =>
+        token.symbol.toLowerCase().includes(tokenSearchTerm.toLowerCase()) ||
+        token.name.toLowerCase().includes(tokenSearchTerm.toLowerCase()) ||
+        (token.address && token.address.toLowerCase().includes(tokenSearchTerm.toLowerCase())),
+    )
+
+    // If search term looks like a contract address (starts with 0x and is 42 chars), 
+    // check if it exists in our contract mapping
+    if (tokenSearchTerm.startsWith('0x') && tokenSearchTerm.length === 42) {
+      const addressLower = tokenSearchTerm.toLowerCase()
+      const tokenFromMapping = contractAddressToToken[addressLower]
+      
+      if (tokenFromMapping && !filtered.find(t => t.symbol === tokenFromMapping.symbol)) {
+        // Add the token from mapping if it's not already in the filtered results
+        filtered.push({
+          ...tokenFromMapping,
+          address: addressLower
+        })
+      }
+    }
+
+    return filtered
+  })()
 
   // Filter out the sell token from the buy token list
   const availableBuyTokens = filteredTokenSearch.filter(token => 
@@ -163,19 +224,53 @@ export default function TradingPlatform() {
     const tempAmount = fromAmount
     setFromToken(toTokens[0] || null)
     setToTokens(fromToken ? [fromToken] : [])
-    setFromAmount(toAmounts[toTokens[0]?.symbol || ''] || '')
-    setToAmounts(fromToken ? { [fromToken.symbol]: tempAmount } : {})
+    setFromAmount(toPercentages[toTokens[0]?.symbol || ''] || '')
+    setToPercentages(fromToken ? { [fromToken.symbol]: tempAmount } : {})
+  }
+
+  // Function to fetch balance for a specific token
+  const fetchTokenBalance = async (token: Token) => {
+    if (!authenticated || !user?.wallet?.address || !token.address) {
+      return
+    }
+
+    try {
+      console.log(`🔍 Fetching balance for ${token.symbol} at ${token.address}`)
+      
+      if (token.address === "0x2222222222222222222222222222222222222222") {
+        // Handle HYPE token separately
+        const balance = await fetchHYPEBalance(user.wallet.address)
+        setTokenBalances(prev => ({
+          ...prev,
+          [token.address!]: balance
+        }))
+        console.log(`💰 Fetched ${token.symbol} balance:`, balance)
+      } else {
+        // Handle ERC20 token
+        const balances = await fetchTokenBalances(user.wallet.address, [token.address])
+        setTokenBalances(prev => ({
+          ...prev,
+          ...balances
+        }))
+        console.log(`💰 Fetched ${token.symbol} balance:`, balances[token.address])
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching balance for ${token.symbol}:`, error)
+    }
   }
 
   const handleTokenSelect = (token: Token, isFrom: boolean) => {
+    // Check if this token is from contract mapping (not in initialTokens)
+    const isFromContractMapping = !tokens.find(t => t.symbol === token.symbol && t.address === token.address)
+    
     if (isFrom) {
       setFromToken(token)
       setShowFromTokenModal(false)
       // Clear toTokens if they contain the same token as the new fromToken
       setToTokens(prev => prev.filter(t => t.symbol !== token.symbol))
-      const newToAmounts = { ...toAmounts }
-      delete newToAmounts[token.symbol]
-      setToAmounts(newToAmounts)
+      const newToPercentages = { ...toPercentages }
+      delete newToPercentages[token.symbol]
+      setToPercentages(newToPercentages)
     } else {
       // Add token to toTokens array if not already present
       setToTokens(prev => {
@@ -186,6 +281,12 @@ export default function TradingPlatform() {
       })
       setShowToTokenModal(false)
     }
+
+    // Fetch balance if token is from contract mapping and we don't have its balance yet
+    if (isFromContractMapping && token.address && !tokenBalances[token.address]) {
+      fetchTokenBalance(token)
+    }
+
     setTokenSearchTerm("")
     setShowCustomTokenInput(false)
   }
@@ -197,20 +298,21 @@ export default function TradingPlatform() {
       price: 0,
       change24h: 0,
       address: address,
-      balance: 0
+      balance: 0,
+      icon: '/coins-logos/unknown.jpg'
     }
+    
+    const tokenWithIcon = {...token, icon: token.icon || '/coins-logos/unknown.jpg'}
+    
     if (isFrom) {
-      // Add icon property to match Token type
-      setFromToken({...token, icon: ''}) 
+      setFromToken(tokenWithIcon) 
       setShowFromTokenModal(false)
       // Clear toTokens if they contain the same token as the new fromToken
       setToTokens(prev => prev.filter(t => t.symbol !== token.symbol))
-      const newToAmounts = { ...toAmounts }
-      delete newToAmounts[token.symbol]
-      setToAmounts(newToAmounts)
+      const newToPercentages = { ...toPercentages }
+      delete newToPercentages[token.symbol]
+      setToPercentages(newToPercentages)
     } else {
-      // Add icon property to match Token type
-      const tokenWithIcon = {...token, icon: ''}
       setToTokens(prev => {
         if (prev.find(t => t.symbol === token.symbol)) {
           return prev // Token already exists
@@ -219,6 +321,12 @@ export default function TradingPlatform() {
       })
       setShowToTokenModal(false)
     }
+
+    // Fetch balance for the custom token if we don't have it yet
+    if (token.address && !tokenBalances[token.address]) {
+      fetchTokenBalance(tokenWithIcon)
+    }
+
     setCustomTokenAddress("")
     setShowCustomTokenInput(false)
   }
@@ -239,11 +347,13 @@ export default function TradingPlatform() {
     "0"
   
   const toFiatValue = toTokens.reduce((total, token) => {
-    const amount = toAmounts[token.symbol] || "0"
-    if (isLoadingPrices) {
-      return total + 0 // Don't calculate during loading
+    const percentage = toPercentages[token.symbol] || "0"
+    if (isLoadingPrices || !fromAmount) {
+      return total + 0 // Don't calculate during loading or without input amount
     }
-    return total + (parseFloat(amount) * getCachedPrice(token.symbol))
+    // Calculate the actual token amount based on percentage of input
+    const tokenAmount = (parseFloat(percentage) / 100) * parseFloat(fromAmount)
+    return total + (tokenAmount * getCachedPrice(token.symbol))
   }, 0).toFixed(2)
 
   // Validation: Check if output value exceeds input value
@@ -253,23 +363,31 @@ export default function TradingPlatform() {
     parseFloat(toFiatValue) > parseFloat(fromFiatValue)
   const isInputValid = fromAmount && parseFloat(fromAmount) > 0
   const isOutputValid = toTokens.length > 0 && toTokens.every(token => {
-    const amount = toAmounts[token.symbol] || "0"
-    return amount && parseFloat(amount) > 0
+    const percentage = toPercentages[token.symbol] || "0"
+    return percentage && parseFloat(percentage) > 0
   })
+  
+  // Calculate total percentage
+  const totalPercentage = toTokens.reduce((total, token) => {
+    const percentage = toPercentages[token.symbol] || "0"
+    return total + parseFloat(percentage)
+  }, 0)
+  
+  const isPercentageExceeding = totalPercentage > 100
 
   // Helper function to remove a token from toTokens
   const removeToToken = (tokenSymbol: string) => {
     setToTokens(prev => prev.filter(t => t.symbol !== tokenSymbol))
-    const newToAmounts = { ...toAmounts }
-    delete newToAmounts[tokenSymbol]
-    setToAmounts(newToAmounts)
+    const newToPercentages = { ...toPercentages }
+    delete newToPercentages[tokenSymbol]
+    setToPercentages(newToPercentages)
   }
 
-  // Helper function to update amount for a specific token
-  const updateToTokenAmount = (tokenSymbol: string, amount: string) => {
-    setToAmounts(prev => ({
+  // Helper function to update percentage for a specific token
+  const updateToTokenPercentage = (tokenSymbol: string, percentage: string) => {
+    setToPercentages(prev => ({
       ...prev,
-      [tokenSymbol]: amount
+      [tokenSymbol]: percentage
     }))
   }
 
@@ -304,37 +422,38 @@ export default function TradingPlatform() {
     return `${sign}${change.toFixed(2)}%`
   }
 
-  // Add TradingView widget
-  useEffect(() => {
-    const initTradingView = () => {
-      const container = document.getElementById('tradingview_chart');
-      if (!container) return;
+  // TradingView widget initialization function (only used in OHLCV config)
+  const initTradingView = (containerId: string) => {
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
-      // Clear any existing content
-      container.innerHTML = '';
+    // Clear any existing content
+    container.innerHTML = '';
 
-      if ((window as any).TradingView) {
-        new (window as any).TradingView.widget({
-          autosize: true,
-          symbol: "BYBIT:HYPEUSDT",
-          interval: "1H",
-          timezone: "Etc/UTC",
-          theme: "dark",
-          style: "1",
-          locale: "en",
-          toolbar_bg: "#f1f3f6",
-          enable_publishing: false,
-          allow_symbol_change: true,
-          container_id: "tradingview_chart",
-          width: "120%",
-          height: "400"
-        });
-      }
-    };
+    if ((window as any).TradingView) {
+      new (window as any).TradingView.widget({
+        autosize: true,
+        symbol: "BYBIT:HYPEUSDT",
+        interval: "1H",
+        timezone: "Etc/UTC",
+        theme: "dark",
+        style: "1",
+        locale: "en",
+        toolbar_bg: "#f1f3f6",
+        enable_publishing: false,
+        allow_symbol_change: true,
+        container_id: containerId,
+        width: "120%",
+        height: "400"
+      });
+    }
+  };
 
+  // Load TradingView script only when needed (in OHLCV config)
+  const loadTradingViewScript = (containerId: string) => {
     // Check if TradingView is already loaded
     if ((window as any).TradingView) {
-      initTradingView();
+      initTradingView(containerId);
       return;
     }
 
@@ -343,20 +462,13 @@ export default function TradingPlatform() {
     script.type = 'text/javascript';
     script.src = 'https://s3.tradingview.com/tv.js';
     script.async = true;
-    script.onload = initTradingView;
+    script.onload = () => initTradingView(containerId);
     script.onerror = () => {
       console.error('Failed to load TradingView script');
     };
     
     document.head.appendChild(script);
-
-    return () => {
-      const container = document.getElementById('tradingview_chart');
-      if (container) {
-        container.innerHTML = '';
-      }
-    };
-  }, [currentStep]);
+  };
 
   // Auto-proceed to step 2 when wallet gets connected after platform selection
   useEffect(() => {
@@ -491,6 +603,21 @@ export default function TradingPlatform() {
     fetchBalances()
   }, [authenticated, user?.wallet?.address, tokens]);
 
+  // Load TradingView widget when OHLCV configuration step is reached
+  useEffect(() => {
+    if (currentStep === 4 && conditionType === "ohlcvn") {
+      loadTradingViewScript("ohlcv_tradingview_chart");
+    }
+    
+    // Cleanup when leaving the OHLCV step
+    return () => {
+      const container = document.getElementById('ohlcv_tradingview_chart');
+      if (container) {
+        container.innerHTML = '';
+      }
+    };
+  }, [currentStep, conditionType]);
+
   // Handle creating conditional swap
   const handleCreateSwap = async () => {
     setIsCreating(true);
@@ -520,7 +647,8 @@ export default function TradingPlatform() {
       // For multiple tokens, we'll create multiple orders or modify the payload structure
       // For now, we'll use the first token as the primary output
       const primaryOutputToken = toTokens[0];
-      const primaryOutputAmount = Number(toAmounts[primaryOutputToken?.symbol || '']);
+      const primaryOutputPercentage = Number(toPercentages[primaryOutputToken?.symbol || '']);
+      const primaryOutputAmount = (primaryOutputPercentage / 100) * inputAmountNum;
       
       const orderPayload = {
         platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
@@ -531,10 +659,14 @@ export default function TradingPlatform() {
           outputToken: primaryOutputToken?.address || '0x0000000000000000000000000000000000000000',
           outputAmount: isFinite(primaryOutputAmount) ? primaryOutputAmount : 0,
           // Add additional output tokens if needed
-          additionalOutputs: toTokens.slice(1).map(token => ({
-            token: token.address || '0x0000000000000000000000000000000000000000',
-            amount: (() => { const n = Number(toAmounts[token.symbol]); return isFinite(n) ? n : 0; })()
-          }))
+          additionalOutputs: toTokens.slice(1).map(token => {
+            const percentage = Number(toPercentages[token.symbol] || '0');
+            const amount = (percentage / 100) * inputAmountNum;
+            return {
+              token: token.address || '0x0000000000000000000000000000000000000000',
+              amount: isFinite(amount) ? amount : 0
+            };
+          })
         },
         orderData: {
           type: 'ohlcvTrigger',
@@ -757,18 +889,19 @@ export default function TradingPlatform() {
           </Card>
         )}
 
-        {/* Step 2: Choose Swap Pair */}
+        {/* Step 2: Swap Pair */}
         {currentStep === 2 && selectedPlatform === "hyperevm" && (
           <Card className="max-w-md mx-auto border-border/50 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-foreground">Swap Tokens</CardTitle>
-              <CardDescription>Select the tokens you want to swap when your condition is met</CardDescription>
+              <CardTitle className="text-foreground">Swap Pair</CardTitle>
+              <CardDescription>Choose the tokens you want to trade and configure amounts</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* From Token (Sell) */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-foreground">Sell</Label>
-                <div className="flex items-center space-x-3 p-4 bg-card border border-border/50 rounded-lg">
+            <CardContent className="space-y-6">
+                  
+                  {/* From Token (Sell) */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-foreground">Sell</Label>
+                    <div className="flex items-center space-x-3 p-4 bg-card border border-border/50 rounded-lg">
                   <div className="flex-1">
                     <Input
                       type="number"
@@ -821,10 +954,10 @@ export default function TradingPlatform() {
                       </span>
                     )}
                   </div>
+                  </div>
                 </div>
-              </div>
 
-              {/* Switch Button */}
+                {/* Switch Button */}
                 <div className="flex justify-center">
                   <Button
                     variant="outline"
@@ -837,28 +970,28 @@ export default function TradingPlatform() {
                   </Button>
                 </div>
 
-              {/* To Tokens (Buy) */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-foreground">Buy</Label>
-                  {toTokens.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {toTokens.length} token{toTokens.length !== 1 ? 's' : ''} selected
-                    </Badge>
-                  )}
-                </div>
-                
-                {/* Dynamic Token Grid */}
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Selected Token Cards */}
-                                     {toTokens.map((token, index) => {
-                     const tokenAmount = toAmounts[token.symbol] || "0"
-                     const tokenValue = parseFloat(tokenAmount) * getCachedPrice(token.symbol)
-                     const isTokenExceeding = tokenValue > parseFloat(fromFiatValue)
-                    
-                    return (
+                {/* To Tokens (Buy) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium text-foreground">Buy</Label>
+                    {toTokens.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {toTokens.length} token{toTokens.length !== 1 ? 's' : ''} selected
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {/* Dynamic Token Grid */}
+                  <div className="grid grid-cols-1 gap-3">
+                    {/* Selected Token Cards */}
+                    {toTokens.map((token, index) => {
+                      const tokenPercentage = toPercentages[token.symbol] || "0"
+                      const tokenAmount = fromAmount ? (parseFloat(tokenPercentage) / 100) * parseFloat(fromAmount) : 0
+                      const tokenValue = tokenAmount * getCachedPrice(token.symbol)
+                      
+                      return (
                     <div key={token.symbol} className={`relative p-4 bg-card border rounded-lg ${
-                      isTokenExceeding ? 'border-red-500/50' : 'border-border/50'
+                      isPercentageExceeding ? 'border-red-500/50' : 'border-border/50'
                     }`}>
                       {/* Remove Button */}
                     <Button
@@ -876,23 +1009,34 @@ export default function TradingPlatform() {
                         <span className="text-foreground font-medium text-sm">{token.symbol}</span>
                       </div>
                       
-                      {/* Amount Input */}
+                      {/* Percentage Input */}
                       <Input
                         type="number"
-                        placeholder="0"
-                        value={toAmounts[token.symbol] || ""}
-                        onChange={(e) => updateToTokenAmount(token.symbol, e.target.value)}
+                        placeholder="Enter percentage"
+                        value={toPercentages[token.symbol] || ""}
+                        onChange={(e) => updateToTokenPercentage(token.symbol, e.target.value)}
                         className="text-base font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground mb-2"
+                        max="100"
+                        min="0"
                       />
                       
                                              {/* Token Details */}
                        <div className="space-y-1">
-                                                   <div className={`text-xs ${
-                            isTokenExceeding ? 'text-red-500' : 'text-muted-foreground'
+                          <div className={`text-xs ${
+                            isPercentageExceeding ? 'text-red-500' : 'text-muted-foreground'
                           }`}>
+                            {tokenPercentage ? `${tokenPercentage}%` : "0%"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
                             {isLoadingPrices ? 
                               "Loading..." : 
-                              `$${toAmounts[token.symbol] ? (parseFloat(toAmounts[token.symbol]) * getCachedPrice(token.symbol)).toFixed(2) : "0"}`
+                              `≈ ${tokenAmount.toFixed(6)} ${token.symbol}`
+                            }
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {isLoadingPrices ? 
+                              "Loading..." : 
+                              `≈ $${tokenValue.toFixed(2)}`
                             }
                           </div>
                          <div className="text-xs text-muted-foreground">
@@ -919,35 +1063,35 @@ export default function TradingPlatform() {
                   </div>
                 </div>
 
-                {/* Total Value Display */}
+                {/* Total Percentage Display */}
                 {toTokens.length > 0 && (
                   <div className={`flex justify-between items-center p-3 rounded-lg ${
-                    isOutputExceedingInput ? 'bg-red-500/10 border border-red-500/20' : 'bg-muted/50'
+                    isPercentageExceeding ? 'bg-red-500/10 border border-red-500/20' : 'bg-muted/50'
                   }`}>
-                    <span className="text-sm font-medium text-foreground">Total Value:</span>
+                    <span className="text-sm font-medium text-foreground">Total Percentage:</span>
                     <div className="flex items-center space-x-2">
                       <span className={`text-sm font-medium ${
-                        isOutputExceedingInput ? 'text-red-500' : 'text-foreground'
+                        isPercentageExceeding ? 'text-red-500' : 'text-foreground'
                       }`}>
-                        ${toFiatValue}
+                        {totalPercentage.toFixed(1)}%
                       </span>
-                      {isOutputExceedingInput && (
-                        <span className="text-xs text-red-500">Exceeds input value</span>
-                    )}
+                      {isPercentageExceeding && (
+                        <span className="text-xs text-red-500">Exceeds 100%</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                )}
+                  )}
+                  </div>
 
-                {/* Validation Message */}
-                {isOutputExceedingInput && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <p className="text-xs text-red-500 text-center">
-                      Total output value (${toFiatValue}) cannot exceed input value (${fromFiatValue}). 
-                      Please reduce token amounts or increase your input amount.
-                    </p>
-                  </div>
-                )}
-              </div>
+                  {/* Validation Message */}
+                  {isPercentageExceeding && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                      <p className="text-xs text-red-500 text-center">
+                        Total percentage ({totalPercentage.toFixed(1)}%) cannot exceed 100%. 
+                        Please reduce the percentages for your selected tokens.
+                      </p>
+                    </div>
+                  )}
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border/50 cursor-pointer">
@@ -955,13 +1099,78 @@ export default function TradingPlatform() {
                 </Button>
                 <Button 
                   onClick={() => setCurrentStep(3)} 
-                  disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid || isOutputExceedingInput}
+                  disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid || isPercentageExceeding}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
                 >
                   Continue
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step 3: Condition Type */}
+        {currentStep === 3 && selectedPlatform === "hyperevm" && (
+          <Card className="max-w-4xl mx-auto border-border/50 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-foreground">Choose Condition Type</CardTitle>
+              <CardDescription>Select the condition that will trigger your trade</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {conditionTypes.map((condition) => {
+                  const Icon = condition.icon
+                  return (
+                    <div
+                      key={condition.id}
+                      className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
+                        conditionType === condition.id
+                          ? "border-primary bg-primary/10 shadow-lg"
+                          : "border-border/50 hover:border-primary/30 hover:bg-accent/50"
+                      }`}
+                      onClick={() => setConditionType(condition.id)}
+                    >
+                      <div className="flex flex-col items-center text-center space-y-3">
+                        <div
+                          className={`p-2 rounded-lg transition-colors ${
+                            conditionType === condition.id 
+                              ? "bg-primary text-primary-foreground" 
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-center space-x-2">
+                            <h3 className="font-medium text-foreground">{condition.name}</h3>
+                            {condition.popular && (
+                              <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
+                                Popular
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">{condition.description}</p>
+                        </div>
+                      </div>
                     </div>
+                  )
+                })}
+              </div>
+
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setCurrentStep(2)} className="border-border/50 cursor-pointer">
+                  Back
+                </Button>
+                <Button 
+                  onClick={() => setCurrentStep(4)} 
+                  disabled={!conditionType}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
+                >
+                  Continue
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -1129,73 +1338,6 @@ export default function TradingPlatform() {
                 </p>
                 <Button variant="outline" onClick={() => setCurrentStep(1)}>
                   Go Back
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 3: Choose Condition Type */}
-        {currentStep === 3 && (
-          <Card className="max-w-4xl mx-auto border-border/50 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-foreground">Choose Condition Type</CardTitle>
-              <CardDescription>Select the type of condition that will trigger your swap</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {conditionTypes.map((condition) => {
-                  const Icon = condition.icon
-                  return (
-                    <div
-                      key={condition.id}
-                      className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                        conditionType === condition.id
-                          ? "border-primary bg-primary/10 shadow-lg"
-                          : "border-border/50 hover:border-primary/30 hover:bg-accent/50"
-                      }`}
-                      onClick={() => setConditionType(condition.id)}
-                    >
-                      <div className="flex items-start space-x-3">
-                        <div
-                          className={`p-2 rounded-lg transition-colors ${
-                            conditionType === condition.id 
-                              ? "bg-primary text-primary-foreground" 
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          <Icon className="w-5 h-5" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <h3 className="font-medium text-foreground">{condition.name}</h3>
-                            {condition.popular && (
-                              <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
-                                Popular
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">{condition.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              <Separator className="my-6" />
-
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(2)} className="border-border/50 cursor-pointer">
-                  Back
-                </Button>
-                <Button 
-                  onClick={() => setCurrentStep(4)} 
-                  disabled={!conditionType}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
-                >
-                  Continue
-                  <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             </CardContent>
@@ -1374,13 +1516,14 @@ export default function TradingPlatform() {
                 </div>
               )}
 
-              {/* TradingView Chart Section */}
-              <div className="pt-4 border-t border-solid border-border/30 mt-5">
-                <div className="bg-card border border-border/50 p-4 rounded-lg">
-                  
-                  <div id="tradingview_chart" style={{ width: '105%', height: '400px', marginLeft: '-15px' }}></div>
+              {/* TradingView Chart Section - Only for OHLCV */}
+              {conditionType === "ohlcvn" && (
+                <div className="pt-4 border-t border-solid border-border/30 mt-5">
+                  <div className="bg-card border border-border/50 p-4 rounded-lg">
+                    <div id="ohlcv_tradingview_chart" style={{ width: '105%', height: '400px', marginLeft: '-15px' }}></div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setCurrentStep(3)} className="border-border/50 cursor-pointer">
@@ -1435,7 +1578,7 @@ export default function TradingPlatform() {
                             <div className="font-medium text-foreground">{token.symbol}</div>
                             <div className="text-sm text-muted-foreground">{token.name}</div>
                             <div className="text-sm text-muted-foreground">
-                              {toAmounts[token.symbol] || "0"} {token.symbol}
+                              {toPercentages[token.symbol] || "0"}% allocation
                             </div>
                           </div>
                         ))}
@@ -1540,7 +1683,7 @@ export default function TradingPlatform() {
                       setFromToken(tokens.find(t => t.symbol === "USDT") || null);
                       setToTokens([]);
                       setFromAmount("");
-                      setToAmounts({});
+                      setToPercentages({});
                       setTriggerToken("");
                       setTimeframe("");
                       setCondition("");
@@ -1565,8 +1708,7 @@ export default function TradingPlatform() {
         )}
       </div>
 
-      {/* Add the container for the TradingView chart */}
-      {/* <div id="tradingview_chart" className="bg-card border border-border/50 p-4 rounded-lg mt-4"></div> */}
+
 
       {/* Wallet Connection Prompt Modal */}
       {showWalletPrompt && (
