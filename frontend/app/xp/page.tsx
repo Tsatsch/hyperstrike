@@ -7,13 +7,14 @@ import { exchangePrivyForBackendJwt, getBackendJwt, getUserXp, getOrCreateUser, 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDown } from "lucide-react"
-import { Activity, Bell, Settings, User } from "lucide-react"
+import { Activity, Bell, Settings, User, Wallet } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { XpButton } from "@/components/XpButton"
 import { Footer } from "@/components/footer"
 
 export default function XpPage() {
-  const { authenticated, user, getAccessToken } = usePrivy()
+  const { authenticated, user, getAccessToken, login } = usePrivy()
   const [xp, setXp] = useState<number>(0)
   const [refCode, setRefCode] = useState<string>("")
   const [copied, setCopied] = useState<boolean>(false)
@@ -69,7 +70,8 @@ export default function XpPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
+      <div className={!authenticated ? "blur-sm" : ""}>
       <header className="border-b bg-card">
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
@@ -81,14 +83,13 @@ export default function XpPage() {
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>
               <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">Portfolio</a>
               <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">Markets</a>
-              <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
-              <a href="/xp" className="font-medium text-primary">XP</a>
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">
             <ThemeToggle />
             <Button variant="ghost" size="icon"><Bell className="h-4 w-4" /></Button>
             <Button variant="ghost" size="icon"><Settings className="h-4 w-4" /></Button>
+            <XpButton />
             <WalletButton />
             <Button variant="ghost" size="icon"><User className="h-4 w-4" /></Button>
           </div>
@@ -192,6 +193,32 @@ export default function XpPage() {
       </div>
 
       <Footer />
+      </div>
+
+      {!authenticated && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card border border-border/50 rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <div className="text-center space-y-6">
+              <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                <Wallet className="w-8 h-8 text-primary" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-foreground">Connect Your Wallet</h3>
+                <p className="text-muted-foreground">Please connect your wallet to view XP and the leaderboard.</p>
+              </div>
+              <div className="space-y-3">
+                <Button 
+                  onClick={login}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                >
+                  Connect Wallet
+                  <Wallet className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
