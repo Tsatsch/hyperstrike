@@ -11,52 +11,73 @@ from eth_account import Account
 import os
 
 # Configuration
-WHYPE_CONTRACT_ADDRESS = "0x62832DAA7B3E925e0bDCEcE457a665878FD3BF36"
-HYPER_TESTNET_RPC = "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm"
-CHAIN_ID = 998
+WHYPE_CONTRACT_ADDRESS = "0x5555555555555555555555555555555555555555"  # WHYPE on HyperEVM mainnet
+HYPER_MAINNET_RPC = "https://withered-delicate-sailboat.hype-mainnet.quiknode.pro/edb38026d62fb1de9d51e057b4b720a455f8b9d8/evm"
+CHAIN_ID = 999  # HyperEVM mainnet chain ID
 
-# WHYPE Contract ABI (complete for wrap/unwrap functions)
+# WHYPE Contract ABI (based on WETH9 standard)
 WHYPE_ABI = [
     {
         "inputs": [],
-        "name": "wrap",
+        "name": "deposit",
         "outputs": [],
         "stateMutability": "payable",
         "type": "function"
     },
     {
-        "inputs": [{"type": "uint256"}],
-        "name": "unwrap",
+        "inputs": [{"name": "wad", "type": "uint256"}],
+        "name": "withdraw",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
     },
     {
-        "inputs": [],
-        "name": "getHYPEBalance",
-        "outputs": [{"type": "uint256"}],
+        "inputs": [{"name": "", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "", "type": "uint256"}],
         "stateMutability": "view",
         "type": "function"
     },
     {
-        "inputs": [{"type": "address"}],
-        "name": "balanceOf",
-        "outputs": [{"type": "uint256"}],
+        "inputs": [],
+        "name": "totalSupply",
+        "outputs": [{"name": "", "type": "uint256"}],
         "stateMutability": "view",
         "type": "function"
     },
     {
         "inputs": [],
         "name": "name",
-        "outputs": [{"type": "string"}],
+        "outputs": [{"name": "", "type": "string"}],
         "stateMutability": "view",
         "type": "function"
     },
     {
         "inputs": [],
         "name": "symbol",
-        "outputs": [{"type": "string"}],
+        "outputs": [{"name": "", "type": "string"}],
         "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "decimals",
+        "outputs": [{"name": "", "type": "uint8"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"name": "guy", "type": "address"}, {"name": "wad", "type": "uint256"}],
+        "name": "approve",
+        "outputs": [{"name": "", "type": "bool"}],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{"name": "dst", "type": "address"}, {"name": "wad", "type": "uint256"}],
+        "name": "transfer",
+        "outputs": [{"name": "", "type": "bool"}],
+        "stateMutability": "nonpayable",
         "type": "function"
     }
 ]
@@ -65,18 +86,18 @@ class HYPEWrapper:
     def __init__(self, private_key):
         """Initialize the HYPE wrapper with a private key"""
         self.account = Account.from_key(private_key)
-        self.w3 = Web3(Web3.HTTPProvider(HYPER_TESTNET_RPC))
+        self.w3 = Web3(Web3.HTTPProvider(HYPER_MAINNET_RPC))
         
         # Check connection
         if not self.w3.is_connected():
-            raise Exception("Failed to connect to HyperEVM testnet")
+            raise Exception("Failed to connect to HyperEVM mainnet")
         
-        print(f"✅ Connected to HyperEVM testnet (Chain ID: {self.w3.eth.chain_id})")
+        print(f"✅ Connected to HyperEVM mainnet (Chain ID: {self.w3.eth.chain_id})")
         print(f"📱 Wallet address: {self.account.address}")
         
-        # Initialize contract
+        # Initialize contract with checksum address
         self.contract = self.w3.eth.contract(
-            address=WHYPE_CONTRACT_ADDRESS,
+            address=Web3.to_checksum_address(WHYPE_CONTRACT_ADDRESS),
             abi=WHYPE_ABI
         )
         
@@ -89,17 +110,17 @@ class HYPEWrapper:
             name = self.contract.functions.name().call()
             symbol = self.contract.functions.symbol().call()
             print(f"📋 Contract verified: {name} ({symbol})")
-            print(f"📍 Contract address: {WHYPE_CONTRACT_ADDRESS}")
+            print(f"📍 Contract address: {Web3.to_checksum_address(WHYPE_CONTRACT_ADDRESS)}")
             
-            # Test if unwrap function is accessible
+            # Test if withdraw function is accessible
             try:
                 # This will fail but we just want to check if the function exists in ABI
-                self.contract.functions.unwrap(0).call()
+                self.contract.functions.withdraw(0).call()
             except Exception as e:
                 if "execution reverted" in str(e).lower():
-                    print("✅ Unwrap function accessible (execution reverted as expected for 0 amount)")
+                    print("✅ Withdraw function accessible (execution reverted as expected for 0 amount)")
                 else:
-                    print(f"⚠️  Unwrap function test: {e}")
+                    print(f"⚠️  Withdraw function test: {e}")
                     
         except Exception as e:
             raise Exception(f"Failed to verify contract: {e}")
@@ -126,31 +147,33 @@ class HYPEWrapper:
             return 0, 0
     
     def wrap_hype(self, amount_ether):
-        """Wrap native HYPE tokens to WHYPE"""
+        """Wrap native HYPE tokens to WHYPE using deposit()"""
         try:
             # Convert ether to wei
             amount_wei = self.w3.to_wei(amount_ether, 'ether')
             
-            # Check if user has enough HYPE
+            # Check if user has enough HYPE (need extra for gas)
             hype_balance = self.w3.eth.get_balance(self.account.address)
-            if hype_balance < amount_wei:
-                raise Exception(f"Insufficient HYPE balance. Have: {self.w3.from_wei(hype_balance, 'ether'):.6f}, Need: {amount_ether}")
-            
-            # Estimate gas
-            gas_estimate = self.contract.functions.wrap().estimate_gas({
+            gas_estimate = self.contract.functions.deposit().estimate_gas({
                 'from': self.account.address,
                 'value': amount_wei
             })
+            gas_cost = gas_estimate * self.w3.eth.gas_price
+            total_needed = amount_wei + gas_cost
+            
+            if hype_balance < total_needed:
+                raise Exception(f"Insufficient HYPE balance. Have: {self.w3.from_wei(hype_balance, 'ether'):.6f}, Need: {self.w3.from_wei(total_needed, 'ether'):.6f} (including gas)")
             
             # Add 20% buffer to gas estimate
             gas_limit = int(gas_estimate * 1.2)
             
-            print(f"\n🔄 Wrapping {amount_ether} HYPE to WHYPE...")
+            print(f"\n🔄 Depositing {amount_ether} HYPE to get WHYPE...")
             print(f"   Gas estimate: {gas_estimate}")
             print(f"   Gas limit: {gas_limit}")
+            print(f"   Gas cost: {self.w3.from_wei(gas_cost, 'ether'):.6f} HYPE")
             
             # Build transaction
-            transaction = self.contract.functions.wrap().build_transaction({
+            transaction = self.contract.functions.deposit().build_transaction({
                 'from': self.account.address,
                 'value': amount_wei,
                 'gas': gas_limit,
@@ -171,7 +194,7 @@ class HYPEWrapper:
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
             
             if tx_receipt.status == 1:
-                print(f"   ✅ Successfully wrapped {amount_ether} HYPE to WHYPE!")
+                print(f"   ✅ Successfully deposited {amount_ether} HYPE and received WHYPE!")
                 print(f"   Gas used: {tx_receipt.gasUsed}")
                 return tx_hash.hex()
             else:
@@ -179,16 +202,16 @@ class HYPEWrapper:
                 return None
                 
         except Exception as e:
-            print(f"❌ Error wrapping HYPE: {e}")
+            print(f"❌ Error depositing HYPE: {e}")
             return None
     
     def unwrap_hype(self, amount_ether):
-        """Unwrap WHYPE tokens back to native HYPE"""
+        """Unwrap WHYPE tokens back to native HYPE using withdraw()"""
         try:
             # Convert ether to wei
             amount_wei = self.w3.to_wei(amount_ether, 'ether')
             
-            print(f"🔍 Debug: Attempting to unwrap {amount_ether} HYPE ({amount_wei} wei)")
+            print(f"🔍 Debug: Attempting to withdraw {amount_ether} WHYPE ({amount_wei} wei)")
             
             # Check if user has enough WHYPE
             whype_balance = self.contract.functions.balanceOf(self.account.address).call()
@@ -197,23 +220,23 @@ class HYPEWrapper:
             if whype_balance < amount_wei:
                 raise Exception(f"Insufficient WHYPE balance. Have: {self.w3.from_wei(whype_balance, 'ether'):.6f}, Need: {amount_ether}")
             
-            print(f"🔍 Debug: Sufficient WHYPE balance, proceeding with unwrap...")
+            print(f"🔍 Debug: Sufficient WHYPE balance, proceeding with withdraw...")
             
             # Estimate gas
-            print(f"🔍 Debug: Estimating gas for unwrap function...")
-            gas_estimate = self.contract.functions.unwrap(amount_wei).estimate_gas({
+            print(f"🔍 Debug: Estimating gas for withdraw function...")
+            gas_estimate = self.contract.functions.withdraw(amount_wei).estimate_gas({
                 'from': self.account.address
             })
             
             # Add 20% buffer to gas estimate
             gas_limit = int(gas_estimate * 1.2)
             
-            print(f"\n🔄 Unwrapping {amount_ether} WHYPE to HYPE...")
+            print(f"\n🔄 Withdrawing {amount_ether} WHYPE to get HYPE...")
             print(f"   Gas estimate: {gas_estimate}")
             print(f"   Gas limit: {gas_limit}")
             
             # Build transaction
-            transaction = self.contract.functions.unwrap(amount_wei).build_transaction({
+            transaction = self.contract.functions.withdraw(amount_wei).build_transaction({
                 'from': self.account.address,
                 'gas': gas_limit,
                 'gasPrice': self.w3.eth.gas_price,
@@ -233,7 +256,7 @@ class HYPEWrapper:
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
             
             if tx_receipt.status == 1:
-                print(f"   ✅ Successfully unwrapped {amount_ether} WHYPE to HYPE!")
+                print(f"   ✅ Successfully withdrew {amount_ether} WHYPE and received HYPE!")
                 print(f"   Gas used: {tx_receipt.gasUsed}")
                 return tx_hash.hex()
             else:
@@ -241,19 +264,24 @@ class HYPEWrapper:
                 return None
                 
         except Exception as e:
-            print(f"❌ Error unwrapping WHYPE: {e}")
+            print(f"❌ Error withdrawing WHYPE: {e}")
             return None
     
     def get_contract_info(self):
         """Get contract information"""
         try:
             print(f"\n📋 Contract Information:")
-            print(f"   Address: {WHYPE_CONTRACT_ADDRESS}")
+            print(f"   Address: {Web3.to_checksum_address(WHYPE_CONTRACT_ADDRESS)}")
             print(f"   Name: {self.contract.functions.name().call()}")
             print(f"   Symbol: {self.contract.functions.symbol().call()}")
             
-            # Get contract's HYPE balance
-            contract_hype_balance = self.contract.functions.getHYPEBalance().call()
+            # Get contract's total supply (total WHYPE in circulation)
+            total_supply = self.contract.functions.totalSupply().call()
+            total_supply_ether = self.w3.from_wei(total_supply, 'ether')
+            print(f"   Total WHYPE Supply: {total_supply_ether:.6f} WHYPE")
+            
+            # Get contract's HYPE balance (should equal total supply)
+            contract_hype_balance = self.w3.eth.get_balance(Web3.to_checksum_address(WHYPE_CONTRACT_ADDRESS))
             contract_hype_balance_ether = self.w3.from_wei(contract_hype_balance, 'ether')
             print(f"   Contract HYPE Balance: {contract_hype_balance_ether:.6f} HYPE")
             
@@ -262,20 +290,22 @@ class HYPEWrapper:
 
 def main():
     """Main function to run the HYPE wrapper/unwrapper"""
-    print("🚀 HYPE ↔ WHYPE Wrapper/Unwrapper Script")
-    print("=" * 50)
+    print("🚀 HYPE ↔ WHYPE Wrapper/Unwrapper Script (MAINNET)")
+    print("=" * 55)
     
-    # Dummy private key (REPLACE WITH YOUR ACTUAL PRIVATE KEY)
-    # WARNING: Never share or commit your private key!
-    DUMMY_PRIVATE_KEY = "0x6552964994ea750d3e04dfc6da73d7594f86c1ad78067082fc0f2e19394473bd"
+    # REPLACE WITH YOUR ACTUAL MAINNET PRIVATE KEY
+    # ⚠️  CRITICAL WARNING: This will interact with REAL FUNDS on MAINNET!
+    MAINNET_PRIVATE_KEY = "0xe469510e586a6e0d982e137bc49d2aefef5dd76b36b8db64cb22af2ab8649eae"
     
-    print("⚠️  WARNING: Using dummy private key!")
-    print("   Replace DUMMY_PRIVATE_KEY with your actual private key")
+    print("🚨 CRITICAL WARNING: MAINNET MODE ENABLED!")
+    print("   This script will interact with REAL FUNDS on HyperEVM mainnet")
+    print("   Make sure you have the correct private key and sufficient HYPE")
+    print("   Double-check all amounts before confirming transactions!")
     print("   Never share or commit your private key!")
     
     try:
         # Initialize wrapper
-        wrapper = HYPEWrapper(DUMMY_PRIVATE_KEY)
+        wrapper = HYPEWrapper(MAINNET_PRIVATE_KEY)
         
         # Show contract info
         wrapper.get_contract_info()
@@ -283,18 +313,28 @@ def main():
         # Show current balances
         wrapper.get_balances()
         
+        # Safety confirmation for mainnet
+        print("\n🚨 MAINNET SAFETY CHECK:")
+        print("   You are about to interact with REAL FUNDS on HyperEVM mainnet!")
+        print("   Make sure you understand what you're doing.")
+        
+        safety_confirm = input("\nType 'I UNDERSTAND' to continue: ").strip()
+        if safety_confirm != "I UNDERSTAND":
+            print("❌ Safety confirmation failed. Exiting for your protection.")
+            return
+        
         # Ask user what they want to do
         print("\n🎯 Choose an action:")
-        print("   1. Wrap HYPE to WHYPE")
-        print("   2. Unwrap WHYPE to HYPE")
+        print("   1. Deposit HYPE to get WHYPE (wrap)")
+        print("   2. Withdraw WHYPE to get HYPE (unwrap)")
         
         try:
             choice = input("Enter your choice (1 or 2): ").strip()
             
             if choice == "1":
-                # Wrap HYPE to WHYPE
+                # Deposit HYPE to get WHYPE
                 try:
-                    wrap_amount = float(input("\n🎯 Enter amount of HYPE to wrap: "))
+                    wrap_amount = float(input("\n🎯 Enter amount of HYPE to deposit: "))
                     if wrap_amount <= 0:
                         print("❌ Amount must be greater than 0")
                         return
@@ -312,7 +352,7 @@ def main():
                     print(f"   You need: {wrap_amount} HYPE")
                     return
                 
-                print(f"🎯 Attempting to wrap {wrap_amount} HYPE...")
+                print(f"🎯 Attempting to deposit {wrap_amount} HYPE...")
                 
                 tx_hash = wrapper.wrap_hype(wrap_amount)
                 
@@ -324,15 +364,15 @@ def main():
                     print("\n📊 Updated Balances:")
                     wrapper.get_balances()
                     
-                    print(f"\n🎉 Wrapping completed successfully!")
+                    print(f"\n🎉 Deposit completed successfully!")
                     print(f"   Transaction: {tx_hash}")
                 else:
-                    print("\n❌ Wrapping failed!")
+                    print("\n❌ Deposit failed!")
                     
             elif choice == "2":
-                # Unwrap WHYPE to HYPE
+                # Withdraw WHYPE to get HYPE
                 try:
-                    unwrap_amount = float(input("\n🎯 Enter amount of WHYPE to unwrap: "))
+                    unwrap_amount = float(input("\n🎯 Enter amount of WHYPE to withdraw: "))
                     if unwrap_amount <= 0:
                         print("❌ Amount must be greater than 0")
                         return
@@ -350,7 +390,7 @@ def main():
                     print(f"   You need: {unwrap_amount} WHYPE")
                     return
                 
-                print(f"🎯 Attempting to unwrap {unwrap_amount} WHYPE...")
+                print(f"🎯 Attempting to withdraw {unwrap_amount} WHYPE...")
                 
                 tx_hash = wrapper.unwrap_hype(unwrap_amount)
                 
@@ -362,10 +402,10 @@ def main():
                     print("\n📊 Updated Balances:")
                     wrapper.get_balances()
                     
-                    print(f"\n🎉 Unwrapping completed successfully!")
+                    print(f"\n🎉 Withdrawal completed successfully!")
                     print(f"   Transaction: {tx_hash}")
                 else:
-                    print("\n❌ Unwrapping failed!")
+                    print("\n❌ Withdrawal failed!")
                     
             else:
                 print("❌ Invalid choice. Please enter 1 or 2.")

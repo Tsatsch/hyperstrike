@@ -13,35 +13,34 @@ module.exports = {
     },
   },
   networks: {
-    // HyperEVM testnet (actual network details)
     hyperevmTestnet: {
-      url: process.env.HYPER_TESTNET_RPC || "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm",
+      url: process.env.HYPER_TESTNET_RPC ,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 998, // Actual HyperEVM testnet chain ID
-      gasPrice: 200000000, // 20 gwei - removed for dynamic pricing
+      chainId: 998, 
+      gasPrice: 200000000, // 0.2 gwei
+  
     },
-    // HyperEVM mainnet (actual network details)
+    
     hyperevmMainnet: {
-      url: process.env.HYPER_MAINNET_RPC || "https://withered-delicate-sailboat.hype-mainnet.quiknode.pro/edb38026d62fb1de9d51e057b4b720a455f8b9d8/evm",
+      url: process.env.HYPER_MAINNET_RPC ,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 999, // Actual HyperEVM mainnet chain ID (corrected)
-      gasPrice: 20000000000, // 20 gwei - removed for dynamic pricing
+      chainId: 999, 
+      gasPrice: 200000000, // 0.2 gwei
     },
-    // Local development
+    
     hardhat: {
       chainId: 31337,
     },
   },
   etherscan: {
-    // Add HyperEVM explorer URL when available
     apiKey: process.env.ETHERSCAN_API_KEY,
     customChains: [
       {
         network: "hyperevmMainnet",
-        chainId: 999, // Actual chain ID (corrected)
+        chainId: 999, 
         urls: {
-          apiURL: "https://explorer.hyperevm.com/api", // Replace with actual URL
-          browserURL: "https://explorer.hyperevm.com", // Replace with actual URL
+          apiURL: "https://explorer.hyperevm.com/api", 
+          browserURL: "https://explorer.hyperevm.com", 
         },
       },
     ],

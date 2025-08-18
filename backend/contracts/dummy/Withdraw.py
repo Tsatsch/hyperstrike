@@ -9,12 +9,30 @@ import time
 from web3 import Web3
 from eth_account import Account
 
-# Configuration
-PRICE_TRIGGER_CONTRACT_ADDRESS = "0x665D96a9737C4C06f9e885FC6fC03dFB97FB0FCB"  # Your deployed contract
-WHYPE_CONTRACT_ADDRESS = "0x3990eeF326Bfa1084bAE56D8607Aa76966F1ea28"  # Your deployed WHYPE
+# ============================================================================
+# CONFIGURATION - CHANGE THESE VARIABLES AS NEEDED
+# ============================================================================
+
+# Contract addresses
+PRICE_TRIGGER_CONTRACT_ADDRESS = "0xe11B7Cd241c5371B459C5820360A1F585e3B71c4"  # Your deployed contract
+WHYPE_CONTRACT_ADDRESS = "0x5a1a1339ad9e52b7a4df78452d5c18e8690746f3"  # Your deployed WHYPE
+
+# Network configuration
 HYPER_TESTNET_RPC = "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm"
 CHAIN_ID = 998
+
+# Wallet addresses
 WITHDRAWAL_WALLET = "0x9E02783Ad42C5A94a0De60394f2996E44458B782"
+YOUR_PRIVATE_KEY = "0xe469510e586a6e0d982e137bc49d2aefef5dd76b36b8db64cb22af2ab8649eae"  # Replace with your actual private key
+USER_ADDRESS_TO_TEST = "0x7F752d65B046EAaa335dc1dB55F3DEf2A419f694"  # Address to test withdrawal for
+
+# Test configuration
+TOKEN_TO_TEST = WHYPE_CONTRACT_ADDRESS  # Change this to test different tokens
+AMOUNT_TO_WITHDRAW = 0.00001  # Amount in tokens (will be converted to wei)
+
+# ============================================================================
+# CONTRACT ABIs
+# ============================================================================
 
 # PriceTriggerSwapV2 Contract ABI (minimal for testing)
 PRICE_TRIGGER_ABI = [
@@ -48,8 +66,8 @@ PRICE_TRIGGER_ABI = [
     }
 ]
 
-# WHYPE Contract ABI (minimal for testing)
-WHYPE_ABI = [
+# Generic ERC20 Contract ABI (minimal for testing)
+ERC20_ABI = [
     {
         "inputs": [{"type": "address"}],
         "name": "balanceOf",
@@ -70,6 +88,13 @@ WHYPE_ABI = [
         "outputs": [{"type": "string"}],
         "stateMutability": "view",
         "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "decimals",
+        "outputs": [{"type": "uint8"}],
+        "stateMutability": "view",
+        "type": "function"
     }
 ]
 
@@ -88,13 +113,13 @@ class WithdrawTriggerTester:
         
         # Initialize contracts
         self.price_trigger_contract = self.w3.eth.contract(
-            address=PRICE_TRIGGER_CONTRACT_ADDRESS,
+            address=Web3.to_checksum_address(PRICE_TRIGGER_CONTRACT_ADDRESS),
             abi=PRICE_TRIGGER_ABI
         )
         
-        self.whype_contract = self.w3.eth.contract(
-            address=WHYPE_CONTRACT_ADDRESS,
-            abi=WHYPE_ABI
+        self.token_contract = self.w3.eth.contract(
+            address=Web3.to_checksum_address(TOKEN_TO_TEST),
+            abi=ERC20_ABI
         )
         
         # Verify contracts
@@ -111,11 +136,15 @@ class WithdrawTriggerTester:
             print(f"👑 Owner: {owner}")
             print(f"💰 Withdrawal wallet: {withdrawal_wallet}")
             
-            # Verify WHYPE contract
-            name = self.whype_contract.functions.name().call()
-            symbol = self.whype_contract.functions.symbol().call()
-            print(f"📋 WHYPE contract verified: {name} ({symbol})")
-            print(f"📍 Contract address: {WHYPE_CONTRACT_ADDRESS}")
+            # Verify token contract
+            name = self.token_contract.functions.name().call()
+            symbol = self.token_contract.functions.symbol().call()
+            decimals = self.token_contract.functions.decimals().call()
+            print(f"📋 Token contract verified: {name} ({symbol})")
+            print(f"📍 Contract address: {TOKEN_TO_TEST}")
+            print(f"🔢 Decimals: {decimals}")
+            
+            self.token_decimals = decimals
             
         except Exception as e:
             print(f"❌ Contract verification failed: {e}")
@@ -128,20 +157,22 @@ class WithdrawTriggerTester:
             hype_balance = self.w3.eth.get_balance(self.account.address)
             hype_balance_eth = self.w3.from_wei(hype_balance, 'ether')
             
-            # Get WHYPE balance
-            whype_balance = self.whype_contract.functions.balanceOf(self.account.address).call()
-            whype_balance_eth = self.w3.from_wei(whype_balance, 'ether')
+            # Get token balance
+            token_balance = self.token_contract.functions.balanceOf(self.account.address).call()
+            token_balance_formatted = token_balance / (10 ** self.token_decimals)
             
-            # Get withdrawal wallet WHYPE balance
-            withdrawal_wallet_balance = self.whype_contract.functions.balanceOf(WITHDRAWAL_WALLET).call()
-            withdrawal_wallet_balance_eth = self.w3.from_wei(withdrawal_wallet_balance, 'ether')
+            # Get withdrawal wallet token balance
+            withdrawal_wallet_balance = self.token_contract.functions.balanceOf(
+                Web3.to_checksum_address(WITHDRAWAL_WALLET)
+            ).call()
+            withdrawal_wallet_balance_formatted = withdrawal_wallet_balance / (10 ** self.token_decimals)
             
             print(f"\n💰 Current Balances:")
             print(f"   Your HYPE: {hype_balance_eth:.6f} HYPE")
-            print(f"   Your WHYPE: {whype_balance_eth:.6f} WHYPE")
-            print(f"   Withdrawal Wallet WHYPE: {withdrawal_wallet_balance_eth:.6f} WHYPE")
+            print(f"   Your {self.token_contract.functions.symbol().call()}: {token_balance_formatted:.6f}")
+            print(f"   Withdrawal Wallet {self.token_contract.functions.symbol().call()}: {withdrawal_wallet_balance_formatted:.6f}")
             
-            return hype_balance, whype_balance, withdrawal_wallet_balance
+            return hype_balance, token_balance, withdrawal_wallet_balance
             
         except Exception as e:
             print(f"❌ Failed to get balances: {e}")
@@ -150,13 +181,16 @@ class WithdrawTriggerTester:
     def check_allowance(self, user_address):
         """Check current allowance for a user"""
         try:
+            # Convert address to checksum format
+            checksum_user_address = Web3.to_checksum_address(user_address)
+            
             allowance = self.price_trigger_contract.functions.getApprovedAmount(
-                user_address, 
-                WHYPE_CONTRACT_ADDRESS
+                checksum_user_address, 
+                Web3.to_checksum_address(TOKEN_TO_TEST)
             ).call()
             
-            allowance_eth = self.w3.from_wei(allowance, 'ether')
-            print(f"🔐 Allowance for {user_address}: {allowance_eth:.6f} WHYPE")
+            allowance_formatted = allowance / (10 ** self.token_decimals)
+            print(f"🔐 Allowance for {user_address}: {allowance_formatted:.6f} {self.token_contract.functions.symbol().call()}")
             
             return allowance
             
@@ -164,12 +198,15 @@ class WithdrawTriggerTester:
             print(f"❌ Failed to check allowance: {e}")
             return 0
     
-    def trigger_withdrawal(self, user_address, amount_whype):
+    def trigger_withdrawal(self, user_address, amount_tokens):
         """Trigger the withdrawOnTrigger function"""
         try:
             print(f"\n🚀 Triggering withdrawal...")
             print(f"   User: {user_address}")
-            print(f"   Amount: {self.w3.from_wei(amount_whype, 'ether')} WHYPE")
+            print(f"   Amount: {amount_tokens} {self.token_contract.functions.symbol().call()}")
+            
+            # Convert amount to wei
+            amount_wei = int(amount_tokens * (10 ** self.token_decimals))
             
             # Check if we're the owner
             owner = self.price_trigger_contract.functions.owner().call()
@@ -181,23 +218,26 @@ class WithdrawTriggerTester:
             
             # Check user allowance
             allowance = self.check_allowance(user_address)
-            if allowance < amount_whype:
-                print(f"❌ Insufficient allowance: {self.w3.from_wei(allowance, 'ether')} WHYPE")
+            if allowance < amount_wei:
+                allowance_formatted = allowance / (10 ** self.token_decimals)
+                print(f"❌ Insufficient allowance: {allowance_formatted:.6f} {self.token_contract.functions.symbol().call()}")
                 return False
             
             # Check user balance
-            user_balance = self.whype_contract.functions.balanceOf(user_address).call()
-            if user_balance < amount_whype:
-                print(f"❌ Insufficient user balance: {self.w3.from_wei(user_balance, 'ether')} WHYPE")
+            checksum_user_address = Web3.to_checksum_address(user_address)
+            user_balance = self.token_contract.functions.balanceOf(checksum_user_address).call()
+            if user_balance < amount_wei:
+                user_balance_formatted = user_balance / (10 ** self.token_decimals)
+                print(f"❌ Insufficient user balance: {user_balance_formatted:.6f} {self.token_contract.functions.symbol().call()}")
                 return False
             
             print(f"✅ All checks passed - proceeding with withdrawal")
             
             # Build transaction
             withdraw_txn = self.price_trigger_contract.functions.withdrawOnTrigger(
-                user_address,
-                WHYPE_CONTRACT_ADDRESS,
-                amount_whype
+                checksum_user_address,
+                Web3.to_checksum_address(TOKEN_TO_TEST),
+                amount_wei
             ).build_transaction({
                 'from': self.account.address,
                 'gas': 300000,
@@ -220,20 +260,22 @@ class WithdrawTriggerTester:
                 
                 # Show updated balances
                 print(f"\n💰 Updated Balances:")
-                new_user_balance = self.whype_contract.functions.balanceOf(user_address).call()
-                new_withdrawal_wallet_balance = self.whype_contract.functions.balanceOf(WITHDRAWAL_WALLET).call()
+                new_user_balance = self.token_contract.functions.balanceOf(checksum_user_address).call()
+                new_withdrawal_wallet_balance = self.token_contract.functions.balanceOf(
+                    Web3.to_checksum_address(WITHDRAWAL_WALLET)
+                ).call()
                 
-                print(f"   User WHYPE: {self.w3.from_wei(new_user_balance, 'ether')} WHYPE")
-                print(f"   Withdrawal Wallet WHYPE: {self.w3.from_wei(new_withdrawal_wallet_balance, 'ether')} WHYPE")
+                print(f"   User {self.token_contract.functions.symbol().call()}: {new_user_balance / (10 ** self.token_decimals):.6f}")
+                print(f"   Withdrawal Wallet {self.token_contract.functions.symbol().call()}: {new_withdrawal_wallet_balance / (10 ** self.token_decimals):.6f}")
                 
                 # Calculate fee
-                protocol_fee = (amount_whype * 50) // 10000  # 0.5% fee
-                actual_transfer = amount_whype - protocol_fee
+                protocol_fee = (amount_wei * 50) // 10000  # 0.5% fee
+                actual_transfer = amount_wei - protocol_fee
                 
                 print(f"\n📊 Transfer Summary:")
-                print(f"   Amount withdrawn: {self.w3.from_wei(amount_whype, 'ether')} WHYPE")
-                print(f"   Protocol fee (0.5%): {self.w3.from_wei(protocol_fee, 'ether')} WHYPE")
-                print(f"   Net transfer: {self.w3.from_wei(actual_transfer, 'ether')} WHYPE")
+                print(f"   Amount withdrawn: {amount_tokens} {self.token_contract.functions.symbol().call()}")
+                print(f"   Protocol fee (0.5%): {protocol_fee / (10 ** self.token_decimals):.6f} {self.token_contract.functions.symbol().call()}")
+                print(f"   Net transfer: {actual_transfer / (10 ** self.token_decimals):.6f} {self.token_contract.functions.symbol().call()}")
                 
                 return True
             else:
@@ -249,13 +291,13 @@ def main():
     print("🚀 PriceTriggerSwapV2 Withdraw Trigger Tester")
     print("=" * 50)
     
-    # Get private key from user input
-    private_key = input("🔑 Enter your private key (without 0x prefix): ").strip()
-    if not private_key:
-        print("❌ Private key is required")
+    # Check if private key is set
+    if YOUR_PRIVATE_KEY == "your_private_key_here":
+        print("❌ Please set YOUR_PRIVATE_KEY variable in the script")
         return
     
     # Remove '0x' prefix if present
+    private_key = YOUR_PRIVATE_KEY
     if private_key.startswith('0x'):
         private_key = private_key[2:]
     
@@ -266,38 +308,32 @@ def main():
         # Get current balances
         tester.get_balances()
         
-        # Get user address to test with (you can modify this)
-        user_address = input("\n🔍 Enter user address to test withdrawal for (or press Enter to use your address): ").strip()
-        if not user_address:
-            user_address = tester.account.address
-            print(f"Using your address: {user_address}")
-        
         # Check allowance for the user
-        allowance = tester.check_allowance(user_address)
+        allowance = tester.check_allowance(USER_ADDRESS_TO_TEST)
         
         if allowance == 0:
-            print(f"❌ No allowance found for {user_address}")
+            print(f"❌ No allowance found for {USER_ADDRESS_TO_TEST}")
             print("Please approve tokens first using your approval script")
             return
         
-        # Get amount to withdraw
-        amount_input = input(f"\n💰 Enter amount to withdraw (in WHYPE, max {tester.w3.from_wei(allowance, 'ether'):.6f}): ").strip()
-        if not amount_input:
-            # Use 90% of allowance as default
-            amount_whype = (allowance * 90) // 100
-            print(f"Using 90% of allowance: {tester.w3.from_wei(amount_whype, 'ether')} WHYPE")
+        # Convert allowance to readable format
+        allowance_formatted = allowance / (10 ** tester.token_decimals)
+        print(f"✅ Allowance found: {allowance_formatted:.6f} {tester.token_contract.functions.symbol().call()}")
+        
+        # Check if amount exceeds allowance
+        if AMOUNT_TO_WITHDRAW > allowance_formatted:
+            print(f"⚠️  Amount {AMOUNT_TO_WITHDRAW} exceeds allowance {allowance_formatted:.6f}")
+            print(f"Using maximum available: {allowance_formatted:.6f}")
+            amount_to_withdraw = allowance_formatted
         else:
-            try:
-                amount_whype = tester.w3.to_wei(float(amount_input), 'ether')
-                if amount_whype > allowance:
-                    print(f"❌ Amount exceeds allowance. Using maximum: {tester.w3.from_wei(allowance, 'ether')} WHYPE")
-                    amount_whype = allowance
-            except ValueError:
-                print("❌ Invalid amount. Using 0.1 WHYPE as default")
-                amount_whype = tester.w3.to_wei(0.1, 'ether')
+            amount_to_withdraw = AMOUNT_TO_WITHDRAW
+        
+        print(f"\n🚀 Starting withdrawal of {amount_to_withdraw} {tester.token_contract.functions.symbol().call()}")
+        print(f"   From: {USER_ADDRESS_TO_TEST}")
+        print(f"   To: {WITHDRAWAL_WALLET}")
         
         # Trigger withdrawal
-        success = tester.trigger_withdrawal(user_address, amount_whype)
+        success = tester.trigger_withdrawal(USER_ADDRESS_TO_TEST, amount_to_withdraw)
         
         if success:
             print(f"\n🎉 Withdrawal completed successfully!")

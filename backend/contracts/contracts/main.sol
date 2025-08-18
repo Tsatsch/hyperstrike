@@ -7,11 +7,11 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
- * @title PriceTriggerSwapV2
- * @dev Optimized smart contract for automated token swaps on HyperEVM
+ * @title Main
+ * @dev Smart contract for automated token swaps on HyperEVM
  * Backend controls all trigger logic, contract handles allowances and transfers
  */
-contract PriceTriggerSwapV2 is Ownable, ReentrancyGuard, Pausable {
+contract Main is Ownable, ReentrancyGuard, Pausable {
     
     // Events
     event TokensApproved(
@@ -80,7 +80,8 @@ contract PriceTriggerSwapV2 is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Approve tokens for the contract to spend
+     * @dev Approve tokens for the contract to spend (internal allowance only)
+     * Note: Users must also call token.approve(contractAddress, amount) directly
      * @param token Address of the token to approve
      * @param amount Amount to approve
      */
@@ -92,7 +93,7 @@ contract PriceTriggerSwapV2 is Ownable, ReentrancyGuard, Pausable {
         IERC20 tokenContract = IERC20(token);
         require(tokenContract.balanceOf(msg.sender) >= amount, "Insufficient token balance");
         
-        // Update allowance
+        // Update internal allowance
         userTokenAllowances[msg.sender][token] = amount;
         
         // Add token to user's approved list if not already there
@@ -181,13 +182,43 @@ contract PriceTriggerSwapV2 is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Get approved amount for a specific token
+     * @dev Get internal approved amount for a specific token
      * @param user Address of the user
      * @param token Address of the token
-     * @return amount Approved amount
+     * @return amount Internal approved amount
      */
     function getApprovedAmount(address user, address token) external view returns (uint256 amount) {
         return userTokenAllowances[user][token];
+    }
+    
+    /**
+     * @dev Get ERC20 allowance for a specific token
+     * @param user Address of the user
+     * @param token Address of the token
+     * @return amount ERC20 allowance amount
+     */
+    function getERC20Allowance(address user, address token) external view returns (uint256 amount) {
+        IERC20 tokenContract = IERC20(token);
+        return tokenContract.allowance(user, address(this));
+    }
+    
+    /**
+     * @dev Check if both allowances are properly set for a user and token
+     * @param user Address of the user
+     * @param token Address of the token
+     * @return internalAmount Internal allowance amount
+     * @return erc20Amount ERC20 allowance amount
+     * @return isReady True if both allowances are sufficient for withdrawal
+     */
+    function checkAllowanceStatus(address user, address token) external view returns (
+        uint256 internalAmount, 
+        uint256 erc20Amount, 
+        bool isReady
+    ) {
+        internalAmount = userTokenAllowances[user][token];
+        erc20Amount = IERC20(token).allowance(user, address(this));
+        isReady = (internalAmount > 0 && erc20Amount > 0);
+        return (internalAmount, erc20Amount, isReady);
     }
     
     /**
