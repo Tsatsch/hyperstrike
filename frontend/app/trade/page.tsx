@@ -21,6 +21,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { XpButton } from "@/components/XpButton"
 import { Footer } from "@/components/footer"
 import { Logo } from "@/components/Logo"
+import { config } from "@/lib/config"
 
 interface Token {
   symbol: string
@@ -608,7 +609,7 @@ export default function TradingPlatform() {
         time: Date.now(),
       };
 
-      const response = await fetch('http://localhost:8000/api/order', {
+      const response = await fetch(`${config.apiUrl}/api/order`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

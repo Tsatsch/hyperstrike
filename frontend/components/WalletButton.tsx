@@ -14,6 +14,7 @@ import { Wallet, User, Copy, ExternalLink, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { exchangePrivyForBackendJwt, listOrders } from '@/lib/api';
+import { config } from '@/lib/config';
 
 // Blockscout URLs for different networks
 const BLOCKSCOUT_URLS: { [key: string]: string } = {
@@ -41,7 +42,7 @@ export function WalletButton() {
     const notifyBackend = async () => {
       if (authenticated && currentWalletAddress) {
         try {
-          await fetch(`http://localhost:8000/api/wallet?address=${currentWalletAddress}`, {
+          await fetch(`${config.apiUrl}/api/wallet?address=${currentWalletAddress}`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -66,7 +67,7 @@ export function WalletButton() {
             if (ref) referralParam = `&referral=${encodeURIComponent(ref)}`;
           } catch {}
 
-          await fetch(`http://localhost:8000/api/user?wallet=${currentWalletAddress}${referralParam}`, {
+          await fetch(`${config.apiUrl}/api/user?wallet=${currentWalletAddress}${referralParam}`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,

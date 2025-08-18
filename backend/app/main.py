@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 from app.routers import wallet
 from app.routers import orders as orders_router
 from app.routers import xp as xp_router
@@ -9,15 +10,20 @@ from app.services.candle_watcher import ensure_subscription
 import asyncio
 
 app = FastAPI()
-#
-# Allow frontend access
+
+# Allow frontend access (configurable)
+default_allowed = [
+    "http://localhost:3000",
+    "https://hyperstrike-silk.vercel.app",
+    "https://hyperstrike.vercel.app",
+]
+env_allowed = os.getenv("ALLOWED_ORIGINS")
+allowed_origins = [o.strip() for o in env_allowed.split(",") if o.strip()] if env_allowed else default_allowed
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://hyperstrike-silk.vercel.app",
-        "https://hyperstrike.vercel.app"
-    ],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\\.vercel\\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,4 +44,3 @@ app.include_router(auth_router.router, prefix="/api", tags=["auth"])
 @app.get("/")
 def read_root():
     return {"message": "FastAPI + Hyperliquid triggers are live!"}
-

@@ -53,7 +53,7 @@ export async function expireOrder(orderId: number, reason = "time ran out"): Pro
   const jwt = getBackendJwt();
   if (!jwt) return false;
   const params = new URLSearchParams({ orderId: String(orderId), reason });
-  const response = await fetch(`http://localhost:8000/api/order/expire?${params.toString()}`, {
+  const response = await fetch(`${config.apiUrl}/api/order/expire?${params.toString()}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${jwt}` },
   });
@@ -63,7 +63,7 @@ export async function expireOrder(orderId: number, reason = "time ran out"): Pro
 export async function setOrderState(orderId: number, state: 'open' | 'done' | 'closed' | 'deleted', termination_message?: string): Promise<boolean> {
   const jwt = getBackendJwt();
   if (!jwt) return false;
-  const response = await fetch('http://localhost:8000/api/order/state', {
+  const response = await fetch(`${config.apiUrl}/api/order/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
     body: JSON.stringify({ orderId, state, termination_message }),
