@@ -72,20 +72,7 @@ const conditionTypes = [
     icon: Clock,
     popular: false,
   },
-  {
-    id: "volume_trigger",
-    name: "Volume Trigger",
-    description: "Execute when trading volume reaches threshold",
-    icon: BarChart3,
-    popular: false,
-  },
-  {
-    id: "multi_token",
-    name: "Multi-Token Condition",
-    description: "Execute based on multiple token price movements",
-    icon: Target,
-    popular: false,
-  },
+  // Removed: Volume Trigger, Multi-Token Condition
   {
     id: "social_sentiment",
     name: "Social Sentiment",
