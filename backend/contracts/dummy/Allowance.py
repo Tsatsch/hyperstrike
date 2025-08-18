@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-USDC Allowance Script for PriceTriggerSwap Contract
-This script checks and sets both internal and ERC20 allowances for the PriceTriggerSwap contract.
+WHYPE Allowance Script for Main Contract (MAINNET)
+This script checks and sets both internal and ERC20 allowances for the Main contract on HyperEVM mainnet.
 """
 
 import os
@@ -11,15 +11,16 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 
 # Configuration
-HYPER_EVM_TESTNET_RPC = "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm"
-PURR_TOKEN_ADDRESS = "0x5a1a1339ad9e52b7a4df78452d5c18e8690746f3"  # USDC (PURR) on HyperEVM testnet
-PRICE_TRIGGER_SWAP_ADDRESS = "0xe11B7Cd241c5371B459C5820360A1F585e3B71c4"  # Replace with actual deployed address
+HYPER_MAINNET_RPC = "https://withered-delicate-sailboat.hype-mainnet.quiknode.pro/edb38026d62fb1de9d51e057b4b720a455f8b9d8/evm"
+WHYPE_TOKEN_ADDRESS = "0x5555555555555555555555555555555555555555"  # WHYPE on HyperEVM mainnet
+MAIN_CONTRACT_ADDRESS = "0x745b14228103d18AdC394a4688fA1628614b91CA"  # Your deployed Main contract on mainnet
 
-# Dummy private key (REPLACE WITH YOUR ACTUAL PRIVATE KEY)
-DUMMY_PRIVATE_KEY = "0xe469510e586a6e0d982e137bc49d2aefef5dd76b36b8db64cb22af2ab8649eae"
+# REPLACE WITH YOUR ACTUAL MAINNET PRIVATE KEY
+# ⚠️  CRITICAL WARNING: This will interact with REAL FUNDS on MAINNET!
+MAINNET_PRIVATE_KEY = "0xe469510e586a6e0d982e137bc49d2aefef5dd76b36b8db64cb22af2ab8649eae"
 
-# USDC (PURR) Token ABI - Minimal ABI for allowance operations
-PURR_ABI = [
+# WHYPE Token ABI - Minimal ABI for allowance operations
+WHYPE_ABI = [
     {
         "constant": True,
         "inputs": [
@@ -63,8 +64,8 @@ PURR_ABI = [
     }
 ]
 
-# PriceTriggerSwap Contract ABI - Simplified
-PRICE_TRIGGER_SWAP_ABI = [
+# Main Contract ABI - Simplified
+MAIN_CONTRACT_ABI = [
     {
         "constant": True,
         "inputs": [
@@ -111,79 +112,79 @@ PRICE_TRIGGER_SWAP_ABI = [
     }
 ]
 
-class USDCAllowanceManager:
+class WHYPEAllowanceManager:
     def __init__(self, private_key: str):
-        """Initialize the USDC Allowance Manager"""
+        """Initialize the WHYPE Allowance Manager"""
         self.private_key = private_key
         self.account: LocalAccount = Account.from_key(private_key)
-        self.w3 = Web3(Web3.HTTPProvider(HYPER_EVM_TESTNET_RPC))
+        self.w3 = Web3(Web3.HTTPProvider(HYPER_MAINNET_RPC))
         
         # Check connection
         if not self.w3.is_connected():
-            raise Exception("Failed to connect to HyperEVM testnet")
+            raise Exception("Failed to connect to HyperEVM mainnet")
         
-        print(f"✅ Connected to HyperEVM testnet")
+        print(f"✅ Connected to HyperEVM mainnet")
         print(f"📱 Wallet address: {self.account.address}")
-        print(f"🔗 RPC URL: {HYPER_EVM_TESTNET_RPC}")
+        print(f"🔗 RPC URL: {HYPER_MAINNET_RPC}")
         
         # Initialize contracts with checksum addresses
-        self.purr_contract = self.w3.eth.contract(
-            address=Web3.to_checksum_address(PURR_TOKEN_ADDRESS),
-            abi=PURR_ABI
+        self.whype_contract = self.w3.eth.contract(
+            address=Web3.to_checksum_address(WHYPE_TOKEN_ADDRESS),
+            abi=WHYPE_ABI
         )
         
-        # Note: PriceTriggerSwap contract needs to be deployed first
-        if PRICE_TRIGGER_SWAP_ADDRESS != "0x0000000000000000000000000000000000000000":
-            self.price_trigger_swap_contract = self.w3.eth.contract(
-                address=Web3.to_checksum_address(PRICE_TRIGGER_SWAP_ADDRESS),
-                abi=PRICE_TRIGGER_SWAP_ABI
+        # Note: Main contract needs to be deployed first
+        if MAIN_CONTRACT_ADDRESS != "0x0000000000000000000000000000000000000000":
+            self.main_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(MAIN_CONTRACT_ADDRESS),
+                abi=MAIN_CONTRACT_ABI
             )
         else:
-            self.price_trigger_swap_contract = None
-            print("⚠️  PriceTriggerSwap contract not deployed yet - set PRICE_TRIGGER_SWAP_ADDRESS")
+            self.main_contract = None
+            print("⚠️  Main contract not deployed yet - set MAIN_CONTRACT_ADDRESS")
     
-    def get_purr_info(self):
-        """Get PURR token information"""
+    def get_whype_info(self):
+        """Get WHYPE token information"""
         try:
-            symbol = self.purr_contract.functions.symbol().call()
-            decimals = self.purr_contract.functions.decimals().call()
-            balance = self.purr_contract.functions.balanceOf(self.account.address).call()
+            symbol = self.whype_contract.functions.symbol().call()
+            decimals = self.whype_contract.functions.decimals().call()
+            balance = self.whype_contract.functions.balanceOf(self.account.address).call()
             
-            print(f"\n📊 PURR Token Info:")
+            print(f"\n📊 WHYPE Token Info:")
             print(f"   Symbol: {symbol}")
             print(f"   Decimals: {decimals}")
             print(f"   Balance: {balance / (10 ** decimals):.6f} {symbol}")
             
             return symbol, decimals, balance
         except Exception as e:
-            print(f"❌ Error getting PURR info: {e}")
+            print(f"❌ Error getting WHYPE info: {e}")
             return None, None, None
     
     def check_both_allowances(self):
         """Check both internal and ERC20 allowances"""
-        if not self.price_trigger_swap_contract:
-            print("\n⚠️  Cannot check allowances - PriceTriggerSwap contract not deployed")
+        if not self.main_contract:
+            print("\n⚠️  Cannot check allowances - Main contract not deployed")
             return None, None, None
         
         try:
             # Check internal allowance
-            internal_allowance = self.price_trigger_swap_contract.functions.getApprovedAmount(
+            internal_allowance = self.main_contract.functions.getApprovedAmount(
                 self.account.address,
-                Web3.to_checksum_address(PURR_TOKEN_ADDRESS)
+                Web3.to_checksum_address(WHYPE_TOKEN_ADDRESS)
             ).call()
             
             # Check ERC20 allowance
-            erc20_allowance = self.price_trigger_swap_contract.functions.getERC20Allowance(
+            erc20_allowance = self.main_contract.functions.getERC20Allowance(
                 self.account.address,
-                Web3.to_checksum_address(PURR_TOKEN_ADDRESS)
+                Web3.to_checksum_address(WHYPE_TOKEN_ADDRESS)
             ).call()
             
             # Get token decimals for formatting
-            decimals = self.purr_contract.functions.decimals().call()
+            decimals = self.whype_contract.functions.decimals().call()
             
             print(f"\n🔍 Current Allowance Status:")
-            print(f"   Internal Allowance: {internal_allowance / (10 ** decimals):.6f} PURR")
-            print(f"   ERC20 Allowance: {erc20_allowance / (10 ** decimals):.6f} PURR")
+            print(f"   Internal Allowance: {internal_allowance / (10 ** decimals):.6f} WHYPE")
+            print(f"   ERC20 Allowance: {erc20_allowance / (10 ** decimals):.6f} WHYPE")
             
             # Check if both are ready
             is_ready = (internal_allowance > 0 and erc20_allowance > 0)
@@ -197,7 +198,7 @@ class USDCAllowanceManager:
     
     def set_internal_allowance(self, amount: int):
         """Set internal allowance using approveTokens function"""
-        if not self.price_trigger_swap_contract:
+        if not self.main_contract:
             print("\n⚠️  Cannot set internal allowance - contract not deployed")
             return False
         
@@ -206,8 +207,8 @@ class USDCAllowanceManager:
             print(f"   Amount: {amount}")
             
             # Build approveTokens transaction
-            approve_txn = self.price_trigger_swap_contract.functions.approveTokens(
-                Web3.to_checksum_address(PURR_TOKEN_ADDRESS),
+            approve_txn = self.main_contract.functions.approveTokens(
+                Web3.to_checksum_address(WHYPE_TOKEN_ADDRESS),
                 amount
             ).build_transaction({
                 'from': self.account.address,
@@ -222,6 +223,7 @@ class USDCAllowanceManager:
             
             print(f"   Transaction hash: {tx_hash.hex()}")
             print(f"   Waiting for confirmation...")
+            print(f"   ⏳ Waiting for confirmation...")
             
             # Wait for confirmation
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
@@ -244,8 +246,8 @@ class USDCAllowanceManager:
             print(f"   Amount: {amount}")
             
             # Build standard ERC20 approve transaction directly on token contract
-            approve_txn = self.purr_contract.functions.approve(
-                Web3.to_checksum_address(PRICE_TRIGGER_SWAP_ADDRESS),
+            approve_txn = self.whype_contract.functions.approve(
+                Web3.to_checksum_address(MAIN_CONTRACT_ADDRESS),
                 amount
             ).build_transaction({
                 'from': self.account.address,
@@ -291,7 +293,7 @@ class USDCAllowanceManager:
         else:
             amount_wei = amount
         
-        print(f"\n🎯 Setting up allowances for {amount_wei / (10 ** decimals):.6f} PURR...")
+        print(f"\n🎯 Setting up allowances for {amount_wei / (10 ** decimals):.6f} WHYPE...")
         
         # Check and set internal allowance if needed
         if internal_allowance < amount_wei:
@@ -321,22 +323,32 @@ class USDCAllowanceManager:
             return False
 
 def main():
-    """Main function to run the USDC allowance script"""
-    print("🚀 USDC Allowance Script for PriceTriggerSwap")
-    print("=" * 50)
+    """Main function to run the WHYPE allowance script"""
+    print("🚀 WHYPE Allowance Script for Main Contract (MAINNET)")
+    print("=" * 60)
     
-    # Check if PriceTriggerSwap address is set
-    if PRICE_TRIGGER_SWAP_ADDRESS == "0x0000000000000000000000000000000000000000":
-        print("\n⚠️  IMPORTANT: Set PRICE_TRIGGER_SWAP_ADDRESS in the script first!")
-        print("   Deploy PriceTriggerSwap contract and update the address")
+    # Safety confirmation for mainnet
+    print("\n🚨 MAINNET SAFETY CHECK:")
+    print("   You are about to interact with REAL FUNDS on HyperEVM mainnet!")
+    print("   Make sure you understand what you're doing.")
+    
+    safety_confirm = input("\nType 'I UNDERSTAND' to continue: ").strip()
+    if safety_confirm != "I UNDERSTAND":
+        print("❌ Safety confirmation failed. Exiting for your protection.")
+        return
+    
+    # Check if Main contract address is set
+    if MAIN_CONTRACT_ADDRESS == "0x0000000000000000000000000000000000000000":
+        print("\n⚠️  IMPORTANT: Set MAIN_CONTRACT_ADDRESS in the script first!")
+        print("   Deploy Main contract and update the address")
         return
     
     try:
         # Initialize manager
-        manager = USDCAllowanceManager(DUMMY_PRIVATE_KEY)
+        manager = WHYPEAllowanceManager(MAINNET_PRIVATE_KEY)
         
-        # Get PURR token info
-        symbol, decimals, balance = manager.get_purr_info()
+        # Get WHYPE token info
+        symbol, decimals, balance = manager.get_whype_info()
         if not symbol:
             return
         

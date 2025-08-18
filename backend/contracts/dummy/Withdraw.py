@@ -14,12 +14,12 @@ from eth_account import Account
 # ============================================================================
 
 # Contract addresses
-PRICE_TRIGGER_CONTRACT_ADDRESS = "0xe11B7Cd241c5371B459C5820360A1F585e3B71c4"  # Your deployed contract
-WHYPE_CONTRACT_ADDRESS = "0x5a1a1339ad9e52b7a4df78452d5c18e8690746f3"  # Your deployed WHYPE
+PRICE_TRIGGER_CONTRACT_ADDRESS = "0x745b14228103d18AdC394a4688fA1628614b91CA"  # Your deployed contract
+WHYPE_CONTRACT_ADDRESS = "0x5555555555555555555555555555555555555555"  # Your deployed WHYPE
 
 # Network configuration
-HYPER_TESTNET_RPC = "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm"
-CHAIN_ID = 998
+HYPER_TESTNET_RPC = "https://withered-delicate-sailboat.hype-mainnet.quiknode.pro/edb38026d62fb1de9d51e057b4b720a455f8b9d8/evm"
+CHAIN_ID = 999
 
 # Wallet addresses
 WITHDRAWAL_WALLET = "0x9E02783Ad42C5A94a0De60394f2996E44458B782"
