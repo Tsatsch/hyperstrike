@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Activity, Bell, Settings, User, Wallet, ChevronDown, ChevronUp, RefreshCw } from "lucide-react"
+import { Activity, Wallet, ChevronDown, ChevronUp, RefreshCw } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { XpButton } from "@/components/XpButton"
@@ -353,16 +353,12 @@ export default function PortfolioPage() {
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>
               <a href="/portfolio" className="font-medium text-primary">Portfolio</a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">Markets</a>
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">
-            <ThemeToggle />
-            <Button variant="ghost" size="icon"><Bell className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon"><Settings className="h-4 w-4" /></Button>
             <XpButton />
             <WalletButton />
-            <Button variant="ghost" size="icon"><User className="h-4 w-4" /></Button>
+            <ThemeToggle />
           </div>
         </div>
       </header>
