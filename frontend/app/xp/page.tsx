@@ -7,7 +7,7 @@ import { exchangePrivyForBackendJwt, getBackendJwt, getUserXp, getOrCreateUser, 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDown } from "lucide-react"
-import { Activity, Bell, Settings, User, Wallet } from "lucide-react"
+import { Activity, Wallet } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { XpButton } from "@/components/XpButton"
@@ -88,16 +88,12 @@ export default function XpPage() {
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>
               <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">Portfolio</a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">Markets</a>
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">
-            <ThemeToggle />
-            <Button variant="ghost" size="icon"><Bell className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon"><Settings className="h-4 w-4" /></Button>
             <XpButton />
             <WalletButton />
-            <Button variant="ghost" size="icon"><User className="h-4 w-4" /></Button>
+            <ThemeToggle />
           </div>
         </div>
       </header>
