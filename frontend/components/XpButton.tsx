@@ -2,42 +2,24 @@
 
 import { Button } from '@/components/ui/button'
 import { usePrivy } from '@privy-io/react-auth'
-import { useEffect, useState } from 'react'
-import { exchangePrivyForBackendJwt, getBackendJwt, getUserXp } from '@/lib/api'
+import { Star } from 'lucide-react'
 
 export function XpButton() {
-  const { authenticated, user, getAccessToken } = usePrivy()
-  const [xp, setXp] = useState<number | null>(null)
+  const { authenticated } = usePrivy()
 
-  useEffect(() => {
-    const run = async () => {
-      if (!authenticated || !user?.wallet?.address) {
-        setXp(null)
-        return
-      }
-      const jwt = getBackendJwt() || await exchangePrivyForBackendJwt(getAccessToken, user.wallet.address)
-      if (!jwt) {
-        setXp(null)
-        return
-      }
-      try {
-        const val = await getUserXp()
-        setXp(Number(val) || 0)
-      } catch {
-        setXp(null)
-      }
-    }
-    run()
-  }, [authenticated, user?.wallet?.address])
-
-  const label = xp !== null ? `XP | ${xp}` : 'XP'
+  // Only show XP button if user is authenticated
+  if (!authenticated) {
+    return null
+  }
 
   return (
     <Button
-      className="hidden sm:inline-flex bg-green-600 hover:bg-green-700 text-white"
+      variant="outline"
+      className="hidden sm:inline-flex border-teal-500 text-teal-600 hover:bg-teal-50 hover:text-teal-700 dark:border-teal-400 dark:text-teal-400 dark:hover:bg-teal-950 dark:hover:text-teal-300"
       onClick={() => { window.location.href = '/xp' }}
     >
-      {label}
+      <Star className="mr-2 h-4 w-4 text-teal-500 dark:text-teal-400" />
+      XP
     </Button>
   )
 }
