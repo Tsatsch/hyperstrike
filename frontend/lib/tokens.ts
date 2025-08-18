@@ -61,7 +61,7 @@ export const HYPERLIQUID_TOKENS: TokenConfig[] = [
     name: "Unit Fartcoin",
     address: "0x3b4575e689ded21caad31d64c4df1f10f3b2cedf",
     decimals: 18,
-    icon: "/coins-logos/ufart.jpg"
+    icon: "https://app.hyperliquid.xyz/coins/FART_USDC.svg"
   },
   {
     symbol: "JEFF",
