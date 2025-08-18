@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 USDC Allowance Script for PriceTriggerSwap Contract
-This script gives allowance for USDC (PURR token) to the PriceTriggerSwap contract
-and checks if the allowance is properly set.
+This script checks and sets both internal and ERC20 allowances for the PriceTriggerSwap contract.
 """
 
 import os
@@ -13,8 +12,8 @@ from eth_account.signers.local import LocalAccount
 
 # Configuration
 HYPER_EVM_TESTNET_RPC = "https://hyperliquid-testnet.core.chainstack.com/f3ce6117a8d9cc6b9908d471f15d1686/evm"
-PURR_TOKEN_ADDRESS = "0xa9056c15938f9aff34cd497c722ce33db0c2fd57"  # USDC (PURR) on HyperEVM testnet
-PRICE_TRIGGER_SWAP_ADDRESS = "0x665D96a9737C4C06f9e885FC6fC03dFB97FB0FCB"  # Replace with actual deployed address
+PURR_TOKEN_ADDRESS = "0x5a1a1339ad9e52b7a4df78452d5c18e8690746f3"  # USDC (PURR) on HyperEVM testnet
+PRICE_TRIGGER_SWAP_ADDRESS = "0xe11B7Cd241c5371B459C5820360A1F585e3B71c4"  # Replace with actual deployed address
 
 # Dummy private key (REPLACE WITH YOUR ACTUAL PRIVATE KEY)
 DUMMY_PRIVATE_KEY = "0xe469510e586a6e0d982e137bc49d2aefef5dd76b36b8db64cb22af2ab8649eae"
@@ -64,7 +63,7 @@ PURR_ABI = [
     }
 ]
 
-# PriceTriggerSwap Contract ABI - Minimal ABI for allowance operations
+# PriceTriggerSwap Contract ABI - Simplified
 PRICE_TRIGGER_SWAP_ABI = [
     {
         "constant": True,
@@ -84,6 +83,30 @@ PRICE_TRIGGER_SWAP_ABI = [
         ],
         "name": "approveTokens",
         "outputs": [],
+        "type": "function"
+    },
+    {
+        "constant": True,
+        "inputs": [
+            {"name": "user", "type": "address"},
+            {"name": "token", "type": "address"}
+        ],
+        "name": "getERC20Allowance",
+        "outputs": [{"name": "amount", "type": "uint256"}],
+        "type": "function"
+    },
+    {
+        "constant": True,
+        "inputs": [
+            {"name": "user", "type": "address"},
+            {"name": "token", "type": "address"}
+        ],
+        "name": "checkAllowanceStatus",
+        "outputs": [
+            {"name": "internalAmount", "type": "uint256"},
+            {"name": "erc20Amount", "type": "uint256"},
+            {"name": "isReady", "type": "bool"}
+        ],
         "type": "function"
     }
 ]
@@ -136,103 +159,50 @@ class USDCAllowanceManager:
             print(f"❌ Error getting PURR info: {e}")
             return None, None, None
     
-    def check_current_allowance(self, spender_address: str):
-        """Check current allowance for a spender"""
-        try:
-            # Convert to checksum address
-            spender_checksum = Web3.to_checksum_address(spender_address)
-            allowance = self.purr_contract.functions.allowance(
-                self.account.address,
-                spender_checksum
-            ).call()
-            
-            decimals = self.purr_contract.functions.decimals().call()
-            formatted_allowance = allowance / (10 ** decimals)
-            
-            print(f"\n🔍 Current Allowance:")
-            print(f"   Spender: {spender_address}")
-            print(f"   Amount: {formatted_allowance:.6f} PURR")
-            print(f"   Raw Amount: {allowance}")
-            
-            return allowance
-        except Exception as e:
-            print(f"❌ Error checking allowance: {e}")
-            return 0
-    
-    def give_allowance(self, spender_address: str, amount: int):
-        """Give allowance to a spender"""
-        try:
-            # Convert to checksum address
-            spender_checksum = Web3.to_checksum_address(spender_address)
-            print(f"\n🚀 Giving allowance...")
-            print(f"   Spender: {spender_checksum}")
-            print(f"   Amount: {amount}")
-            
-            # Build approve transaction
-            approve_txn = self.purr_contract.functions.approve(
-                spender_checksum,
-                amount
-            ).build_transaction({
-                'from': self.account.address,
-                'nonce': self.w3.eth.get_transaction_count(self.account.address),
-                'gas': 100000,  # Standard gas limit for approve
-                'gasPrice': self.w3.eth.gas_price
-            })
-            
-            # Sign and send transaction
-            signed_txn = self.w3.eth.account.sign_transaction(approve_txn, self.private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-            
-            print(f"   Transaction hash: {tx_hash.hex()}")
-            print(f"   Waiting for confirmation...")
-            
-            # Wait for confirmation
-            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
-            
-            if tx_receipt.status == 1:
-                print(f"   ✅ Allowance granted successfully!")
-                return True
-            else:
-                print(f"   ❌ Transaction failed!")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Error giving allowance: {e}")
-            return False
-    
-    def check_price_trigger_swap_allowance(self):
-        """Check allowance specifically for PriceTriggerSwap contract"""
+    def check_both_allowances(self):
+        """Check both internal and ERC20 allowances"""
         if not self.price_trigger_swap_contract:
-            print("\n⚠️  Cannot check PriceTriggerSwap allowance - contract not deployed")
-            return
+            print("\n⚠️  Cannot check allowances - PriceTriggerSwap contract not deployed")
+            return None, None, None
         
         try:
-            # Check allowance through PriceTriggerSwap contract
-            allowance = self.price_trigger_swap_contract.functions.getApprovedAmount(
+            # Check internal allowance
+            internal_allowance = self.price_trigger_swap_contract.functions.getApprovedAmount(
                 self.account.address,
                 Web3.to_checksum_address(PURR_TOKEN_ADDRESS)
             ).call()
             
+            # Check ERC20 allowance
+            erc20_allowance = self.price_trigger_swap_contract.functions.getERC20Allowance(
+                self.account.address,
+                Web3.to_checksum_address(PURR_TOKEN_ADDRESS)
+            ).call()
+            
+            # Get token decimals for formatting
             decimals = self.purr_contract.functions.decimals().call()
-            formatted_allowance = allowance / (10 ** decimals)
             
-            print(f"\n🔍 PriceTriggerSwap Contract Allowance:")
-            print(f"   Amount: {formatted_allowance:.6f} PURR")
-            print(f"   Raw Amount: {allowance}")
+            print(f"\n🔍 Current Allowance Status:")
+            print(f"   Internal Allowance: {internal_allowance / (10 ** decimals):.6f} PURR")
+            print(f"   ERC20 Allowance: {erc20_allowance / (10 ** decimals):.6f} PURR")
             
-            return allowance
+            # Check if both are ready
+            is_ready = (internal_allowance > 0 and erc20_allowance > 0)
+            print(f"   Status: {'✅ Ready for withdrawal' if is_ready else '❌ Not ready'}")
+            
+            return internal_allowance, erc20_allowance, decimals
+            
         except Exception as e:
-            print(f"❌ Error checking PriceTriggerSwap allowance: {e}")
-            return 0
+            print(f"❌ Error checking allowances: {e}")
+            return None, None, None
     
-    def approve_tokens_for_price_trigger_swap(self, amount: int):
-        """Approve tokens specifically for PriceTriggerSwap contract"""
+    def set_internal_allowance(self, amount: int):
+        """Set internal allowance using approveTokens function"""
         if not self.price_trigger_swap_contract:
-            print("\n⚠️  Cannot approve for PriceTriggerSwap - contract not deployed")
+            print("\n⚠️  Cannot set internal allowance - contract not deployed")
             return False
         
         try:
-            print(f"\n🚀 Approving tokens for PriceTriggerSwap contract...")
+            print(f"\n🚀 Setting internal allowance...")
             print(f"   Amount: {amount}")
             
             # Build approveTokens transaction
@@ -242,7 +212,7 @@ class USDCAllowanceManager:
             ).build_transaction({
                 'from': self.account.address,
                 'nonce': self.w3.eth.get_transaction_count(self.account.address),
-                'gas': 150000,  # Higher gas limit for contract interaction
+                'gas': 150000,
                 'gasPrice': self.w3.eth.gas_price
             })
             
@@ -257,14 +227,97 @@ class USDCAllowanceManager:
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
             
             if tx_receipt.status == 1:
-                print(f"   ✅ Tokens approved for PriceTriggerSwap successfully!")
+                print(f"   ✅ Internal allowance set successfully!")
                 return True
             else:
                 print(f"   ❌ Transaction failed!")
                 return False
                 
         except Exception as e:
-            print(f"❌ Error approving tokens: {e}")
+            print(f"❌ Error setting internal allowance: {e}")
+            return False
+    
+    def set_erc20_allowance(self, amount: int):
+        """Set ERC20 allowance using standard ERC20 approve function"""
+        try:
+            print(f"\n🚀 Setting ERC20 allowance...")
+            print(f"   Amount: {amount}")
+            
+            # Build standard ERC20 approve transaction directly on token contract
+            approve_txn = self.purr_contract.functions.approve(
+                Web3.to_checksum_address(PRICE_TRIGGER_SWAP_ADDRESS),
+                amount
+            ).build_transaction({
+                'from': self.account.address,
+                'nonce': self.w3.eth.get_transaction_count(self.account.address),
+                'gas': 100000,  # Standard gas for ERC20 approve
+                'gasPrice': self.w3.eth.gas_price
+            })
+            
+            # Sign and send transaction
+            signed_txn = self.w3.eth.account.sign_transaction(approve_txn, self.private_key)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+            
+            print(f"   Transaction hash: {tx_hash.hex()}")
+            print(f"   Waiting for confirmation...")
+            
+            # Wait for confirmation
+            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+            
+            if tx_receipt.status == 1:
+                print(f"   ✅ ERC20 allowance set successfully!")
+                return True
+            else:
+                print(f"   ❌ Transaction failed!")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error setting ERC20 allowance: {e}")
+            return False
+    
+    def setup_allowances(self, amount: int):
+        """Check and setup both allowances if needed"""
+        print(f"\n🔍 Checking current allowance status...")
+        
+        # Check current allowances
+        internal_allowance, erc20_allowance, decimals = self.check_both_allowances()
+        
+        if internal_allowance is None:
+            return False
+        
+        # Convert amount to wei if needed
+        if decimals:
+            amount_wei = amount if amount > 1000000 else int(amount * (10 ** decimals))
+        else:
+            amount_wei = amount
+        
+        print(f"\n🎯 Setting up allowances for {amount_wei / (10 ** decimals):.6f} PURR...")
+        
+        # Check and set internal allowance if needed
+        if internal_allowance < amount_wei:
+            print(f"   ⚠️  Internal allowance insufficient ({internal_allowance / (10 ** decimals):.6f} < {amount_wei / (10 ** decimals):.6f})")
+            if not self.set_internal_allowance(amount_wei):
+                return False
+        else:
+            print(f"   ✅ Internal allowance sufficient ({internal_allowance / (10 ** decimals):.6f} >= {amount_wei / (10 ** decimals):.6f})")
+        
+        # Check and set ERC20 allowance if needed
+        if erc20_allowance < amount_wei:
+            print(f"   ⚠️  ERC20 allowance insufficient ({erc20_allowance / (10 ** decimals):.6f} < {amount_wei / (10 ** decimals):.6f})")
+            if not self.set_erc20_allowance(amount_wei):
+                return False
+        else:
+            print(f"   ✅ ERC20 allowance sufficient ({erc20_allowance / (10 ** decimals):.6f} >= {amount_wei / (10 ** decimals):.6f})")
+        
+        # Final check
+        print(f"\n🔍 Final allowance status:")
+        final_internal, final_erc20, _ = self.check_both_allowances()
+        
+        if final_internal >= amount_wei and final_erc20 >= amount_wei:
+            print(f"🎉 All allowances set successfully! Ready for withdrawal.")
+            return True
+        else:
+            print(f"❌ Failed to set all required allowances.")
             return False
 
 def main():
@@ -287,61 +340,27 @@ def main():
         if not symbol:
             return
         
-        # Check current allowance for PriceTriggerSwap
+        # Ask user for amount
         print(f"\n" + "="*50)
-        print("🔍 CHECKING CURRENT ALLOWANCE")
+        print("🎯 SETUP ALLOWANCES")
         print("="*50)
         
-        current_allowance = manager.check_current_allowance(PRICE_TRIGGER_SWAP_ADDRESS)
-        manager.check_price_trigger_swap_allowance()
-        
-        # Ask user what to do
-        print(f"\n" + "="*50)
-        print("🎯 WHAT WOULD YOU LIKE TO DO?")
-        print("="*50)
-        print("1. Give standard ERC20 allowance to PriceTriggerSwap")
-        print("2. Use PriceTriggerSwap's approveTokens function")
-        print("3. Check allowance status only")
-        
-        choice = input("\nEnter your choice (1-3): ").strip()
-        
-        if choice == "1":
-            # Standard ERC20 allowance
-            amount_input = input(f"\nEnter amount of {symbol} to approve (e.g., 100): ").strip()
-            try:
-                amount = int(float(amount_input) * (10 ** decimals))
-                manager.give_allowance(PRICE_TRIGGER_SWAP_ADDRESS, amount)
-                
-                # Check new allowance
-                print(f"\n" + "="*50)
-                print("✅ CHECKING NEW ALLOWANCE")
-                print("="*50)
-                manager.check_current_allowance(PRICE_TRIGGER_SWAP_ADDRESS)
-                
-            except ValueError:
-                print("❌ Invalid amount entered")
-                
-        elif choice == "2":
-            # PriceTriggerSwap approveTokens
-            amount_input = input(f"\nEnter amount of {symbol} to approve (e.g., 100): ").strip()
-            try:
-                amount = int(float(amount_input) * (10 ** decimals))
-                manager.approve_tokens_for_price_trigger_swap(amount)
-                
-                # Check new allowance
-                print(f"\n" + "="*50)
-                print("✅ CHECKING NEW ALLOWANCE")
-                print("="*50)
-                manager.check_price_trigger_swap_allowance()
-                
-            except ValueError:
-                print("❌ Invalid amount entered")
-                
-        elif choice == "3":
-            print("\n✅ Allowance check completed")
+        amount_input = input(f"\nEnter amount of {symbol} to approve (e.g., 1.0): ").strip()
+        try:
+            amount = float(amount_input)
+            print(f"\n🚀 Setting up allowances for {amount} {symbol}...")
             
-        else:
-            print("❌ Invalid choice")
+            # Setup both allowances
+            success = manager.setup_allowances(amount)
+            
+            if success:
+                print(f"\n✅ Allowance setup completed successfully!")
+                print(f"   You can now use the withdrawal script.")
+            else:
+                print(f"\n❌ Allowance setup failed. Check the output above for details.")
+                
+        except ValueError:
+            print("❌ Invalid amount entered")
             
     except Exception as e:
         print(f"\n❌ Script failed: {e}")
