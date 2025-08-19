@@ -143,7 +143,7 @@ export default function LandingPage() {
               {stats.map((stat, index) => {
                 const Icon = stat.icon
                 return (
-                  <div key={index} className="text-center">
+                  <div key={stat.label} className="text-center">
                     <div className="flex items-center justify-center mb-2">
                       <Icon className="w-5 h-5 text-primary mr-2" />
                       <span className="text-2xl font-bold text-foreground">{stat.value}</span>
@@ -181,7 +181,7 @@ export default function LandingPage() {
                 'from-teal-500/20 to-blue-500/20'
               ]
               return (
-                <div key={index} className={`relative bg-gradient-to-br ${gradients[index]} border border-border/30 rounded-xl p-6 text-center group hover:scale-105 hover:shadow-xl transition-all duration-300 backdrop-blur-sm`}>
+                <div key={condition.title} className={`relative bg-gradient-to-br ${gradients[index]} border border-border/30 rounded-xl p-6 text-center group hover:scale-105 hover:shadow-xl transition-all duration-300 backdrop-blur-sm`}>
                   {/* Glow effect */}
                   <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   
@@ -218,7 +218,7 @@ export default function LandingPage() {
             {features.map((feature, index) => {
               const Icon = feature.icon
               return (
-                <Card key={index} className="border-border/50 shadow-lg hover:shadow-xl transition-all duration-300">
+                <Card key={feature.title} className="border-border/50 shadow-lg hover:shadow-xl transition-all duration-300">
                   <CardHeader className="pb-3">
                     <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-3">
                       <Icon className="w-5 h-5 text-primary" />

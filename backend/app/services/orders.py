@@ -1,10 +1,23 @@
 from typing import List, Optional, Dict, Any
 from app.db.sb import supabase
 from app.models.order import OrderCreateRequest, OrderOut
+import asyncio
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _normalize_wallet(wallet: str) -> str:
     return wallet.lower()
+
+
+def _canonicalize_symbol_for_hyperliquid(symbol: str) -> str:
+    """Map internal symbols (e.g., UBTC) to Hyperliquid canonical form (e.g., BTC)."""
+    if not symbol:
+        return symbol
+    s = symbol.upper()
+    if s.startswith("U") and len(s) > 1:
+        return s[1:]
+    return s
 
 
 def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet: str) -> OrderOut:
@@ -22,7 +35,32 @@ def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet: str) 
     if getattr(response, "error", None):
         raise Exception(f"Failed to create order: {response.error}")
     saved = response.data[0]
+    
+    # Try to subscribe to market data for this order (non-blocking)
+    try:
+        if (saved.get("orderData") and 
+            saved["orderData"].get("type") == "ohlcvTrigger" and
+            saved["orderData"].get("ohlcvTrigger")):
+            trigger = saved["orderData"]["ohlcvTrigger"]
+            symbol = trigger.get("pair")
+            timeframe = trigger.get("timeframe")
+            if symbol and timeframe:
+                # Start subscription in background
+                asyncio.create_task(_subscribe_to_market_data(symbol, timeframe))
+    except Exception as e:
+        logger.warning(f"Failed to subscribe to market data for new order: {e}")
+    
     return OrderOut(**saved)
+
+
+async def _subscribe_to_market_data(symbol: str, timeframe: str):
+    """Subscribe to market data for a symbol/timeframe combination"""
+    try:
+        from app.services.candle_watcher import ensure_subscription
+        await ensure_subscription(symbol, timeframe)
+        logger.info(f"Subscribed to market data for {symbol}/{timeframe}")
+    except Exception as e:
+        logger.error(f"Failed to subscribe to market data for {symbol}/{timeframe}: {e}")
 
 
 def list_orders_for_user(user_id: int) -> List[OrderOut]:
@@ -30,6 +68,41 @@ def list_orders_for_user(user_id: int) -> List[OrderOut]:
     if getattr(response, "error", None):
         raise Exception(f"Failed to fetch orders: {response.error}")
     return [OrderOut(**row) for row in response.data]
+
+
+def get_all_open_orders() -> List[OrderOut]:
+    """Fetch all open orders in a single query (backend housekeeping)."""
+    response = supabase.table("orders").select("*").eq("state", "open").execute()
+    if getattr(response, "error", None):
+        raise Exception(f"Failed to fetch open orders: {response.error}")
+    return [OrderOut(**row) for row in response.data]
+
+
+def get_open_orders_by_symbol_timeframe(symbol: str, timeframe: str) -> List[OrderOut]:
+    """Get all open orders for a specific symbol and timeframe"""
+    try:
+        response = supabase.table("orders").select("*").eq("state", "open").execute()
+        if getattr(response, "error", None):
+            raise Exception(f"Failed to fetch orders: {response.error}")
+        
+        orders = []
+        requested_symbol = _canonicalize_symbol_for_hyperliquid(symbol)
+        for order_data in response.data:
+            try:
+                order = OrderOut(**order_data)
+                # Check if this order has OHLCV trigger data that matches our symbol/timeframe
+                if (order.orderData and 
+                    order.orderData.type == "ohlcvTrigger" and
+                    order.orderData.ohlcvTrigger and
+                    _canonicalize_symbol_for_hyperliquid(order.orderData.ohlcvTrigger.pair) == requested_symbol and
+                    order.orderData.ohlcvTrigger.timeframe == timeframe):
+                    orders.append(order)
+            except Exception:
+                continue
+        
+        return orders
+    except Exception as e:
+        raise Exception(f"Error fetching orders for {symbol}/{timeframe}: {e}")
 
 
 def delete_order_for_user(order_id: int, user_id: int) -> None:

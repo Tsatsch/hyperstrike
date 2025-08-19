@@ -72,7 +72,20 @@ const conditionTypes = [
     icon: Clock,
     popular: false,
   },
-  // Removed: Volume Trigger, Multi-Token Condition
+  {
+    id: "volume_trigger",
+    name: "Volume Trigger",
+    description: "Execute when trading volume reaches threshold",
+    icon: BarChart3,
+    popular: false,
+  },
+  {
+    id: "multi_token",
+    name: "Multi-Token Condition",
+    description: "Execute based on multiple token price movements",
+    icon: Target,
+    popular: false,
+  },
   {
     id: "social_sentiment",
     name: "Social Sentiment",
@@ -110,6 +123,7 @@ export default function TradingPlatform() {
   const [showSuccessPage, setShowSuccessPage] = useState(false);
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
   const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>({});
+  const [orderLifetime, setOrderLifetime] = useState<string>("24h");
 
   // Generate mapping from contract address to tokens using centralized config
   const contractAddressToToken: { [key: string]: Token | undefined } = {}
@@ -589,6 +603,7 @@ export default function TradingPlatform() {
             source: condition || 'close',
             trigger: triggerWhen || 'above',
             triggerValue: targetValue || '0',
+            lifetime: orderLifetime || '24h',
           },
           walletActivity: null,
         },
@@ -1289,10 +1304,31 @@ export default function TradingPlatform() {
                           <SelectValue placeholder="1H" />
                       </SelectTrigger>
                       <SelectContent>
+                          <SelectItem value="1m" className="cursor-pointer">1m</SelectItem>
                           <SelectItem value="15m" className="cursor-pointer">15m</SelectItem>
                           <SelectItem value="1h" className="cursor-pointer">1H</SelectItem>
                           <SelectItem value="4h" className="cursor-pointer">4H</SelectItem>
                           <SelectItem value="1d" className="cursor-pointer">1D</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  </div>
+
+                  {/* Lifetime Section */}
+                  <div className="pb-3 border-b border-dotted border-border/40">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-foreground font-semibold">Order Lifetime</Label>
+                      <Select value={orderLifetime} onValueChange={setOrderLifetime}>
+                        <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
+                          <SelectValue placeholder="24H" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="1h" className="cursor-pointer">1 Hour</SelectItem>
+                          <SelectItem value="6h" className="cursor-pointer">6 Hours</SelectItem>
+                          <SelectItem value="12h" className="cursor-pointer">12 Hours</SelectItem>
+                          <SelectItem value="24h" className="cursor-pointer">24 Hours</SelectItem>
+                          <SelectItem value="7d" className="cursor-pointer">7 Days</SelectItem>
+                          <SelectItem value="30d" className="cursor-pointer">30 Days</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1500,6 +1536,8 @@ export default function TradingPlatform() {
                       {triggerToken && condition && timeframe && triggerWhen && targetValue ? (
                         <span>
                           {condition.charAt(0).toUpperCase() + condition.slice(1)} goes {triggerWhen} {targetValue} on {timeframe} chart of {triggerToken}
+                          <br />
+                          <span className="text-xs">Order will expire after {orderLifetime}</span>
                     </span>
                       ) : (
                         <span>{conditionTypes.find((c) => c.id === conditionType)?.description}</span>

@@ -31,6 +31,7 @@ class OhlcvTriggerData(BaseModel):
     source: str
     trigger: str
     triggerValue: str
+    lifetime: str = Field(..., description="How long the order should live (e.g., '1h', '24h', '7d')")
 
 
 class OrderData(BaseModel):

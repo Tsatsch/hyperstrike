@@ -14,17 +14,7 @@ function PrivyProviderWithTheme({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  // Don't render Privy until we know the theme to avoid hydration issues
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-background">
-        {children}
-        <Toaster />
-      </div>
-    );
-  }
-
-  const currentTheme = resolvedTheme || theme || 'light';
+  const currentTheme = (resolvedTheme || theme || 'light') as 'light' | 'dark';
   
   return (
     <PrivyProvider

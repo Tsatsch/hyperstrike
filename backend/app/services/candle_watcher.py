@@ -1,11 +1,15 @@
 import asyncio
 import json
+import random
 import time
 from collections import deque
 from typing import Deque, Dict, List, Optional, Tuple
+import logging
 
 import aiohttp
 import websockets
+
+from app.services.trigger_processor import TriggerProcessor
 
 HYPER_WS = "wss://api.hyperliquid.xyz/ws"
 HYPER_REST = "https://api.hyperliquid.xyz/info"
@@ -13,6 +17,27 @@ CANDLES_TO_FETCH_AT_START = 1000
 
 Symbol = str
 Interval = str
+
+logger = logging.getLogger(__name__)
+
+# Global trigger processor instance
+trigger_processor = TriggerProcessor()
+
+# Track active subscriptions
+active_subscriptions: Dict[Tuple[Symbol, Interval], bool] = {}
+
+def canonicalize_symbol(symbol: str) -> str:
+    """Map internal symbols to Hyperliquid coin names.
+    Examples:
+    - UBTC -> BTC
+    - UETH -> ETH
+    Currently strips a single leading 'U' if present.
+    """
+    if not symbol:
+        return symbol
+    if symbol.upper().startswith("U") and len(symbol) > 1:
+        return symbol.upper()[1:]
+    return symbol.upper()
 
 class RollingSMA:
     """O(1) rolling SMA using a deque and running sum."""
@@ -30,7 +55,7 @@ class RollingSMA:
         self._sum += x
         if len(self.values) < self.window:
             return None
-        return self._sum / self.window
+        return self._sum / len(self.values)
 
 class CandleMonitor:
     """
@@ -62,10 +87,44 @@ class CandleMonitor:
                 "endTime": end_ms,
             },
         }
-        async with session.post(HYPER_REST, json=body, timeout=15) as r:
-            r.raise_for_status()
-            data = await r.json()
-            print(f"Fetched {len(data)} candles")
+        # Retry on transient failures so a single 5xx doesn't crash the task
+        max_attempts = 5
+        base_backoff_seconds = 1.0
+        data = []
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with session.post(HYPER_REST, json=body, timeout=15) as r:
+                    r.raise_for_status()
+                    data = await r.json()
+                    logger.info(f"Fetched {len(data)} candles for {self.symbol}/{self.interval}")
+                    break
+            except aiohttp.ClientResponseError as e:
+                # Retry on 5xx and 429; otherwise, consider it fatal for seeding
+                if e.status and (500 <= e.status < 600 or e.status == 429):
+                    jitter = random.uniform(0, 0.5)
+                    wait = min(base_backoff_seconds * (2 ** (attempt - 1)) + jitter, 30.0)
+                    logger.warning(
+                        f"Seed history attempt {attempt}/{max_attempts} failed with {e.status}. "
+                        f"Retrying in {wait:.1f}s for {self.symbol}/{self.interval}"
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error(
+                    f"Seed history failed with non-retriable status {e.status} for {self.symbol}/{self.interval}: {e}"
+                )
+                break
+            except (aiohttp.ClientConnectorError, aiohttp.ServerDisconnectedError, asyncio.TimeoutError) as e:
+                jitter = random.uniform(0, 0.5)
+                wait = min(base_backoff_seconds * (2 ** (attempt - 1)) + jitter, 30.0)
+                logger.warning(
+                    f"Seed history attempt {attempt}/{max_attempts} encountered {type(e).__name__}: {e}. "
+                    f"Retrying in {wait:.1f}s for {self.symbol}/{self.interval}"
+                )
+                await asyncio.sleep(wait)
+                continue
+            except Exception as e:
+                logger.error(f"Seed history failed for {self.symbol}/{self.interval}: {e}")
+                break
 
         # Sort and only consider truly closed (T <= now)
         data.sort(key=lambda c: c["T"])
@@ -138,25 +197,44 @@ class CandleMonitor:
 
     async def on_closed_candle(self, candle: dict) -> None:
         """
-        >>> PLACE YOUR STRATEGY/ACTIONS HERE <<<
-        `candle` includes keys:
-          t, T, s, i, o, c, h, l, v, n, and any "sma_<window>" you've configured.
-        This method is awaited for each closed candle.
+        Process closed candle and check for triggered orders
         """
-        # Example: act on SMA cross logic (toy)
-        # close = float(candle["c"])
-        # s5 = candle.get("sma_5"); s20 = candle.get("sma_20")
-        # if s5 is not None and s20 is not None:
-        #     if s5 > s20: ... BUY
-        #     elif s5 < s20: ... SELL
-
-        print(
-            f"Closed {candle['s']} {candle['i']} "
-            f"t=[{candle['t']}..{candle['T']}] close={candle['c']} "
-            + " ".join(
-                f"{k}={v:.4f}" for k, v in candle.items() if k.startswith("sma_") and v is not None
+        try:
+            logger.info(
+                f"Closed {candle['s']} {candle['i']} "
+                f"t=[{candle['t']}..{candle['T']}] close={candle['c']} "
+                + " ".join(
+                    f"{k}={v:.4f}" for k, v in candle.items() if k.startswith("sma_") and v is not None
+                )
             )
-        )
+            
+            # Process triggers for this candle
+            await trigger_processor.process_candle(self.symbol, self.interval, candle)
+            
+        except Exception as e:
+            logger.error(f"Error processing closed candle: {e}")
+
+async def ensure_subscription(symbol: Symbol, interval: Interval) -> None:
+    """Ensure we have an active subscription for a symbol/interval pair"""
+    # Canonicalize symbol for HL (e.g., UBTC -> BTC)
+    canonical_symbol = canonicalize_symbol(symbol)
+    key = (canonical_symbol, interval)
+    if key not in active_subscriptions:
+        active_subscriptions[key] = True
+        if canonical_symbol != symbol:
+            logger.info(f"Starting subscription for {symbol}/{interval} as {canonical_symbol}")
+        else:
+            logger.info(f"Starting subscription for {symbol}/{interval}")
+        # Start monitoring in background
+        asyncio.create_task(run_stream(canonical_symbol, interval))
+
+async def maybe_unsubscribe(symbol: Symbol, interval: Interval) -> None:
+    """Unsubscribe from a symbol/interval if no more triggers need it"""
+    key = (symbol, interval)
+    if key in active_subscriptions:
+        # Check if there are any orders that need this subscription
+        # For now, we'll keep it simple and not unsubscribe
+        logger.info(f"Keeping subscription for {symbol}/{interval} (orders may still need it)")
 
 async def run_stream(
     symbol: Symbol = "BTC",
@@ -164,12 +242,25 @@ async def run_stream(
     sma_windows: List[int] = [5, 20],
     history_lookback_ms: int = 24 * 60 * 60 * 1000,  # 24h
 ) -> None:
-    monitor = CandleMonitor(symbol, interval, sma_windows)
+    # Ensure symbol is canonical for HL
+    canonical_symbol = canonicalize_symbol(symbol)
+    if canonical_symbol != symbol:
+        logger.info(f"Using canonical symbol {canonical_symbol} for {symbol}/{interval}")
+    monitor = CandleMonitor(canonical_symbol, interval, sma_windows)
     lookback_ms = CandleMonitor.interval_to_ms(interval)*CANDLES_TO_FETCH_AT_START
+    
+    logger.info(f"Starting stream for {canonical_symbol}/{interval}")
+    
     # Use a single HTTP session for REST
     async with aiohttp.ClientSession() as session:
         # Seed enough candles to warm up the largest SMA
-        await monitor.seed_history(session, lookback_ms)
+        try:
+            await monitor.seed_history(session, lookback_ms)
+        except Exception as e:
+            # Proceed without seed to avoid killing the whole stream task
+            logger.error(
+                f"Seeding history failed for {symbol}/{interval}; continuing without seed: {type(e).__name__}: {e}"
+            )
 
     backoff = 1.0
     while True:
@@ -177,9 +268,10 @@ async def run_stream(
             async with websockets.connect(HYPER_WS, ping_interval=20, ping_timeout=20) as ws:
                 sub = {
                     "method": "subscribe",
-                    "subscription": {"type": "candle", "interval": interval, "coin": symbol},
+                    "subscription": {"type": "candle", "interval": interval, "coin": canonical_symbol},
                 }
                 await ws.send(json.dumps(sub))
+                logger.info(f"Subscribed to {canonical_symbol}/{interval}")
 
                 # After subscribing, try finalizing the last open candle periodically
                 async def finalizer():
@@ -197,7 +289,7 @@ async def run_stream(
                         await monitor.on_closed_candle(closed)
 
         except Exception as e:
-            print(f"[WS] error: {type(e).__name__}: {e} — reconnecting soon...")
+            logger.error(f"[WS] error for {canonical_symbol}/{interval}: {type(e).__name__}: {e} — reconnecting soon...")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 30.0)  # exponential backoff capped at 30s
         else:

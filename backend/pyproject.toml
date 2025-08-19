@@ -20,6 +20,10 @@ pyjwt = ">=2.10,<3.0"
 requests = ">=2.31,<3.0"
 cryptography = ">=42,<45"
 eth-account = ">=0.10.0,<1.0.0"
+web3 = "^6.0.0"
+eth-abi = "^4.0.0"
+pydantic = "^2.0.0"
+setuptools = ">=68,<75"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

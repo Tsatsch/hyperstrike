@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { usePrivy } from '@privy-io/react-auth'
-import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, getUserXp, expireOrder } from '@/lib/api'
+import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, getUserXp, setOrderState } from '@/lib/api'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
 import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getNativeToken } from '@/lib/tokens'
 import { updateAllTokenPrices } from '@/lib/hyperliquid-prices'
@@ -103,13 +103,9 @@ export default function PortfolioPage() {
   const [showConnectPrompt, setShowConnectPrompt] = useState(false)
   const [hideCanceledClosed, setHideCanceledClosed] = useState(false)
   const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>(DEFAULT_TOKEN_PRICES)
-
-  // Current time ticker for countdowns
-  const [nowMs, setNowMs] = useState<number>(Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [])
+  const [now, setNow] = useState<number>(Date.now())
+  const [closingAllDone, setClosingAllDone] = useState(false)
+  const [closingIds, setClosingIds] = useState<Set<number>>(new Set())
 
   // Done state (ephemeral) to briefly show newly closed orders
   const { doneIds, clearDone } = useEphemeralDoneState(orders)
@@ -134,42 +130,20 @@ export default function PortfolioPage() {
     run()
   }, [authenticated, user?.wallet?.address])
 
-  // Auto-expire orders when timeframe elapsed
-  useEffect(() => {
-    if (!authenticated || orders.length === 0) return
-    const open = orders.filter(o => o.state === 'open')
-    if (open.length === 0) return
-    const checkAndExpire = async () => {
-      const toClose: number[] = []
-      for (const o of open) {
-        const od: any = (o as any).orderData || {}
-        const trig: any = od.ohlcvTrigger || {}
-        const tf = trig.timeframe || trig.interval || ''
-        const tfMs = timeframeToMs(tf)
-        if (!tfMs) continue
-        const created = new Date(o.time).getTime()
-        const expiresAt = created + tfMs
-        if (nowMs >= expiresAt) toClose.push(o.id)
-      }
-      if (toClose.length > 0) {
-        // Close in sequence to keep it simple
-        for (const id of toClose) {
-          await expireOrder(id, 'time ran out')
-        }
-        // Refresh orders
-        try {
-          const data = await listOrders() as OrderOut[]
-          setOrders(Array.isArray(data) ? data : [])
-        } catch {}
-      }
-    }
-    checkAndExpire()
-  }, [authenticated, orders, nowMs])
+  // Note: Order expiration is now handled automatically by the backend
+  // The backend runs expiration checks every 30 seconds and closes expired orders
+  // This ensures orders expire even if the frontend is closed
 
   useEffect(() => {
     if (!ready) return
     setShowConnectPrompt(!authenticated)
   }, [ready, authenticated])
+
+  // Live ticker for countdowns
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   // Fetch balances
   useEffect(() => {
@@ -236,6 +210,35 @@ export default function PortfolioPage() {
     return { open, done, closed }
   }, [orders])
 
+  const handleMoveOneToClosed = async (orderId: number) => {
+    try {
+      setClosingIds(prev => new Set(prev).add(orderId))
+      const ok = await setOrderState(orderId, 'closed')
+      if (ok) {
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, state: 'closed', termination_message: undefined } : o))
+      }
+    } finally {
+      setClosingIds(prev => {
+        const next = new Set(prev)
+        next.delete(orderId)
+        return next
+      })
+    }
+  }
+
+  const handleMoveAllDoneToClosed = async () => {
+    if (closingAllDone) return
+    const ids = categorized.done.map(o => o.id)
+    if (ids.length === 0) return
+    try {
+      setClosingAllDone(true)
+      await Promise.all(ids.map(id => setOrderState(id, 'closed')))
+      setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, state: 'closed', termination_message: undefined } : o))
+    } finally {
+      setClosingAllDone(false)
+    }
+  }
+
   const addressToSymbol = (address?: string) => {
     if (!address) return 'UNKNOWN'
     const lower = address.toLowerCase()
@@ -254,6 +257,11 @@ export default function PortfolioPage() {
     if (m.endsWith('h')) return Number(m.replace('h', '')) * 60 * 60 * 1000
     if (m.endsWith('d')) return Number(m.replace('d', '')) * 24 * 60 * 60 * 1000
     return null
+  }
+
+  // Normalize seconds vs milliseconds timestamps
+  const normalizeTimestamp = (ts: number): number => {
+    return ts < 1e12 ? ts * 1000 : ts
   }
 
   const tfHuman = (tf?: string): string => {
@@ -328,7 +336,8 @@ export default function PortfolioPage() {
       inSym, inAmt, outText: splitsText, tf, source, dir, trigVal, pair, inVal, outVal,
       ruleText,
       tfLabel: tfHuman(tf),
-      whenText: formatDate(o.time),
+      whenText: formatDate(normalizeTimestamp(o.time)),
+      lifetime: trig.lifetime || '',
     }
   }
 
@@ -407,19 +416,23 @@ export default function PortfolioPage() {
                         </div>
                         <div className="text-[11px] text-muted-foreground mt-1">
                           {(() => {
-                            const tfMs = timeframeToMs(s.tf)
-                            if (!tfMs) return `#${o.id} • ${s.whenText}`
-                            const created = new Date(o.time).getTime()
-                            const expiresAt = created + tfMs
-                            const remMs = Math.max(0, expiresAt - nowMs)
+                            const lifetimeMs = timeframeToMs(s.lifetime)
+                            if (!lifetimeMs) return `#${o.id} • ${s.whenText}`
+                            const created = normalizeTimestamp(o.time)
+                            const expiresAt = created + lifetimeMs
+                            const remMs = Math.max(0, expiresAt - now)
                             const totalSeconds = Math.floor(remMs / 1000)
                             const hours = Math.floor(totalSeconds / 3600)
                             const minutes = Math.floor((totalSeconds % 3600) / 60)
                             const seconds = totalSeconds % 60
-                            const cd = hours > 0
-                              ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-                              : `${minutes}:${String(seconds).padStart(2, '0')}`
-                            return `#${o.id} • ${s.whenText}: ${s.tfLabel} • ${cd}`
+                            const oneDayMs = 24 * 60 * 60 * 1000
+                            if (remMs < oneDayMs) {
+                              const cd = hours > 0
+                                ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+                                : `${minutes}:${String(seconds).padStart(2, '0')}`
+                              return `#${o.id} • ${s.whenText}: expires in ${cd}`
+                            }
+                            return `#${o.id} • expires on ${formatDate(expiresAt)}`
                           })()}
                         </div>
                       </div>
@@ -435,6 +448,17 @@ export default function PortfolioPage() {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm font-semibold text-foreground">Done ({categorized.done.length})</div>
+                {categorized.done.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleMoveAllDoneToClosed}
+                    disabled={closingAllDone}
+                    className="cursor-pointer"
+                  >
+                    {closingAllDone ? 'Moving…' : 'Move all to closed'}
+                  </Button>
+                )}
               </div>
               {categorized.done.length === 0 ? (
                 <div className="text-muted-foreground text-sm">No recently closed orders</div>
@@ -483,6 +507,15 @@ export default function PortfolioPage() {
                         })()}
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="bg-yellow-500/10 border-yellow-500/40 text-yellow-500">done</Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleMoveOneToClosed(o.id)}
+                            disabled={closingIds.has(o.id)}
+                            className="cursor-pointer"
+                          >
+                            {closingIds.has(o.id) ? 'Moving…' : 'Move to closed'}
+                          </Button>
                         </div>
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}{o.termination_message ? ` • ${o.termination_message}` : ''}</div>

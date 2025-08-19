@@ -36,6 +36,13 @@ SUPABASE_URL=
 SUPABASE_KEY=
 PRIVY_APP_ID=
 PRIVY_JWKS_URL=
+# Background task throttling (optional)
+# Mark dev mode to use slower defaults
+DEV_MODE=true
+# Override cleanup interval in seconds (default 180s in dev, 30s in prod)
+CLEANUP_INTERVAL_SEC=180
+# CORS origins (comma-separated). Make sure your frontend origin is listed exactly.
+ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 ### Database setup
@@ -46,7 +53,11 @@ Run the following SQL to create the required tables and indexes:
 -- Users
 create table if not exists public.users (
   user_id bigserial primary key,
-  wallet_address text unique not null
+  wallet_address text unique not null,
+  xp int not null default 0,
+  referral_code text unique,
+  referred_by_user_id int references users(user_id),
+  last_daily_xp_at timestamptz
 );
 
 -- Orders
@@ -59,43 +70,14 @@ create table if not exists public.orders (
   "orderData" jsonb not null,
   signature text,
   time bigint not null,
-  state text not null default 'open' check (state in ('open','closed','deleted')),
+  state text not null default 'open' check (state in ('open','done','closed','deleted')),
   termination_message text,
   created_at timestamptz not null default now()
 );
--- Add new 'done' state support
-alter table public.orders drop constraint if exists orders_state_check;
-alter table public.orders add constraint orders_state_check check (state in ('open','done','closed','deleted'));
 
-
-create index if not exists idx_orders_user_id on public.orders(user_id);
-create index if not exists idx_orders_state on public.orders(state);
-
-alter table users add column if not exists xp int not null default 0;
-alter table users add column if not exists referral_code text unique;
-alter table users add column if not exists referred_by_user_id int references users(user_id);
-
--- add column xp to user
-alter table users add column if not exists xp int not null default 0;
-update users set xp = 0 where xp is null;
-
--- backfill any missing referral codes
-update users
-set referral_code = concat('U', lpad(user_id::text, 6, '0'))
-where referral_code is null;
-
---daily xp timestamptz
-alter table users add column if not exists last_daily_xp_at timestamptz;
-
-update public.orders
-set "swapData" = jsonb_set("swapData", '{outputs}', to_jsonb(ARRAY[jsonb_build_object('token', "swapData"->>'outputToken', 'percentage', 100)]))
-where ("swapData"->'outputs') is null and ("swapData"->>'outputToken') is not null;
-
-alter table public.orders add column if not exists termination_message text;
-
-update public.orders
-set "swapData" = "swapData" - 'outputAmount'
-where "swapData" ? 'outputAmount';
+ALTER TABLE public.orders
+ADD COLUMN lifetime text
+GENERATED ALWAYS AS (("orderData"->'ohlcvTrigger'->>'lifetime')) STORED;
 ```
 
 #### orders.swapData JSON structure
