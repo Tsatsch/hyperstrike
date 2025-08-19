@@ -52,6 +52,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include routers
@@ -74,3 +75,17 @@ async def start_watchers():
 @app.get("/")
 def read_root():
     return {"message": "FastAPI + Hyperliquid orders are live!"}
+
+@app.options("/api/{path:path}")
+async def cors_preflight(path: str):
+    """Handle CORS preflight requests"""
+    return {"message": "CORS preflight handled"}
+
+@app.get("/debug/cors")
+def debug_cors():
+    """Debug endpoint to check CORS configuration"""
+    return {
+        "allowed_origins": allowed_origins,
+        "env_allowed_origins": os.getenv("ALLOWED_ORIGINS"),
+        "message": "CORS debug info"
+    }
