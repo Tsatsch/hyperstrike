@@ -44,14 +44,14 @@ When a user creates an order:
 ### 3. **Trigger Evaluation**
 For each open order matching the symbol/timeframe:
 1. **Check if order has expired** (backend handles this, not frontend)
-2. If expired, mark as "closed" with "time ran out" message
+2. If expired, mark as "done_failed" with "time ran out" message
 3. If valid, extract trigger conditions (source, trigger type, threshold)
 4. Compare current market data against conditions
 5. If conditions are met, execute the order
 
 ### 4. **Order Execution**
 When a trigger condition is met:
-1. Order state is updated to "done"
+1. Order state is updated to "done_successful"
 2. Execution details are logged
 3. User is awarded XP (1% of input USD value)
 

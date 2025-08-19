@@ -126,13 +126,13 @@ class TriggerProcessor:
             # In a full implementation, you would:
             # 1. Call the smart contract's withdrawOnTrigger function
             # 2. Execute the actual swap via GlueX or similar
-            # 3. Update order state to "done"
+            # 3. Update order state to "done_successful"
             
             # Mark order as executed
             updated_order = update_order_state_for_user(
                 order.id, 
                 order.user_id, 
-                "done", 
+                "done_successful", 
                 f"Triggered at {candle_data.get('c', 'unknown')} price"
             )
             
@@ -141,12 +141,12 @@ class TriggerProcessor:
             
         except Exception as e:
             logger.error(f"Failed to execute order {order.id}: {e}")
-            # Mark order as failed
+            # Mark order as failed (ephemeral done_failed)
             try:
                 update_order_state_for_user(
                     order.id, 
                     order.user_id, 
-                    "closed", 
+                    "done_failed", 
                     f"Execution failed: {str(e)}"
                 )
             except Exception as update_error:
@@ -162,24 +162,24 @@ class TriggerProcessor:
             orders = await self.get_open_orders_for_symbol(symbol, interval)
             logger.info(f"Found {len(orders)} open orders for {symbol}/{interval}")
             
-            # Filter out expired orders and mark them as closed
+            # Filter out expired orders and mark them as done_failed
             valid_orders = []
             expired_orders = []
             
             for order in orders:
                 if self._is_order_expired(order):
                     expired_orders.append(order)
-                    logger.info(f"Order {order.id} has expired, marking as closed")
+                    logger.info(f"Order {order.id} has expired, marking as failed")
                 else:
                     valid_orders.append(order)
             
-            # Close expired orders
+            # Mark expired orders as done_failed
             for order in expired_orders:
                 try:
                     update_order_state_for_user(
                         order.id,
                         order.user_id,
-                        "closed",
+                        "done_failed",
                         "time ran out"
                     )
                 except Exception as e:

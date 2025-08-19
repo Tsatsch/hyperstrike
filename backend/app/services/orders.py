@@ -117,7 +117,8 @@ def delete_order_for_user(order_id: int, user_id: int) -> None:
 
 
 def close_order_for_user(order_id: int, user_id: int, message: Optional[str] = None) -> OrderOut:
-    update: Dict[str, Any] = {"state": "closed"}
+    # Legacy helper retained; now maps to done_failed to reflect non-successful termination
+    update: Dict[str, Any] = {"state": "done_failed"}
     if message is not None:
         update["termination_message"] = message
     response = supabase.table("orders").update(update).eq("id", order_id).eq("user_id", user_id).execute()

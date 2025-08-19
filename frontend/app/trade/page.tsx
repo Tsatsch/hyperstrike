@@ -656,6 +656,9 @@ export default function TradingPlatform() {
               <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">
                 Portfolio
               </a>
+              <a href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">
+                Docs
+              </a>
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">

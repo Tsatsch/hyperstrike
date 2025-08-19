@@ -92,11 +92,11 @@ class StartupService:
                                         update_order_state_for_user(
                                             order.id,
                                             order.user_id,
-                                            "closed",
+                                            "done_failed",
                                             "time ran out"
                                         )
                                         expired_count += 1
-                                        logger.info(f"Closed expired order {order.id} (created: {created_time}, expired: {expires_at}, current: {current_time})")
+                                        logger.info(f"Marked expired order {order.id} as failed (created: {created_time}, expired: {expires_at}, current: {current_time})")
                         except Exception as e:
                             logger.error(f"Error processing order {order.id}: {e}")
                             continue

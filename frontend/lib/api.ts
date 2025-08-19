@@ -60,7 +60,7 @@ export async function expireOrder(orderId: number, reason = "time ran out"): Pro
   return response.ok;
 }
 
-export async function setOrderState(orderId: number, state: 'open' | 'done' | 'closed' | 'deleted', termination_message?: string): Promise<boolean> {
+export async function setOrderState(orderId: number, state: 'open' | 'deleted' | 'done_successful' | 'done_failed' | 'successful' | 'failed', termination_message?: string): Promise<boolean> {
   const jwt = getBackendJwt();
   if (!jwt) return false;
   const response = await fetch(`${config.apiUrl}/api/order/state`, {

@@ -18,7 +18,7 @@ import { XpButton } from "@/components/XpButton"
 import { Footer } from "@/components/footer"
 import { Logo } from "@/components/Logo"
 
-type OrderState = "open" | "closed" | "deleted" | "done"
+type OrderState = "open" | "deleted" | "done_successful" | "done_failed" | "successful" | "failed"
 
 interface OrderOut {
   id: number
@@ -35,7 +35,7 @@ interface OrderOut {
   orderData?: any
   signature?: string
   time: number
-  state: "open" | "done" | "closed" | "deleted"
+  state: "open" | "deleted" | "done_successful" | "done_failed" | "successful" | "failed"
   created_at?: string
   termination_message?: string
 }
@@ -61,8 +61,8 @@ function useEphemeralDoneState(orders: OrderOut[]) {
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
-    // Mark newly closed orders as "done" briefly so users can notice them
-    const closedNow = orders.filter(o => o.state === 'closed').map(o => o.id)
+    // (Legacy) Previously marked newly closed orders as "done" briefly; no-op with new states
+    const closedNow: number[] = []
     const newlyClosed = closedNow.filter(id => !doneIds.has(id))
     if (newlyClosed.length > 0) {
       const updated = new Set(doneIds)
@@ -106,6 +106,7 @@ export default function PortfolioPage() {
   const [now, setNow] = useState<number>(Date.now())
   const [closingAllDone, setClosingAllDone] = useState(false)
   const [closingIds, setClosingIds] = useState<Set<number>>(new Set())
+  const [showAllTokens, setShowAllTokens] = useState(false)
 
   // Done state (ephemeral) to briefly show newly closed orders
   const { doneIds, clearDone } = useEphemeralDoneState(orders)
@@ -204,8 +205,8 @@ export default function PortfolioPage() {
     const closed: OrderOut[] = []
     for (const o of orders) {
       if (o.state === 'open') open.push(o)
-      else if (o.state === 'done') done.push(o)
-      else if (o.state === 'closed') closed.push(o)
+      else if (o.state === 'done_successful' || o.state === 'done_failed') done.push(o)
+      else if (o.state === 'successful' || o.state === 'failed') closed.push(o)
     }
     return { open, done, closed }
   }, [orders])
@@ -213,9 +214,12 @@ export default function PortfolioPage() {
   const handleMoveOneToClosed = async (orderId: number) => {
     try {
       setClosingIds(prev => new Set(prev).add(orderId))
-      const ok = await setOrderState(orderId, 'closed')
+      const current = orders.find(o => o.id === orderId)
+      const nextState: OrderState | null = current?.state === 'done_successful' ? 'successful' : (current?.state === 'done_failed' ? 'failed' : null)
+      if (!nextState) return
+      const ok = await setOrderState(orderId, nextState)
       if (ok) {
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, state: 'closed', termination_message: undefined } : o))
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, state: nextState } : o))
       }
     } finally {
       setClosingIds(prev => {
@@ -232,8 +236,15 @@ export default function PortfolioPage() {
     if (ids.length === 0) return
     try {
       setClosingAllDone(true)
-      await Promise.all(ids.map(id => setOrderState(id, 'closed')))
-      setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, state: 'closed', termination_message: undefined } : o))
+      await Promise.all(categorized.done.map(o => {
+        const nextState: OrderState = o.state === 'done_successful' ? 'successful' : 'failed'
+        return setOrderState(o.id, nextState)
+      }))
+      setOrders(prev => prev.map(o => {
+        if (!ids.includes(o.id)) return o
+        const nextState: OrderState = o.state === 'done_successful' ? 'successful' : 'failed'
+        return { ...o, state: nextState }
+      }))
     } finally {
       setClosingAllDone(false)
     }
@@ -362,6 +373,7 @@ export default function PortfolioPage() {
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>
               <a href="/portfolio" className="font-medium text-primary">Portfolio</a>
+              <a href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">Docs</a>
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">
@@ -402,7 +414,8 @@ export default function PortfolioPage() {
                   {categorized.open.map(o => {
                     const s = formatOrderSummary(o)
                     return (
-                      <div key={o.id} className="border rounded-lg p-3 bg-blue-500/10 border-blue-500/20">
+                      <div key={o.id} className="relative group border rounded-lg p-3 bg-blue-500/10 border-blue-500/20">
+                        <div className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-blue-500/30 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
                         <div className="flex items-center justify-between">
                           <div className="text-foreground font-medium">
                             {formatAmount(s.inAmt)} {s.inSym} → {s.outText}
@@ -422,17 +435,16 @@ export default function PortfolioPage() {
                             const expiresAt = created + lifetimeMs
                             const remMs = Math.max(0, expiresAt - now)
                             const totalSeconds = Math.floor(remMs / 1000)
-                            const hours = Math.floor(totalSeconds / 3600)
+                            const days = Math.floor(totalSeconds / 86400)
+                            const hours = Math.floor((totalSeconds % 86400) / 3600)
                             const minutes = Math.floor((totalSeconds % 3600) / 60)
                             const seconds = totalSeconds % 60
-                            const oneDayMs = 24 * 60 * 60 * 1000
-                            if (remMs < oneDayMs) {
-                              const cd = hours > 0
+                            const cd = days > 0
+                              ? `${days}d ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+                              : hours > 0
                                 ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
                                 : `${minutes}:${String(seconds).padStart(2, '0')}`
-                              return `#${o.id} • ${s.whenText}: expires in ${cd}`
-                            }
-                            return `#${o.id} • expires on ${formatDate(expiresAt)}`
+                            return `#${o.id} • ${s.whenText}: expires in ${cd}`
                           })()}
                         </div>
                       </div>
@@ -465,7 +477,22 @@ export default function PortfolioPage() {
               ) : (
                 <div className="space-y-2">
                   {categorized.done.map(o => (
-                    <div key={o.id} className="border rounded-lg p-3 bg-yellow-500/10 border-yellow-500/20">
+                    <div
+                      key={o.id}
+                      className={`relative group border rounded-lg p-3 ${o.state === 'done_failed' ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}`}
+                    >
+                      {/* Animated background glow (box, not edges) */}
+                      <div
+                        className={`pointer-events-none absolute inset-0 rounded-lg ${o.state === 'done_failed' ? 'bg-red-500/15 shadow-[0_0_24px_rgba(239,68,68,0.25)]' : 'bg-green-500/15 shadow-[0_0_24px_rgba(34,197,94,0.25)]'} animate-[pulse_2.4s_cubic-bezier(0.4,0,0.6,1)_infinite] transition-opacity duration-100 ease-out group-hover:opacity-0`}
+                      />
+                      {/* Static background on hover for readability */}
+                      <div
+                        className={`pointer-events-none absolute inset-0 rounded-lg ${o.state === 'done_failed' ? 'bg-red-500/15 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-green-500/15 shadow-[0_0_20px_rgba(34,197,94,0.2)]'} opacity-0 transition-opacity duration-100 ease-out group-hover:opacity-100`}
+                      />
+                      {/* Edge highlight on hover only */}
+                      <div
+                        className={`pointer-events-none absolute inset-0 rounded-lg ${o.state === 'done_failed' ? 'ring-2 ring-red-500/35' : 'ring-2 ring-green-500/35'} opacity-0 transition-opacity duration-150 group-hover:opacity-100`}
+                      />
                       <div className="flex items-center justify-between">
                         <div className="text-foreground font-medium">
                           {formatAmount((o.swapData as any).inputAmount)} {addressToSymbol((o.swapData as any).inputToken)} → {(() => {
@@ -506,7 +533,12 @@ export default function PortfolioPage() {
                           ) : null
                         })()}
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="bg-yellow-500/10 border-yellow-500/40 text-yellow-500">done</Badge>
+                          <Badge
+                            variant="outline"
+                            className={`${o.state === 'done_failed' ? 'bg-red-500/10 border-red-500/40 text-red-500' : 'bg-green-500/10 border-green-500/40 text-green-500'}`}
+                          >
+                            {o.state === 'done_successful' ? 'successful' : 'failed'}
+                          </Badge>
                           <Button
                             variant="outline"
                             size="sm"
@@ -547,8 +579,9 @@ export default function PortfolioPage() {
                   <div className="text-muted-foreground text-sm">No closed orders</div>
                 ) : (
                   <div className="space-y-2">
-                    {(hideCanceledClosed ? categorized.closed.filter(o => !o.termination_message) : categorized.closed).map(o => (
-                      <div key={o.id} className={`border rounded-lg p-3 ${o.termination_message ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
+                    {(hideCanceledClosed ? categorized.closed.filter(o => o.state === 'successful') : categorized.closed).map(o => (
+                      <div key={o.id} className={`relative group border rounded-lg p-3 ${o.state === 'failed' ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
+                        <div className={`pointer-events-none absolute inset-0 rounded-lg ${o.state === 'failed' ? 'ring-2 ring-red-500/30' : 'ring-2 ring-green-500/30'} opacity-0 transition-opacity duration-150 group-hover:opacity-100`} />
                         <div className="flex items-center justify-between">
                           <div className="text-foreground font-medium">
                             {formatAmount((o.swapData as any).inputAmount)} {addressToSymbol((o.swapData as any).inputToken)} → {(() => {
@@ -588,7 +621,7 @@ export default function PortfolioPage() {
                               <div className="text-xs text-muted-foreground mt-1">{ruleText}</div>
                             ) : null
                           })()}
-                          <Badge variant="outline" className={`${o.termination_message ? 'bg-red-500/10 border-red-500/40 text-red-500' : 'bg-green-500/10 border-green-500/40 text-green-500'}`}>closed</Badge>
+                          <Badge variant="outline" className={`${o.state === 'failed' ? 'bg-red-500/10 border-red-500/40 text-red-500' : 'bg-green-500/10 border-green-500/40 text-green-500'}`}>{o.state}</Badge>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}{o.termination_message ? ` • ${o.termination_message}` : ''}</div>
                       </div>
@@ -603,9 +636,19 @@ export default function PortfolioPage() {
           {/* Tokens on the right (compact) */}
           <div className="space-y-6">
             <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle className="text-foreground">Tokens</CardTitle>
-                <CardDescription>Tradable assets on Hyperliquid</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-foreground">Your Tokens</CardTitle>
+                  <CardDescription>Your current token holdings</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => (window.location.href = '/docs')}
+                  className="cursor-pointer"
+                >
+                  Tradable Assets
+                </Button>
               </CardHeader>
               <CardContent>
                 {loadingBalances ? (
@@ -616,31 +659,53 @@ export default function PortfolioPage() {
                 ) : (
                   <div className="space-y-2">
                     {(() => {
-                      const rows = TOKENS.map((t) => {
-                        const balanceStr = t.symbol === 'HYPE'
-                          ? balances['0x2222222222222222222222222222222222222222']
-                          : (t.address ? balances[t.address] : undefined)
-                        const balanceNum = parseFloat(balanceStr || '0') || 0
-                        const price = priceCache[t.symbol]?.price ?? 0
-                        const valueUsd = balanceNum * price
-                        return { token: t, balanceStr: (balanceStr ?? '0'), balanceNum, price, valueUsd }
-                      }).sort((a, b) => b.valueUsd - a.valueUsd)
+                      const rowsAll = TOKENS
+                        .map((t) => {
+                          const balanceStr = t.symbol === 'HYPE'
+                            ? balances['0x2222222222222222222222222222222222222222']
+                            : (t.address ? balances[t.address] : undefined)
+                          const balanceNum = parseFloat(balanceStr || '0') || 0
+                          const price = priceCache[t.symbol]?.price ?? 0
+                          const valueUsd = balanceNum * price
+                          return { token: t, balanceStr: (balanceStr ?? '0'), balanceNum, price, valueUsd }
+                        })
+                        .sort((a, b) => b.valueUsd - a.valueUsd)
 
-                      return rows.map(({ token: t, balanceStr, valueUsd }) => (
-                        <div key={t.symbol} className="flex items-center justify-between border border-border/50 rounded-lg px-3 py-2">
-                          <div className="flex items-center space-x-2">
-                            <img src={t.icon} alt={t.symbol} className="w-5 h-5 rounded-full" />
-                            <div>
-                              <div className="text-foreground text-sm font-medium">{t.symbol}</div>
-                              <div className="text-[10px] text-muted-foreground">{t.name}</div>
+                      // Only show tokens that the user holds (balance > 0)
+                      const rows = rowsAll.filter(r => r.balanceNum > 0)
+
+                      const visible = showAllTokens ? rows : rows.slice(0, 6)
+
+                      return (
+                        <>
+                          {visible.map(({ token: t, balanceStr, valueUsd }) => (
+                            <div key={t.symbol} className="flex items-center justify-between border border-border/50 rounded-lg px-3 py-2">
+                              <div className="flex items-center space-x-2">
+                                <img src={t.icon} alt={t.symbol} className="w-5 h-5 rounded-full" />
+                                <div>
+                                  <div className="text-foreground text-sm font-medium">{t.symbol}</div>
+                                  <div className="text-[10px] text-muted-foreground">{t.name}</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-foreground text-sm font-semibold">${valueUsd.toFixed(2)}</div>
+                                <div className="text-[10px] text-muted-foreground">{balanceStr}</div>
+                              </div>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-foreground text-sm font-semibold">${valueUsd.toFixed(2)}</div>
-                            <div className="text-[10px] text-muted-foreground">{balanceStr}</div>
-                          </div>
-                        </div>
-                      ))
+                          ))}
+                          {rows.length > 6 && (
+                            <Button
+                              key="toggle"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowAllTokens(v => !v)}
+                              className="w-full cursor-pointer"
+                            >
+                              {showAllTokens ? <>Hide <ChevronUp className="w-4 h-4 ml-1" /></> : <>Show <ChevronDown className="w-4 h-4 ml-1" /></>}
+                            </Button>
+                          )}
+                        </>
+                      )
                     })()}
                   </div>
                 )}

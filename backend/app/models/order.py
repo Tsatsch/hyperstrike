@@ -58,7 +58,7 @@ class OrderOut(BaseModel):
     orderData: OrderData
     signature: Optional[str] = None
     time: int
-    state: Literal["open", "done", "closed", "deleted"] = "open"
+    state: Literal["open", "done_successful", "done_failed", "successful", "failed", "deleted"] = "open"
     termination_message: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -82,6 +82,6 @@ class OrderTriggeredRequest(BaseModel):
 
 class UpdateOrderStateRequest(BaseModel):
     orderId: int
-    state: Literal["open", "done", "closed", "deleted"]
+    state: Literal["open", "done_successful", "done_failed", "successful", "failed", "deleted"]
     termination_message: Optional[str] = None
 

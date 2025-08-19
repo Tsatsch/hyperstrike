@@ -36,7 +36,6 @@ SUPABASE_URL=
 SUPABASE_KEY=
 PRIVY_APP_ID=
 PRIVY_JWKS_URL=
-# Background task throttling (optional)
 # Mark dev mode to use slower defaults
 DEV_MODE=true
 # Override cleanup interval in seconds (default 180s in dev, 30s in prod)
@@ -70,7 +69,7 @@ create table if not exists public.orders (
   "orderData" jsonb not null,
   signature text,
   time bigint not null,
-  state text not null default 'open' check (state in ('open','done','closed','deleted')),
+  state text not null default 'open' check (state in ('open','done_successful','done_failed','successful','failed','deleted')),
   termination_message text,
   created_at timestamptz not null default now()
 );

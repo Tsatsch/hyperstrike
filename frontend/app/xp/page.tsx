@@ -88,6 +88,7 @@ export default function XpPage() {
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>
               <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">Portfolio</a>
+              <a href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">Docs</a>
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">
