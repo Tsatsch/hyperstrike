@@ -18,11 +18,15 @@ app = FastAPI()
 # CORS debugging middleware
 @app.middleware("http")
 async def cors_debug_middleware(request, call_next):
-    origin = request.headers.get("origin")
-    if origin:
-        logger.info(f"Request from origin: {origin}")
-    response = await call_next(request)
-    return response
+    try:
+        origin = request.headers.get("origin")
+        if origin:
+            logger.info(f"Request from origin: {origin}")
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.error(f"Error in CORS middleware: {e}")
+        raise
 
 # Allow frontend access (configurable)
 default_allowed = [
@@ -45,14 +49,13 @@ else:
 # Log the allowed origins for debugging
 logger.info(f"Allowed CORS origins: {allowed_origins}")
 
+# Simplified CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 # Include routers
@@ -75,11 +78,6 @@ async def start_watchers():
 @app.get("/")
 def read_root():
     return {"message": "FastAPI + Hyperliquid orders are live!"}
-
-@app.options("/api/{path:path}")
-async def cors_preflight(path: str):
-    """Handle CORS preflight requests"""
-    return {"message": "CORS preflight handled"}
 
 @app.get("/debug/cors")
 def debug_cors():
