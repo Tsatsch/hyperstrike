@@ -15,44 +15,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# CORS debugging middleware
-@app.middleware("http")
-async def cors_debug_middleware(request, call_next):
-    try:
-        origin = request.headers.get("origin")
-        if origin:
-            logger.info(f"Request from origin: {origin}")
-        response = await call_next(request)
-        return response
-    except Exception as e:
-        logger.error(f"Error in CORS middleware: {e}")
-        raise
-
-# Allow frontend access (configurable)
-default_allowed = [
-    "http://localhost:3000",
-    "https://hyperstrike-silk.vercel.app",
-    "https://hyperstrike.vercel.app",
-]
-
-# Get allowed origins from environment or use defaults
-env_allowed = os.getenv("ALLOWED_ORIGINS")
-if env_allowed:
-    allowed_origins = [o.strip() for o in env_allowed.split(",") if o.strip()]
-    # Always ensure our default domains are included
-    for origin in default_allowed:
-        if origin not in allowed_origins:
-            allowed_origins.append(origin)
-else:
-    allowed_origins = default_allowed
-
-# Log the allowed origins for debugging
-logger.info(f"Allowed CORS origins: {allowed_origins}")
-
-# Simplified CORS configuration
+# Basic CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["http://localhost:3000", "https://hyperstrike-silk.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,7 +49,14 @@ def read_root():
 def debug_cors():
     """Debug endpoint to check CORS configuration"""
     return {
-        "allowed_origins": allowed_origins,
-        "env_allowed_origins": os.getenv("ALLOWED_ORIGINS"),
-        "message": "CORS debug info"
+        "message": "CORS is working!",
+        "status": "ok"
+    }
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "message": "Backend is running"
     }
