@@ -8,6 +8,8 @@ import logging
 import sys
 import aiohttp
 import websockets
+import math
+
 
 # from app.services.trigger_processor import TriggerProcessor
 
@@ -127,6 +129,68 @@ class RollingRSI:
         rs = self.avg_gain / self.avg_loss
         return 100.0 - (100.0 / (1.0 + rs))
 
+class RollingBollinger:
+    """
+    O(1) rolling Bollinger Bands over N closes using running sum and sumsq.
+    Returns (mid, upper, lower) where:
+      mid   = SMA(N)
+      upper = SMA + k * std
+      lower = SMA - k * std
+    """
+    def __init__(self, window: int, k: float = 2.0):
+        if window <= 1:
+            raise ValueError("Bollinger window must be > 1")
+        self.window = window
+        self.k = k
+        self.values: Deque[float] = deque(maxlen=window)
+        self._sum = 0.0
+        self._sumsq = 0.0
+
+    def push(self, x: float) -> Optional[Tuple[float, float, float]]:
+        # remove oldest if at capacity
+        if len(self.values) == self.window:
+            oldest = self.values[0]
+            self._sum -= oldest
+            self._sumsq -= oldest * oldest
+
+        self.values.append(x)
+        self._sum += x
+        self._sumsq += x * x
+
+        n = len(self.values)
+        if n < self.window:
+            return None
+
+        mean = self._sum / n
+        # Numerical guard
+        variance = max((self._sumsq / n) - (mean * mean), 0.0)
+        std = math.sqrt(variance)
+        upper = mean + self.k * std
+        lower = mean - self.k * std
+        return (mean, upper, lower)
+from typing import Optional
+
+class RollingEMA:
+    """
+    O(1) rolling Exponential Moving Average (EMA).
+    Keeps only last EMA value, no full window.
+    Formula: EMA_t = α * price_t + (1 - α) * EMA_{t-1}
+    where α = 2 / (window + 1)
+    """
+    def __init__(self, window: int):
+        if window <= 0:
+            raise ValueError("EMA window must be > 0")
+        self.window = window
+        self.alpha = 2.0 / (window + 1)
+        self._ema: Optional[float] = None
+
+    def push(self, x: float) -> float:
+        if self._ema is None:
+            # seed with first value
+            self._ema = x
+        else:
+            self._ema = self.alpha * x + (1 - self.alpha) * self._ema
+        return self._ema
 
 
 class CandleMonitor:
@@ -134,12 +198,14 @@ class CandleMonitor:
     Monitors one (symbol, interval) stream, keeps rolling SMA on closed candles,
     and calls a user hook on each closed candle.
     """
-    def __init__(self, symbol: Symbol, interval: Interval, sma_windows: List[int], vwap_windows: List[int], rsi_windows: List[int]):
+    def __init__(self, symbol: Symbol, interval: Interval, sma_windows: List[int], vwap_windows: List[int], rsi_windows: List[int], bollinger_cfg: List[Tuple[int, float]], ema_windows: List[int]):
         self.symbol = symbol
         self.interval = interval
         self.sma = {w: RollingSMA(w) for w in sma_windows}
         self.vwap = {w: RollingVWAP(w) for w in (vwap_windows or [])}
         self.rsi = {w: RollingRSI(w) for w in (rsi_windows or [])}
+        self.bbands = {(w, k): RollingBollinger(w, k) for w, k in (bollinger_cfg or [])}
+        self.ema = {w: RollingEMA(w) for w in (ema_windows or [])}
         self.last_processed_T: int = 0  # end time (ms) of last processed candle
         self._latest_candle: Optional[dict] = None  # most recent WS snapshot for current (open) candle
 
@@ -215,6 +281,10 @@ class CandleMonitor:
                     vwap.push(tp, volume)
                 for w, rsi in self.rsi.items():
                     rsi.push(close_f)
+                for w, bb in self.bbands.items():
+                    bb.push(close_f)
+                for w, ema in self.ema.items():
+                    ema.push(close_f)
                 self.last_processed_T = max(self.last_processed_T, int(c["T"]))
 
     def _maybe_finalize_current(self) -> Optional[dict]:
@@ -243,10 +313,23 @@ class CandleMonitor:
             rsis = {}
             for w, rsi in self.rsi.items():
                 rsis[f"rsi_{w}"] = rsi.push(close_f)
-            closed = dict(c)
+            bbands = {}
+            for (w, k), bb in self.bbands.items():
+                res = bb.push(close_f)
+                if res is not None:
+                    mid, upper, lower = res
+                    bbands[f"bb_{w}_{k}_mid"] = mid
+                    bbands[f"bb_{w}_{k}_upper"] = upper
+                    bbands[f"bb_{w}_{k}_lower"] = lower
+            emas = {}
+            for w, ema in self.ema.items():
+                emas[f"ema_{w}"] = ema.push(close_f)
+            closed = dict(c)    
             closed.update(smas)
             closed.update(vwaps)
             closed.update(rsis)
+            closed.update(bbands)
+            closed.update(emas)
             self.last_processed_T = T
             return closed
         return None
@@ -298,7 +381,7 @@ class CandleMonitor:
                 f"Closed {candle['s']} {candle['i']} "
                 f"t=[{candle['t']}..{candle['T']}] close={candle['c']} "
                 + " ".join(
-                    f"{k}={v:.4f}" for k, v in candle.items() if k.startswith("sma_") or k.startswith("vwap_") or k.startswith("rsi_") and v is not None
+                    f"{k}={v:.4f}" for k, v in candle.items() if k.startswith("sma_") or k.startswith("vwap_") or k.startswith("rsi_") or k.startswith("bb_") or k.startswith("ema_") and v is not None
                 )
             )
            
@@ -338,12 +421,14 @@ async def run_stream(
     history_lookback_ms: int = 24 * 60 * 60 * 1000,  # 24h
     vwap_windows: List[int] = [210, 400],  
     rsi_windows: List[int] = [14, 21],  
+    bollinger_cfg: List[Tuple[int, float]] = [(20, 2.0), (50, 2.0)],  #add/remove windows as you like
+    ema_windows: List[int] = [50, 200],  #add/remove windows as you like
 ) -> None:
     # Ensure symbol is canonical for HL
     canonical_symbol = canonicalize_symbol(symbol)
     if canonical_symbol != symbol:
         logger.info(f"Using canonical symbol {canonical_symbol} for {symbol}/{interval}")
-    monitor = CandleMonitor(canonical_symbol, interval, sma_windows, vwap_windows, rsi_windows)
+    monitor = CandleMonitor(canonical_symbol, interval, sma_windows, vwap_windows, rsi_windows, bollinger_cfg)
     lookback_ms = CandleMonitor.interval_to_ms(interval)*CANDLES_TO_FETCH_AT_START
     
     logger.info(f"Starting stream for {canonical_symbol}/{interval}")
@@ -399,4 +484,6 @@ if __name__ == "__main__":
         sma_windows=[50, 200],  # add/remove windows as you like
         vwap_windows=[210, 400],  #dd/remove windows as you like
         rsi_windows=[14, 21],  #add/remove windows as you like
+        bollinger_cfg=[(20, 2.0), (50, 2.0)],  #add/remove windows as you like
+        ema_windows=[50, 200],  #add/remove windows as you like
     ))

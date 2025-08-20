@@ -435,8 +435,16 @@ export default function TradingPlatform() {
         enable_publishing: false,
         allow_symbol_change: true,
         container_id: containerId,
-        width: "120%",
-        height: "400"
+        width: "100%",
+        height: "500",
+        studies: [
+          { "id": "MASimple@tv-basicstudies", "inputs": { "length": 50 } },
+          { "id": "MASimple@tv-basicstudies", "inputs": { "length": 50 } },
+          { "id": "RSI@tv-basicstudies", "inputs": { "length": 50 } },
+          { "id": "VWAP@tv-basicstudies", "inputs": { "length": 50 } },
+
+  
+        ]
       });
     }
   };
