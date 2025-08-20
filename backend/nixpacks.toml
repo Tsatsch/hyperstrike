@@ -6,6 +6,3 @@ cmds = ["poetry install --only main --no-interaction --no-ansi"]
 
 [phases.build]
 cmds = ["poetry run python -m pip install --upgrade pip"]
-
-[start]
-cmd = "poetry run uvicorn app.main:app --host 0.0.0.0 --port $PORT"
