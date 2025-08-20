@@ -403,10 +403,13 @@ export default function TradingPlatform() {
       const getTradingViewInterval = (tf: string) => {
         const intervalMap: { [key: string]: string } = {
           '1m': '1',
+          '5m': '5',
           '15m': '15',
           '1h': '60',
           '4h': '240',
-          '1d': '1D'
+          '12h': '720',
+          '1d': '1D',
+          '1w': '1W',
         };
         return intervalMap[tf] || '60';
       };
@@ -414,11 +417,13 @@ export default function TradingPlatform() {
       // Map token symbol to TradingView symbol format
       const getTradingViewSymbol = (token: string) => {
         const symbolMap: { [key: string]: string } = {
-          'HYPE': 'BYBIT:HYPEUSDT',
-          'USDT': 'BINANCE:USDTUSD',
-          'UETH': 'BINANCE:ETHUSD',
-          'UBTC': 'BINANCE:BTCUSD',
-          'USOL': 'BINANCE:SOLUSD'
+          'HYPE': 'BYBIT:HYPEUSDT.P',
+   
+          'UETH': 'BYBIT:ETHUSD.P',
+          'UBTC': 'BYBIT:BTCUSD.P',
+          'USOL': 'BYBIT:SOLUSD.P',
+          'UFART': 'BYBIT:FARTCOINUSDT.P',
+          'JEF': 'BYBIT:JEFUSDT',
         };
         return symbolMap[token] || `BYBIT:${token}USDT`;
       };
@@ -1301,8 +1306,8 @@ export default function TradingPlatform() {
             <CardHeader>
               <CardTitle className="text-foreground">Configure Condition</CardTitle>
               <CardDescription>
-                Set up the specific parameters for your condition 
-                {conditionTypes.find((c) => c.id === conditionType)?.name.toLowerCase()}
+                Set up the specific parameters for your condition  
+                {/* {conditionTypes.find((c) => c.id === conditionType)?.name.toLowerCase()} */}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1320,7 +1325,7 @@ export default function TradingPlatform() {
                         </SelectTrigger>
                         <SelectContent>
                           {tokens
-                            .filter(token => token.symbol !== 'USDT' && token.symbol !== 'USDE')
+                            .filter(token => token.symbol == 'USOL' || token.symbol == 'UBTC' || token.symbol == 'UETH' || token.symbol == 'HYPE')
                             .map((token) => (
                               <SelectItem key={token.symbol} value={token.symbol} className="cursor-pointer">
                                 <div className="flex items-center space-x-2">
@@ -1338,58 +1343,58 @@ export default function TradingPlatform() {
                     <div className="pb-3 border-b border-dotted border-border/40">
                       <div className="flex items-center justify-between">
                         <Label className="text-foreground font-semibold">Timeframe</Label>
-                        <Select value={timeframe} onValueChange={setTimeframe}>
-                          <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
-                            <SelectValue placeholder="1H" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="1m" className="cursor-pointer">1m</SelectItem>
-                            <SelectItem value="15m" className="cursor-pointer">15m</SelectItem>
-                            <SelectItem value="1h" className="cursor-pointer">1H</SelectItem>
-                            <SelectItem value="4h" className="cursor-pointer">4H</SelectItem>
-                            <SelectItem value="1d" className="cursor-pointer">1D</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    </div>
+                        <div className="flex gap-2">
+                          {[
+                            { value: "1m", label: "1m" },
 
-                    {/* Lifetime Section */}
-                    <div className="pb-3 border-b border-dotted border-border/40">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-foreground font-semibold">Order Lifetime</Label>
-                        <Select value={orderLifetime} onValueChange={setOrderLifetime}>
-                          <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
-                            <SelectValue placeholder="24H" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="1h" className="cursor-pointer">1 Hour</SelectItem>
-                            <SelectItem value="6h" className="cursor-pointer">6 Hours</SelectItem>
-                            <SelectItem value="12h" className="cursor-pointer">12 Hours</SelectItem>
-                            <SelectItem value="24h" className="cursor-pointer">24 Hours</SelectItem>
-                            <SelectItem value="7d" className="cursor-pointer">7 Days</SelectItem>
-                            <SelectItem value="30d" className="cursor-pointer">30 Days</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                            { value: "15m", label: "15m" },
+                            { value: "1h", label: "1H" },
+                            { value: "4h", label: "4H" },
+                            { value: "1d", label: "1D" },
+                            { value: "1w", label: "1W" }
+                          ].map((tf) => (
+                            <button
+                              key={tf.value}
+                              onClick={() => setTimeframe(tf.value)}
+                              className={`px-3 py-2 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer ${
+                                timeframe === tf.value
+                                  ? "bg-primary text-primary-foreground shadow-sm"
+                                  : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border border-border/50"
+                              }`}
+                            >
+                              {tf.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Source Section */}
                     <div className="pb-3 border-b border-dotted border-border/40">
-                      <div className="flex items-center justify-between">
+                      <div className="space-y-3">
                         <Label className="text-foreground font-semibold">Source</Label>
-                        <Select value={condition} onValueChange={setCondition}>
-                          <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
-                            <SelectValue placeholder="Close" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="open" className="cursor-pointer">Open</SelectItem>
-                            <SelectItem value="high" className="cursor-pointer">High</SelectItem>
-                            <SelectItem value="low" className="cursor-pointer">Low</SelectItem>
-                            <SelectItem value="close" className="cursor-pointer">Close</SelectItem>
-                            <SelectItem value="volume" className="cursor-pointer">Volume</SelectItem>
-                            <SelectItem value="trades" className="cursor-pointer">Number of Trades</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[
+                            { value: "open", label: "Open" },
+                            { value: "high", label: "High" },
+                            { value: "low", label: "Low" },
+                            { value: "close", label: "Close" },
+                            { value: "volume", label: "Volume" },
+                            { value: "trades", label: "Trades" }
+                          ].map((src) => (
+                            <button
+                              key={src.value}
+                              onClick={() => setCondition(src.value)}
+                              className={`px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer ${
+                                condition === src.value
+                                  ? "bg-primary text-primary-foreground shadow-sm"
+                                  : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border border-border/50"
+                              }`}
+                            >
+                              {src.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
