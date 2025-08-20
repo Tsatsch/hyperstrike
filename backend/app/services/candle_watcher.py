@@ -5,11 +5,11 @@ import time
 from collections import deque
 from typing import Deque, Dict, List, Optional, Tuple
 import logging
-
+import sys
 import aiohttp
 import websockets
 
-from app.services.trigger_processor import TriggerProcessor
+# from app.services.trigger_processor import TriggerProcessor
 
 HYPER_WS = "wss://api.hyperliquid.xyz/ws"
 HYPER_REST = "https://api.hyperliquid.xyz/info"
@@ -18,12 +18,19 @@ CANDLES_TO_FETCH_AT_START = 1000
 Symbol = str
 Interval = str
 
+
+logging.basicConfig(
+    level=logging.INFO,  # show INFO and above
+    format="%(asctime)s %(levelname)s %(name)s:%(lineno)d - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],  # -> stdout; omit to keep stderr
+    force=True,  # overwrite any prior config (handy in notebooks/frameworks)
+)
 logger = logging.getLogger(__name__)
 
 # Global trigger processor instance
-trigger_processor = TriggerProcessor()
+# trigger_processor = TriggerProcessor()
 
-# Track active subscriptions
+
 active_subscriptions: Dict[Tuple[Symbol, Interval], bool] = {}
 
 def canonicalize_symbol(symbol: str) -> str:
@@ -56,16 +63,83 @@ class RollingSMA:
         if len(self.values) < self.window:
             return None
         return self._sum / len(self.values)
+class RollingVWAP:
+    """O(1) rolling VWAP over N candles using deques for pv and vol."""
+    def __init__(self, window: int):
+        if window <= 0:
+            raise ValueError("VWAP window must be > 0")
+        self.window = window
+        self._pv = deque(maxlen=window)   # stores TP*V
+        self._vol = deque(maxlen=window)  # stores V
+        self._sum_pv = 0.0
+        self._sum_vol = 0.0
+
+    def push(self, tp: float, vol: float) -> float:
+        # remove oldest contributions if at capacity
+        if len(self._pv) == self.window:
+            self._sum_pv -= self._pv[0]
+            self._sum_vol -= self._vol[0]
+        pv = tp * vol
+        self._pv.append(pv)
+        self._vol.append(vol)
+        self._sum_pv += pv
+        self._sum_vol += vol
+        return (self._sum_pv / self._sum_vol) if self._sum_vol > 0 else float("nan")
+class RollingRSI:
+    def __init__(self, window: int = 14):
+        self.window = window
+        self.prev_close: Optional[float] = None
+        self.gains: List[float] = []  # Collect first window of gains
+        self.losses: List[float] = []  # Collect first window of losses
+        self.avg_gain: Optional[float] = None
+        self.avg_loss: Optional[float] = None
+
+    def push(self, close: float) -> Optional[float]:
+        if self.prev_close is None:
+            self.prev_close = close
+            return None
+
+        change = close - self.prev_close
+        gain = max(change, 0.0)
+        loss = -min(change, 0.0)
+
+        if len(self.gains) < self.window:
+
+            self.gains.append(gain)
+            self.losses.append(loss)
+            self.prev_close = close
+            
+            if len(self.gains) == self.window:
+
+                self.avg_gain = sum(self.gains) / self.window
+                self.avg_loss = sum(self.losses) / self.window
+                
+            return None
+        else:
+            # Use Wilder's smoothing
+            self.avg_gain = (self.avg_gain * (self.window - 1) + gain) / self.window
+            self.avg_loss = (self.avg_loss * (self.window - 1) + loss) / self.window
+
+        self.prev_close = close
+
+        if self.avg_loss == 0:
+            return 100.0
+        rs = self.avg_gain / self.avg_loss
+        return 100.0 - (100.0 / (1.0 + rs))
+
+
 
 class CandleMonitor:
     """
     Monitors one (symbol, interval) stream, keeps rolling SMA on closed candles,
     and calls a user hook on each closed candle.
     """
-    def __init__(self, symbol: Symbol, interval: Interval, sma_windows: List[int]):
+    def __init__(self, symbol: Symbol, interval: Interval, sma_windows: List[int], vwap_windows: List[int], rsi_windows: List[int]):
         self.symbol = symbol
         self.interval = interval
         self.sma = {w: RollingSMA(w) for w in sma_windows}
+        self.vwap = {w: RollingVWAP(w) for w in (vwap_windows or [])}
+        self.rsi = {w: RollingRSI(w) for w in (rsi_windows or [])}
         self.last_processed_T: int = 0  # end time (ms) of last processed candle
         self._latest_candle: Optional[dict] = None  # most recent WS snapshot for current (open) candle
 
@@ -87,7 +161,7 @@ class CandleMonitor:
                 "endTime": end_ms,
             },
         }
-        # Retry on transient failures so a single 5xx doesn't crash the task
+
         max_attempts = 5
         base_backoff_seconds = 1.0
         data = []
@@ -133,6 +207,14 @@ class CandleMonitor:
                 close_f = float(c["c"])
                 for w, sma in self.sma.items():
                     sma.push(close_f)
+                volume = float(c.get("v", 0))
+                low_f = float(c.get("l", 0))
+                high_f = float(c.get("h", 0))
+                tp = (close_f + low_f + high_f) / 3
+                for w, vwap in self.vwap.items():
+                    vwap.push(tp, volume)
+                for w, rsi in self.rsi.items():
+                    rsi.push(close_f)
                 self.last_processed_T = max(self.last_processed_T, int(c["T"]))
 
     def _maybe_finalize_current(self) -> Optional[dict]:
@@ -146,13 +228,25 @@ class CandleMonitor:
         c = self._latest_candle
         T = int(c["T"])
         if self._now_ms() >= T and T > self.last_processed_T:
-            # Closed: push close price into SMA(s) once
+
             close_f = float(c["c"])
             smas = {}
             for w, sma in self.sma.items():
                 smas[f"sma_{w}"] = sma.push(close_f)
+            vwaps = {}
+            volume = float(c.get("v", 0))
+            low_f = float(c.get("l", 0))
+            high_f = float(c.get("h", 0))
+            tp = (close_f + low_f + high_f) / 3
+            for w, vwap in self.vwap.items():
+                vwaps[f"vwap_{w}"] = vwap.push(tp, volume)
+            rsis = {}
+            for w, rsi in self.rsi.items():
+                rsis[f"rsi_{w}"] = rsi.push(close_f)
             closed = dict(c)
             closed.update(smas)
+            closed.update(vwaps)
+            closed.update(rsis)
             self.last_processed_T = T
             return closed
         return None
@@ -190,9 +284,9 @@ class CandleMonitor:
         if not isinstance(candle, dict):
             return None
 
-        # keep the latest snapshot of the live candle
+
         self._latest_candle = candle
-        # Attempt to finalize if it has crossed its end time
+
         return self._maybe_finalize_current()
 
     async def on_closed_candle(self, candle: dict) -> None:
@@ -204,19 +298,20 @@ class CandleMonitor:
                 f"Closed {candle['s']} {candle['i']} "
                 f"t=[{candle['t']}..{candle['T']}] close={candle['c']} "
                 + " ".join(
-                    f"{k}={v:.4f}" for k, v in candle.items() if k.startswith("sma_") and v is not None
+                    f"{k}={v:.4f}" for k, v in candle.items() if k.startswith("sma_") or k.startswith("vwap_") or k.startswith("rsi_") and v is not None
                 )
             )
+           
             
             # Process triggers for this candle
-            await trigger_processor.process_candle(self.symbol, self.interval, candle)
+            #await trigger_processor.process_candle(self.symbol, self.interval, candle)
             
         except Exception as e:
             logger.error(f"Error processing closed candle: {e}")
 
 async def ensure_subscription(symbol: Symbol, interval: Interval) -> None:
     """Ensure we have an active subscription for a symbol/interval pair"""
-    # Canonicalize symbol for HL (e.g., UBTC -> BTC)
+
     canonical_symbol = canonicalize_symbol(symbol)
     key = (canonical_symbol, interval)
     if key not in active_subscriptions:
@@ -232,8 +327,8 @@ async def maybe_unsubscribe(symbol: Symbol, interval: Interval) -> None:
     """Unsubscribe from a symbol/interval if no more triggers need it"""
     key = (symbol, interval)
     if key in active_subscriptions:
-        # Check if there are any orders that need this subscription
-        # For now, we'll keep it simple and not unsubscribe
+
+
         logger.info(f"Keeping subscription for {symbol}/{interval} (orders may still need it)")
 
 async def run_stream(
@@ -241,23 +336,25 @@ async def run_stream(
     interval: Interval = "1m",
     sma_windows: List[int] = [5, 20],
     history_lookback_ms: int = 24 * 60 * 60 * 1000,  # 24h
+    vwap_windows: List[int] = [210, 400],  
+    rsi_windows: List[int] = [14, 21],  
 ) -> None:
     # Ensure symbol is canonical for HL
     canonical_symbol = canonicalize_symbol(symbol)
     if canonical_symbol != symbol:
         logger.info(f"Using canonical symbol {canonical_symbol} for {symbol}/{interval}")
-    monitor = CandleMonitor(canonical_symbol, interval, sma_windows)
+    monitor = CandleMonitor(canonical_symbol, interval, sma_windows, vwap_windows, rsi_windows)
     lookback_ms = CandleMonitor.interval_to_ms(interval)*CANDLES_TO_FETCH_AT_START
     
     logger.info(f"Starting stream for {canonical_symbol}/{interval}")
     
     # Use a single HTTP session for REST
     async with aiohttp.ClientSession() as session:
-        # Seed enough candles to warm up the largest SMA
+
         try:
             await monitor.seed_history(session, lookback_ms)
         except Exception as e:
-            # Proceed without seed to avoid killing the whole stream task
+
             logger.error(
                 f"Seeding history failed for {symbol}/{interval}; continuing without seed: {type(e).__name__}: {e}"
             )
@@ -297,7 +394,9 @@ async def run_stream(
 
 if __name__ == "__main__":
     asyncio.run(run_stream(
-        symbol="PURR",
+        symbol="BTC",
         interval="1m",
         sma_windows=[50, 200],  # add/remove windows as you like
+        vwap_windows=[210, 400],  #dd/remove windows as you like
+        rsi_windows=[14, 21],  #add/remove windows as you like
     ))
