@@ -399,10 +399,34 @@ export default function TradingPlatform() {
     container.innerHTML = '';
 
     if ((window as any).TradingView) {
+      // Map timeframe to TradingView interval format
+      const getTradingViewInterval = (tf: string) => {
+        const intervalMap: { [key: string]: string } = {
+          '1m': '1',
+          '15m': '15',
+          '1h': '60',
+          '4h': '240',
+          '1d': '1D'
+        };
+        return intervalMap[tf] || '60';
+      };
+
+      // Map token symbol to TradingView symbol format
+      const getTradingViewSymbol = (token: string) => {
+        const symbolMap: { [key: string]: string } = {
+          'HYPE': 'BYBIT:HYPEUSDT',
+          'USDT': 'BINANCE:USDTUSD',
+          'UETH': 'BINANCE:ETHUSD',
+          'UBTC': 'BINANCE:BTCUSD',
+          'USOL': 'BINANCE:SOLUSD'
+        };
+        return symbolMap[token] || `BYBIT:${token}USDT`;
+      };
+
       new (window as any).TradingView.widget({
         autosize: true,
-        symbol: "BYBIT:HYPEUSDT",
-        interval: "1H",
+        symbol: getTradingViewSymbol(triggerToken || 'HYPE'),
+        interval: getTradingViewInterval(timeframe || '1h'),
         timezone: "Etc/UTC",
         theme: "dark",
         style: "1",
@@ -549,7 +573,7 @@ export default function TradingPlatform() {
         container.innerHTML = '';
       }
     };
-  }, [currentStep, conditionType]);
+  }, [currentStep, conditionType, triggerToken, timeframe, condition]);
 
   // Handle creating conditional swap
   const handleCreateSwap = async () => {
@@ -1265,7 +1289,7 @@ export default function TradingPlatform() {
 
         {/* Step 4: Configure Condition */}
         {currentStep === 4 && (
-          <Card className="max-w-2xl mx-auto border-border/50 shadow-lg">
+          <Card className="max-w-7xl mx-auto border-border/50 shadow-lg">
             <CardHeader>
               <CardTitle className="text-foreground">Configure Condition</CardTitle>
               <CardDescription>
@@ -1275,133 +1299,145 @@ export default function TradingPlatform() {
             </CardHeader>
             <CardContent className="space-y-6">
               {conditionType === "ohlcvn" && (
-                <div className="space-y-4">
-                  {/* Trigger Token Section */}
-                  <div className="pb-3 border-b border-dotted border-border/40">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-foreground font-semibold">Pair</Label>
-                      <Select value={triggerToken} onValueChange={setTriggerToken}>
-                        <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
-                          <SelectValue placeholder="HYPE" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tokens.map((token) => (
-                            <SelectItem key={token.symbol} value={token.symbol} className="cursor-pointer">
-                              <div className="flex items-center space-x-2">
-                                <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
-                                <span>{token.symbol} - {token.name}</span>
-                              </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  </div>
-
-                  {/* Timeframe Section */}
-                  <div className="pb-3 border-b border-dotted border-border/40">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-foreground font-semibold">Timeframe</Label>
-                      <Select value={timeframe} onValueChange={setTimeframe}>
-                        <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
-                          <SelectValue placeholder="1H" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="1m" className="cursor-pointer">1m</SelectItem>
-                          <SelectItem value="15m" className="cursor-pointer">15m</SelectItem>
-                          <SelectItem value="1h" className="cursor-pointer">1H</SelectItem>
-                          <SelectItem value="4h" className="cursor-pointer">4H</SelectItem>
-                          <SelectItem value="1d" className="cursor-pointer">1D</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  </div>
-
-                  {/* Lifetime Section */}
-                  <div className="pb-3 border-b border-dotted border-border/40">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-foreground font-semibold">Order Lifetime</Label>
-                      <Select value={orderLifetime} onValueChange={setOrderLifetime}>
-                        <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
-                          <SelectValue placeholder="24H" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="1h" className="cursor-pointer">1 Hour</SelectItem>
-                          <SelectItem value="6h" className="cursor-pointer">6 Hours</SelectItem>
-                          <SelectItem value="12h" className="cursor-pointer">12 Hours</SelectItem>
-                          <SelectItem value="24h" className="cursor-pointer">24 Hours</SelectItem>
-                          <SelectItem value="7d" className="cursor-pointer">7 Days</SelectItem>
-                          <SelectItem value="30d" className="cursor-pointer">30 Days</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  </div>
-
-                  {/* Source Section */}
-                  <div className="pb-3 border-b border-dotted border-border/40">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-foreground font-semibold">Source</Label>
-                      <Select value={condition} onValueChange={setCondition}>
-                        <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
-                          <SelectValue placeholder="Close" />
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                  {/* Left Column: Configuration Settings (2/5 = 40%) */}
+                  <div className="space-y-4 lg:col-span-2">
+                    {/* Trigger Token Section */}
+                    <div className="pb-3 border-b border-dotted border-border/40">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-foreground font-semibold">Pair</Label>
+                        <Select value={triggerToken} onValueChange={setTriggerToken}>
+                          <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
+                            <SelectValue placeholder="HYPE" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="open" className="cursor-pointer">Open</SelectItem>
-                          <SelectItem value="high" className="cursor-pointer">High</SelectItem>
-                          <SelectItem value="low" className="cursor-pointer">Low</SelectItem>
-                          <SelectItem value="close" className="cursor-pointer">Close</SelectItem>
-                          <SelectItem value="volume" className="cursor-pointer">Volume</SelectItem>
-                          <SelectItem value="trades" className="cursor-pointer">Number of Trades</SelectItem>
+                          {tokens
+                            .filter(token => token.symbol !== 'USDT' && token.symbol !== 'USDE')
+                            .map((token) => (
+                              <SelectItem key={token.symbol} value={token.symbol} className="cursor-pointer">
+                                <div className="flex items-center space-x-2">
+                                  <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
+                                  <span>{token.symbol} - {token.name}</span>
+                                </div>
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
+                    </div>
 
-                  {/* Trigger When Section */}
-                  <div className="pb-3 border-b border-dotted border-border/40">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-foreground font-semibold">Trigger When</Label>
-                      <div className="flex w-1/2 bg-muted rounded-lg p-1">
-                        <button
-                          onClick={() => setTriggerWhen("above")}
-                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 cursor-pointer ${
-                            triggerWhen === "above"
-                              ? "bg-primary text-primary-foreground shadow-sm"
-                              : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                          }`}
-                        >
-                          Above
-                        </button>
-                        <button
-                          onClick={() => setTriggerWhen("below")}
-                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 cursor-pointer ${
-                            triggerWhen === "below"
-                              ? "bg-primary text-primary-foreground shadow-sm"
-                              : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                          }`}
-                        >
-                          Below
-                        </button>
+                    {/* Timeframe Section */}
+                    <div className="pb-3 border-b border-dotted border-border/40">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-foreground font-semibold">Timeframe</Label>
+                        <Select value={timeframe} onValueChange={setTimeframe}>
+                          <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
+                            <SelectValue placeholder="1H" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1m" className="cursor-pointer">1m</SelectItem>
+                            <SelectItem value="15m" className="cursor-pointer">15m</SelectItem>
+                            <SelectItem value="1h" className="cursor-pointer">1H</SelectItem>
+                            <SelectItem value="4h" className="cursor-pointer">4H</SelectItem>
+                            <SelectItem value="1d" className="cursor-pointer">1D</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    </div>
+
+                    {/* Lifetime Section */}
+                    <div className="pb-3 border-b border-dotted border-border/40">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-foreground font-semibold">Order Lifetime</Label>
+                        <Select value={orderLifetime} onValueChange={setOrderLifetime}>
+                          <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
+                            <SelectValue placeholder="24H" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1h" className="cursor-pointer">1 Hour</SelectItem>
+                            <SelectItem value="6h" className="cursor-pointer">6 Hours</SelectItem>
+                            <SelectItem value="12h" className="cursor-pointer">12 Hours</SelectItem>
+                            <SelectItem value="24h" className="cursor-pointer">24 Hours</SelectItem>
+                            <SelectItem value="7d" className="cursor-pointer">7 Days</SelectItem>
+                            <SelectItem value="30d" className="cursor-pointer">30 Days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    </div>
+
+                    {/* Source Section */}
+                    <div className="pb-3 border-b border-dotted border-border/40">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-foreground font-semibold">Source</Label>
+                        <Select value={condition} onValueChange={setCondition}>
+                          <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
+                            <SelectValue placeholder="Close" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="open" className="cursor-pointer">Open</SelectItem>
+                            <SelectItem value="high" className="cursor-pointer">High</SelectItem>
+                            <SelectItem value="low" className="cursor-pointer">Low</SelectItem>
+                            <SelectItem value="close" className="cursor-pointer">Close</SelectItem>
+                            <SelectItem value="volume" className="cursor-pointer">Volume</SelectItem>
+                            <SelectItem value="trades" className="cursor-pointer">Number of Trades</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Trigger When Section */}
+                    <div className="pb-3 border-b border-dotted border-border/40">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-foreground font-semibold">Trigger When</Label>
+                        <div className="flex w-1/2 bg-muted rounded-lg p-1">
+                          <button
+                            onClick={() => setTriggerWhen("above")}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 cursor-pointer ${
+                              triggerWhen === "above"
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                            }`}
+                          >
+                            Above
+                          </button>
+                          <button
+                            onClick={() => setTriggerWhen("below")}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 cursor-pointer ${
+                              triggerWhen === "below"
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                            }`}
+                          >
+                            Below
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Target Value Section */}
+                    <div className="pb-0">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-foreground font-semibold">Target Value</Label>
+                        <Input
+                          placeholder={
+                            condition === "volume" 
+                              ? "Enter volume in $" 
+                              : condition === "trades" 
+                                ? "Enter number of trades"
+                                : "Enter price in $"
+                          }
+                          className="w-1/2 border-border/50 focus:ring-primary/20"
+                          value={targetValue}
+                          onChange={(e) => setTargetValue(e.target.value)}
+                        />
                       </div>
                     </div>
                   </div>
 
-                  {/* Target Value Section */}
-                  <div className="pb-0">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-foreground font-semibold">Target Value</Label>
-                      <Input
-                        placeholder={
-                          condition === "volume" 
-                            ? "Enter volume in $" 
-                            : condition === "trades" 
-                              ? "Enter number of trades"
-                              : "Enter price in $"
-                        }
-                        className="w-1/2 border-border/50 focus:ring-primary/20"
-                        value={targetValue}
-                        onChange={(e) => setTargetValue(e.target.value)}
-                      />
+                  {/* Right Column: TradingView Chart (3/5 = 60%) */}
+                  <div className="space-y-4 lg:col-span-3">
+                    <div className="bg-card border border-border/50 p-4 rounded-lg">
+                      <div id="ohlcv_tradingview_chart" style={{ width: '100%', height: '500px' }}></div>
                     </div>
                   </div>
                 </div>
@@ -1452,15 +1488,6 @@ export default function TradingPlatform() {
                   <div>
                     <Label className="text-foreground">Date & Time</Label>
                     <Input type="datetime-local" className="border-border/50 focus:ring-primary/20" />
-                  </div>
-                </div>
-              )}
-
-              {/* TradingView Chart Section - Only for OHLCV */}
-              {conditionType === "ohlcvn" && (
-                <div className="pt-4 border-t border-solid border-border/30 mt-5">
-                  <div className="bg-card border border-border/50 p-4 rounded-lg">
-                    <div id="ohlcv_tradingview_chart" style={{ width: '105%', height: '400px', marginLeft: '-15px' }}></div>
                   </div>
                 </div>
               )}
