@@ -73,11 +73,25 @@ class StartupService:
             logger.info(f"Starting expired order cleanup task (interval={CLEANUP_INTERVAL_SEC}s, dev={DEV_MODE})...")
             while True:
                 try:
+                    # Check if database connection is available
+                    from app.db.sb import supabase
+                    if not supabase:
+                        logger.warning("Database connection not available, skipping cleanup cycle")
+                        await asyncio.sleep(CLEANUP_INTERVAL_SEC)
+                        continue
+                    
                     from app.services.orders import get_all_open_orders
                     from app.services.orders import update_order_state_for_user
                     current_time = int(time.time() * 1000)
                     expired_count = 0
-                    orders = get_all_open_orders()
+                    
+                    try:
+                        orders = get_all_open_orders()
+                    except Exception as db_error:
+                        logger.error(f"Database error in cleanup task: {db_error}")
+                        await asyncio.sleep(max(60, CLEANUP_INTERVAL_SEC))
+                        continue
+                    
                     for order in orders:
                         try:
                             if (order.orderData and 

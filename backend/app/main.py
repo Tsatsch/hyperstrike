@@ -36,10 +36,12 @@ async def start_watchers():
     try:
         logger.info("Starting background tasks...")
         # Start background tasks in a separate task to avoid blocking startup
+        # Don't await this to prevent blocking startup
         asyncio.create_task(start_background_tasks())
         logger.info("Background tasks started successfully")
     except Exception as e:
         logger.error(f"Failed to start background tasks: {e}")
+        # Don't raise the exception to prevent startup failure
 
 @app.get("/")
 def read_root():
