@@ -1,5 +1,5 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
+set -euo pipefail
 # Colors for output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -12,24 +12,50 @@ echo -e "${BLUE}🚀 Starting Hyperstrike Development Environment${NC}"
 cleanup() {
     echo -e "\n${YELLOW}🛑 Stopping all processes...${NC}"
     kill $(jobs -p) 2>/dev/null
-    exit
+    exit 0
 }
 
 # Set up signal handlers
 trap cleanup SIGINT SIGTERM
 
-# Check if pnpm is installed
-if ! command -v pnpm &> /dev/null; then
-    echo -e "${YELLOW}⚠️  pnpm is not installed. Installing pnpm...${NC}"
+
+
+
+apt_install() {
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update && apt-get install -y "$@"
+  fi
+}
+
+# Ensure curl + python3 exist
+command -v curl >/dev/null 2>&1 || apt_install curl
+command -v python3 >/dev/null 2>&1 || apt_install python3 python3-venv
+
+
+
+# PNPM (bootstrap even if npm is missing)
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo -e "${YELLOW}⚠️  pnpm not found. Installing pnpm...${NC}"
+  if command -v npm >/dev/null 2>&1; then
     npm install -g pnpm
+  else
+    # npm isn't available: use official pnpm installer
+    curl -fsSL https://get.pnpm.io/install.sh | sh -
+    export PNPM_HOME="$HOME/.local/share/pnpm"
+    export PATH="$PNPM_HOME:$PATH"
+  fi
 fi
 
-# Check if poetry is installed
-if ! command -v poetry &> /dev/null; then
-    echo -e "${YELLOW}⚠️  poetry is not installed. Please install poetry first:${NC}"
-    echo "curl -sSL https://install.python-poetry.org | python3 -"
-    exit 1
+# Poetry
+if ! command -v poetry >/dev/null 2>&1; then
+  echo -e "${YELLOW}⚠️  poetry not found. Installing poetry...${NC}"
+  curl -sSL https://install.python-poetry.org | python3 -
+  export PATH="$HOME/.local/bin:$PATH"
 fi
+
+
+
+
 
 # Install frontend dependencies
 echo -e "${BLUE}📦 Installing frontend dependencies...${NC}"
@@ -46,7 +72,7 @@ cd ..
 # Start frontend in background
 echo -e "${GREEN}🌐 Starting frontend (Next.js)...${NC}"
 cd frontend
-pnpm dev &
+pnpm dev --port 3000 --hostname 0.0.0.0 &
 FRONTEND_PID=$!
 cd ..
 
