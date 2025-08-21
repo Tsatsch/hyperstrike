@@ -729,27 +729,27 @@ export default function TradingPlatform() {
       const orderPayload = {
         platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
         wallet: '0x0000000000000000000000000000000000000000',
-        swapData: {
-          inputToken: fromToken?.address || '0x0000000000000000000000000000000000000000',
-          inputAmount: isFinite(inputAmountNum) ? inputAmountNum : 0,
+        swap_data: {
+          input_token: fromToken?.address || '0x0000000000000000000000000000000000000000',
+          input_amount: isFinite(inputAmountNum) ? inputAmountNum : 0,
           // Legacy single-output fields populated from first split for compatibility
-          outputToken: primaryOutputToken?.token || '0x0000000000000000000000000000000000000000',
+          output_token: primaryOutputToken?.token || '0x0000000000000000000000000000000000000000',
           // New percentage-based outputs for up to 4 tokens
           outputs: selectedOutputs,
         },
-        orderData: {
+        order_data: {
           type: 'ohlcvTrigger',
-          ohlcvTrigger: {
+          ohlcv_trigger: {
             pair: triggerToken || 'HYPE',
             timeframe: timeframe || '1h',
-            firstSource: {
+            first_source: {
               type: getSourceType(source),
               source: getSourceType(source) === "OHLCV" ? source : undefined,
               indicator: getSourceType(source) === "indicators" ? source : undefined,
               parameters: getSourceType(source) === "indicators" ? getIndicatorParameters(source) : undefined,
             },
-            triggerWhen: triggerWhen || 'above',
-            secondSource: {
+            trigger_when: triggerWhen || 'above',
+            second_source: {
               type: secondSourceType === "value" ? "value" : "indicators",
               value: secondSourceType === "value" ? Number(secondSourceValue) : undefined,
               indicator: secondSourceType === "indicators" ? source : undefined,
@@ -759,15 +759,15 @@ export default function TradingPlatform() {
               active: cooldownActive,
               value: cooldownActive ? Number(cooldownValue) : null,
             },
-            chainedConfirmation: {
+            chained_confirmation: {
               active: chainedConfirmation,
             },
-            invalidationHalt: {
+            invalidation_halt: {
               active: invalidationHaltActive,
             },
             lifetime: orderLifetime || '24h',
           },
-          walletActivity: null,
+          wallet_activity: null,
         },
         signature: null,
         time: Date.now(),
