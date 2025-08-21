@@ -12,7 +12,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { useTheme } from "next-themes"
+import { useRef } from "react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown, Activity, Copy, ExternalLink, X } from "lucide-react"
@@ -122,6 +128,24 @@ export default function TradingPlatform() {
   const [isCreating, setIsCreating] = useState(false);
   const [showSuccessPage, setShowSuccessPage] = useState(false);
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
+  const [indicatorParams, setIndicatorParams] = useState<{ [key: string]: number }>({
+    sma: 14,
+    ema: 14,
+    rsi: 14,
+    bb_lower: 14,
+    bb_mid: 14,
+    bb_upper: 14
+  });
+  const [openParamFor, setOpenParamFor] = useState<string | null>(null);
+  const [showValueInput, setShowValueInput] = useState(false);
+  const [secondSourceValue, setSecondSourceValue] = useState<string>("");
+  const [firstSourceType, setFirstSourceType] = useState<string>("");
+  const [secondSourceType, setSecondSourceType] = useState<string>("");
+  const [cooldownActive, setCooldownActive] = useState(false);
+  const [cooldownValue, setCooldownValue] = useState<string>("");
+  const [chainedConfirmation, setChainedConfirmation] = useState(false);
+  const [invalidationHaltActive, setInvalidationHaltActive] = useState(false);
+  const { resolvedTheme } = useTheme();
   const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>({});
   const [orderLifetime, setOrderLifetime] = useState<string>("24h");
 
@@ -391,7 +415,11 @@ export default function TradingPlatform() {
   }
 
   // TradingView widget initialization function (only used in OHLCV config)
-  const initTradingView = (containerId: string) => {
+  const tvWidgetRef = useRef<any>(null);
+  const tvReadyRef = useRef<boolean>(false);
+  const chartRef = useRef<any>(null);
+  const currentStudyIdRef = useRef<number | null>(null);
+  const initTradingView = (containerId: string, studies?: any[]) => {
     const container = document.getElementById(containerId);
     if (!container) return;
 
@@ -414,42 +442,62 @@ export default function TradingPlatform() {
         return intervalMap[tf] || '60';
       };
 
-      // Map token symbol to TradingView symbol format
+      // Map selected pair to TradingView symbol format
       const getTradingViewSymbol = (token: string) => {
-        const symbolMap: { [key: string]: string } = {
+        // Handle grouped values like "HYPE/USDC" (spot) and "HYPE-USDC" (perps)
+        const isSpot = token?.includes('/USDC')
+        const isPerp = token?.includes('-USDC')
+        const base = isSpot ? token.split('/')[0] : isPerp ? token.split('-')[0] : token
+
+        // Perps mapping (Bybit .P contracts)
+        const perpsMap: { [key: string]: string } = {
           'HYPE': 'BYBIT:HYPEUSDT.P',
-   
           'UETH': 'BYBIT:ETHUSD.P',
           'UBTC': 'BYBIT:BTCUSD.P',
           'USOL': 'BYBIT:SOLUSD.P',
           'UFART': 'BYBIT:FARTCOINUSDT.P',
+        }
+
+        // Spot mapping (Bybit spot USDT pairs when available)
+        const spotMap: { [key: string]: string } = {
+          'HYPE': 'BYBIT:HYPEUSDT',
+          'UETH': 'BYBIT:ETHUSDT',
+          'UBTC': 'BYBIT:BTCUSDT',
+          'USOL': 'BYBIT:SOLUSDT',
           'JEF': 'BYBIT:JEFUSDT',
-        };
-        return symbolMap[token] || `BYBIT:${token}USDT`;
+        }
+
+        if (isPerp) {
+          return perpsMap[base] || `BYBIT:${base}USDT.P`
+        }
+        if (isSpot) {
+          return spotMap[base] || `BYBIT:${base}USDT`
+        }
+        // Fallback for old values where token is just a base symbol
+        return perpsMap[base] || spotMap[base] || `BYBIT:${base}USDT`
       };
 
-      new (window as any).TradingView.widget({
+      tvWidgetRef.current = new (window as any).TradingView.widget({
         autosize: true,
         symbol: getTradingViewSymbol(triggerToken || 'HYPE'),
         interval: getTradingViewInterval(timeframe || '1h'),
         timezone: "Etc/UTC",
-        theme: "dark",
+        theme: (resolvedTheme === 'light') ? 'light' : 'dark',
         style: "1",
         locale: "en",
-        toolbar_bg: "#f1f3f6",
+        toolbar_bg: (resolvedTheme === 'light') ? "#ffffff" : "#0b0b0b",
         enable_publishing: false,
         allow_symbol_change: true,
         container_id: containerId,
         width: "100%",
         height: "500",
-        studies: [
-          { "id": "MASimple@tv-basicstudies", "inputs": { "length": 50 } },
-          { "id": "MASimple@tv-basicstudies", "inputs": { "length": 50 } },
-          { "id": "RSI@tv-basicstudies", "inputs": { "length": 50 } },
-          { "id": "VWAP@tv-basicstudies", "inputs": { "length": 50 } },
+        studies: studies || []
+      });
 
-  
-        ]
+      // Wait for chart to be ready, cache reference
+      tvWidgetRef.current.onChartReady?.(() => {
+        tvReadyRef.current = true;
+        chartRef.current = tvWidgetRef.current.activeChart?.();
       });
     }
   };
@@ -586,7 +634,7 @@ export default function TradingPlatform() {
         container.innerHTML = '';
       }
     };
-  }, [currentStep, conditionType, triggerToken, timeframe, condition]);
+  }, [currentStep, conditionType, triggerToken, timeframe, resolvedTheme]);
 
   // Handle creating conditional swap
   const handleCreateSwap = async () => {
@@ -1318,16 +1366,33 @@ export default function TradingPlatform() {
                             <SelectValue placeholder="HYPE" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel>SPOT</SelectLabel>
                           {tokens
                             .filter(token => token.symbol == 'USOL' || token.symbol == 'UBTC' || token.symbol == 'UETH' || token.symbol == 'HYPE')
                             .map((token) => (
-                              <SelectItem key={token.symbol} value={token.symbol} className="cursor-pointer">
+                                <SelectItem key={`spot-${token.symbol}`} value={`${token.symbol}/USDC`} className="cursor-pointer">
                                 <div className="flex items-center space-x-2">
                                   <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
-                                  <span>{token.symbol} - {token.name}</span>
+                                    <span>{token.symbol}/USDC - {token.name}</span>
                                 </div>
                             </SelectItem>
                           ))}
+                          </SelectGroup>
+                          <SelectSeparator />
+                          <SelectGroup>
+                            <SelectLabel>Perps</SelectLabel>
+                            {tokens
+                              .filter(token => token.symbol == 'USOL' || token.symbol == 'UBTC' || token.symbol == 'UETH' || token.symbol == 'HYPE')
+                              .map((token) => (
+                                <SelectItem key={`perp-${token.symbol}`} value={`${token.symbol}-USDC`} className="cursor-pointer">
+                                  <div className="flex items-center space-x-2">
+                                    <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
+                                    <span>{token.symbol}-USDC - {token.name}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1366,31 +1431,220 @@ export default function TradingPlatform() {
                     {/* Source Section */}
                     <div className="pb-3 border-b border-dotted border-border/40">
                       <div className="space-y-3">
-                        <Label className="text-foreground font-semibold">Source</Label>
-                        <div className="grid grid-cols-2 gap-3">
-                          {[
-                            { value: "open", label: "Open" },
-                            { value: "high", label: "High" },
-                            { value: "low", label: "Low" },
-                            { value: "close", label: "Close" },
-                            { value: "volume", label: "Volume" },
-                            { value: "trades", label: "Trades" }
-                          ].map((src) => (
+                        <Label className="text-foreground font-semibold">First Source</Label>
+                        {/* Two dropdown menus: Candlestick and Indicators */}
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* Candlestick Dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
                             <button
-                              key={src.value}
-                              onClick={() => setCondition(src.value)}
-                              className={`px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer ${
-                                condition === src.value
-                                  ? "bg-primary text-primary-foreground shadow-sm"
-                                  : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border border-border/50"
-                              }`}
-                            >
-                              {src.label}
+                                  className={`flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium transition-colors ${
+                                    firstSourceType === "candlestick"
+                                      ? "bg-primary text-primary-foreground border-primary/50"
+                                      : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border-border/50"
+                                  }`}
+                                >
+                                  <img src="/ohlcv.png" alt="logo" className="w-12 h-12" />
+                                  <span>Candlestick</span>
                             </button>
-                          ))}
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="min-w-[14rem]">
+                              {["open","high","low","close","volume"].map((src) => (
+                                <DropdownMenuItem key={`candles-${src}`} onClick={() => {
+                                  setCondition(src);
+                                  setFirstSourceType("candlestick");
+                                }}>
+                                  <img src="/ohlcv.png" alt="logo" className="w-4 h-4" />
+                                  {src.charAt(0).toUpperCase() + src.slice(1)}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+
+                          {/* Indicators Dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                                              <button
+                                  className={`flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium transition-colors ${
+                                    firstSourceType === "indicators"
+                                      ? "bg-primary text-primary-foreground border-primary/50"
+                                      : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border-border/50"
+                                  }`}
+                                >
+                                  <img src="/indicators.png" alt="logo" className="w-12 h-12" />
+                                  <span>Indicators</span>
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="min-w-[14rem]">
+                                                              {[
+                                  { key: "sma", label: "SMA" },
+                                  { key: "ema", label: "EMA" },
+                                  { key: "rsi", label: "RSI" },
+                                  { key: "bb_lower", label: "BB.lower" },
+                                  { key: "bb_mid", label: "BB.mid" },
+                                  { key: "bb_upper", label: "BB.upper" },
+                                ].map((ind) => (
+                                <DropdownMenuItem
+                                  key={`ind-${ind.key}`}
+                                  className="flex items-center justify-between gap-2"
+                                  onSelect={() => {
+                                    setCondition(ind.key);
+                                    setFirstSourceType("indicators");
+                                    // Recreate widget with chosen study (TradingView's public tv.js lacks createStudy in v2)
+                                    const length = indicatorParams[ind.key] ?? 14;
+                                    const studyMap: any = {
+                                      sma: { id: 'MASimple@tv-basicstudies', inputs: { length } },
+                                      ema: { id: 'MAExp@tv-basicstudies',"version": 60, inputs: { length } },
+                                      rsi: { id: 'RSI@tv-basicstudies', inputs: { length } },
+                                      bb_lower: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'lower' } },
+                                      bb_mid: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'basis' } },
+                                      bb_upper: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'upper' } },
+                                    };
+                                    const selected = studyMap[ind.key];
+                                    const container = 'ohlcv_tradingview_chart';
+                                    const currentSymbol = (() => {
+                                      try {
+                                        return tvWidgetRef.current?.activeChart?.().symbol?.() || tvWidgetRef.current?.symbol?.();
+                                      } catch { return undefined; }
+                                    })();
+                                    const getIntervalSafe = (tf: string) => {
+                                      const map: any = { '1m':'1','5m':'5','15m':'15','1h':'60','4h':'240','12h':'720','1d':'1D','1w':'1W' };
+                                      return map[tf] || '60';
+                                    }
+                                    const currentInterval = (() => {
+                                      try {
+                                        return tvWidgetRef.current?.activeChart?.().resolution?.() || getIntervalSafe(timeframe || '1h');
+                                      } catch { return getIntervalSafe(timeframe || '1h'); }
+                                    })();
+                                    // re-init widget with same symbol/interval and selected study
+                                    const containerEl = document.getElementById(container);
+                                    if (containerEl) containerEl.innerHTML = '';
+                                    new (window as any).TradingView.widget({
+                                      autosize: true,
+                                      symbol: currentSymbol || (()=>{ const isSpot=(triggerToken||'').includes('/USDC'); const isPerp=(triggerToken||'').includes('-USDC'); const base=isSpot?(triggerToken||'HYPE').split('/')[0]:isPerp?(triggerToken||'HYPE').split('-')[0]:(triggerToken||'HYPE'); const perps:{[k:string]:string}={HYPE:'BYBIT:HYPEUSDT.P',UETH:'BYBIT:ETHUSD.P',UBTC:'BYBIT:BTCUSD.P',USOL:'BYBIT:SOLUSD.P',UFART:'BYBIT:FARTCOINUSDT.P'}; const spot:{[k:string]:string}={HYPE:'BYBIT:HYPEUSDT',UETH:'BYBIT:ETHUSDT',UBTC:'BYBIT:BTCUSDT',USOL:'BYBIT:SOLUSDT',JEF:'BYBIT:JEFUSDT'}; if(isPerp){return perps[base]||`BYBIT:${base}USDT.P`;} if(isSpot){return spot[base]||`BYBIT:${base}USDT`;} return perps[base]||spot[base]||`BYBIT:${base}USDT`; })(),
+                                      interval: currentInterval,
+                                      timezone: 'Etc/UTC',
+                                      theme: (resolvedTheme === 'light') ? 'light' : 'dark',
+                                      style: '1',
+                                      locale: 'en',
+                                      toolbar_bg: (resolvedTheme === 'light') ? '#ffffff' : '#0b0b0b',
+                                      enable_publishing: false,
+                                      allow_symbol_change: true,
+                                      container_id: container,
+                                      width: '100%',
+                                      height: '500',
+                                      studies: selected ? [selected] : []
+                                    });
+                                  }}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <img src="/indicators.png" alt="logo" className="w-4 h-4" />
+                                    {ind.label}
+                                  </span>
+                                  <button
+                                    className="p-1 rounded-md hover:bg-accent cursor-pointer"
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenParamFor(ind.key); }}
+                                  >
+                                    <img src="/settings.png" alt="settings" className="w-4 h-4" />
+                                  </button>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                     </div>
+
+
+
+                    {/* Indicator Settings Dialog */}
+                    <Dialog open={openParamFor !== null} onOpenChange={(open) => setOpenParamFor(open ? openParamFor : null)}>
+                      <DialogContent className="sm:max-w-sm">
+                        <DialogHeader>
+                          <DialogTitle>{openParamFor ? openParamFor.toUpperCase() + ' Settings' : 'Settings'}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3">
+                          <label className="text-sm">Lookback window</label>
+                          <input
+                            type="number"
+                            min={1}
+                            className="w-full px-3 py-2 rounded-md border bg-background"
+                            value={indicatorParams[openParamFor || ''] ?? 14}
+                            onChange={(e) => {
+                              const newValue = Number(e.target.value);
+                              setIndicatorParams(prev => ({ ...prev, [openParamFor || '']: newValue }));
+                            }}
+                          />
+                          <div className="text-xs text-muted-foreground">Provide the number of periods for {openParamFor ? openParamFor.toUpperCase() : 'indicator'}.</div>
+                          <div className="flex gap-2 pt-2">
+                            <Button 
+                              variant="outline" 
+                              onClick={() => setOpenParamFor(null)}
+                              className="flex-1"
+                            >
+                              Cancel
+                            </Button>
+                            <Button 
+                              onClick={() => {
+                                // Update chart with new lookback if this indicator is currently active
+                                if (openParamFor && condition === openParamFor) {
+                                  const length = indicatorParams[openParamFor] ?? 14;
+                                  const studyMap: any = {
+                                    sma: { id: 'MASimple@tv-basicstudies', inputs: { length } },
+                                    ema: { id: 'MAExp@tv-basicstudies', "version": 60, inputs: { length } },
+                                    rsi: { id: 'RSI@tv-basicstudies', inputs: { length } },
+                                    bb_lower: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'lower' } },
+                                    bb_mid: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'basis' } },
+                                    bb_upper: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'upper' } },
+                                  };
+                                  const selected = studyMap[openParamFor];
+                                  if (selected) {
+                                    const container = 'ohlcv_tradingview_chart';
+                                    const currentSymbol = (() => {
+                                      try {
+                                        return tvWidgetRef.current?.activeChart?.().symbol?.() || tvWidgetRef.current?.symbol?.();
+                                      } catch { return undefined; }
+                                    })();
+                                    const getIntervalSafe = (tf: string) => {
+                                      const map: any = { '1m':'1','5m':'5','15m':'15','1h':'60','4h':'240','12h':'720','1d':'1D','1w':'1W' };
+                                      return map[tf] || '60';
+                                    }
+                                    const currentInterval = (() => {
+                                      try {
+                                        return tvWidgetRef.current?.activeChart?.().resolution?.() || getIntervalSafe(timeframe || '1h');
+                                      } catch { return getIntervalSafe(timeframe || '1h'); }
+                                    })();
+                                    // re-init widget with same symbol/interval and updated study
+                                    const containerEl = document.getElementById(container);
+                                    if (containerEl) containerEl.innerHTML = '';
+                                    new (window as any).TradingView.widget({
+                                      autosize: true,
+                                      symbol: currentSymbol || (()=>{ const isSpot=(triggerToken||'').includes('/USDC'); const isPerp=(triggerToken||'').includes('-USDC'); const base=isSpot?(triggerToken||'HYPE').split('/')[0]:isPerp?(triggerToken||'HYPE').split('-')[0]:(triggerToken||'HYPE'); const perps:{[k:string]:string}={HYPE:'BYBIT:HYPEUSDT.P',UETH:'BYBIT:ETHUSD.P',UBTC:'BYBIT:BTCUSD.P',USOL:'BYBIT:SOLUSD.P',UFART:'BYBIT:FARTCOINUSDT.P'}; const spot:{[k:string]:string}={HYPE:'BYBIT:HYPEUSDT',UETH:'BYBIT:ETHUSDT',UBTC:'BYBIT:BTCUSDT',USOL:'BYBIT:SOLUSDT',JEF:'BYBIT:JEFUSDT'}; if(isPerp){return perps[base]||`BYBIT:${base}USDT.P`;} if(isSpot){return spot[base]||`BYBIT:${base}USDT`;} return perps[base]||spot[base]||`BYBIT:${base}USDT`; })(),
+                                      interval: currentInterval,
+                                      timezone: 'Etc/UTC',
+                                      theme: (resolvedTheme === 'light') ? 'light' : 'dark',
+                                      style: '1',
+                                      locale: 'en',
+                                      toolbar_bg: (resolvedTheme === 'light') ? '#ffffff' : '#0b0b0b',
+                                      enable_publishing: false,
+                                      allow_symbol_change: true,
+                                      container_id: container,
+                                      width: '100%',
+                                      height: '500',
+                                      studies: [selected]
+                                    });
+                                  }
+                                }
+                                setOpenParamFor(null); // Close dialog after applying changes
+                              }}
+                              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                            >
+                              Confirm
+                            </Button>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
 
                     {/* Trigger When Section */}
                     <div className="pb-3 border-b border-dotted border-border/40">
@@ -1421,22 +1675,226 @@ export default function TradingPlatform() {
                       </div>
                     </div>
 
-                    {/* Target Value Section */}
-                    <div className="pb-0">
+                    {/* Second Source Section */}
+                    <div className="pb-3 border-b border-dotted border-border/40">
+                      <div className="space-y-3">
+                        <Label className="text-foreground font-semibold">Second Source</Label>
+                        <div className={`grid gap-4 ${["volume", "rsi"].includes(condition) ? "grid-cols-1" : "grid-cols-2"}`}>
+                          {/* Value Button - Transforms to input field */}
+                          <div className={`space-y-2 ${["volume", "rsi"].includes(condition) ? "col-span-1" : ""}`}>
+                            {!showValueInput ? (
+                              <button
+                                className={`flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium transition-colors ${
+                                  secondSourceType === "value"
+                                    ? "bg-primary text-primary-foreground border-primary/50"
+                                    : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border-border/50"
+                                }`}
+                                onClick={() => {
+                                  setShowValueInput(true);
+                                  setSecondSourceType("value");
+                                }}
+                              >
+                                <img src="/123.png" alt="logo" className="w-12 h-12" />
+                                <span>{secondSourceValue ? secondSourceValue : "Value"}</span>
+                              </button>
+                            ) : (
+                              <div className="flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium bg-background border-primary/50">
+                                <img src="/123.png" alt="logo" className="w-8 h-8" />
+                                <Input
+                                  type="number"
+                                  placeholder="Enter value"
+                                  className="w-20 h-8 text-center border-0 bg-transparent focus:ring-0 focus:border-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  value={secondSourceValue}
+                                  onChange={(e) => setSecondSourceValue(e.target.value)}
+                                  onBlur={() => setShowValueInput(false)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      setShowValueInput(false);
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => setShowValueInput(false)}
+                                  className="text-muted-foreground hover:text-foreground p-1"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Indicators Button - Hidden when Source One is Volume or RSI */}
+                          {!["volume", "rsi"].includes(condition) && (
+                            <div className="space-y-2">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    className={`flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium transition-colors ${
+                                      secondSourceType === "indicators"
+                                        ? "bg-primary text-primary-foreground border-primary/50"
+                                        : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border-border/50"
+                                    }`}
+                                  >
+                                    <img src="/indicators.png" alt="logo" className="w-12 h-12" />
+                                    <span>Indicators</span>
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="min-w-[14rem]">
+                                  {(() => {
+                                    // Different indicator options based on Source One selection
+                                    if (["sma", "ema"].includes(condition)) {
+                                      // If SMA/EMA is selected, allow EMA, SMA, BB.lower, BB.upper
+                                      return [
+                                        { key: "sma", label: "SMA" },
+                                        { key: "ema", label: "EMA" },
+                                        { key: "bb_lower", label: "BB.lower" },
+                                        { key: "bb_upper", label: "BB.upper" },
+                                      ];
+                                    } else if (["bb_lower", "bb_mid", "bb_upper"].includes(condition)) {
+                                      // If BB components are selected, allow only SMA, EMA
+                                      return [
+                                        { key: "sma", label: "SMA" },
+                                        { key: "ema", label: "EMA" },
+                                      ];
+                                    } else {
+                                      // Default: show all indicators (for candlestick selections)
+                                      return [
+                                        { key: "sma", label: "SMA" },
+                                        { key: "ema", label: "EMA" },
+                                        { key: "bb_lower", label: "BB.lower" },
+                                        { key: "bb_mid", label: "BB.mid" },
+                                        { key: "bb_upper", label: "BB.upper" },
+                                      ];
+                                    }
+                                  })().map((ind) => (
+                                    <DropdownMenuItem
+                                      key={`ind-${ind.key}`}
+                                      className="flex items-center justify-between gap-2"
+                                      onSelect={() => {
+                                        setCondition(ind.key);
+                                        setSecondSourceType("indicators");
+                                        // Clear value when selecting indicators
+                                        setSecondSourceValue("");
+                                        setShowValueInput(false);
+                                        // No chart reloading - just set the condition
+                                      }}
+                                    >
+                                      <span className="flex items-center gap-2">
+                                        <img src="/indicators.png" alt="logo" className="w-4 h-4" />
+                                        {ind.label}
+                                      </span>
+                                      <button
+                                        className="p-1 rounded-md hover:bg-accent cursor-pointer"
+                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenParamFor(ind.key); }}
+                                      >
+                                        <img src="/settings.png" alt="settings" className="w-4 h-4" />
+                                      </button>
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Cooldown Section */}
+                    <div className="pb-2">
                       <div className="flex items-center justify-between">
-                        <Label className="text-foreground font-semibold">Target Value</Label>
+                        <div className="flex items-center gap-2">
+                          <div
+                            onClick={() => setCooldownActive(!cooldownActive)}
+                            className={`w-4 h-4 rounded-full border-2 cursor-pointer transition-all duration-200 ${
+                              cooldownActive
+                                ? "bg-primary border-primary"
+                                : "bg-transparent border-muted-foreground/30 hover:border-primary/50"
+                            }`}
+                          />
+                          <Label className={`font-semibold transition-colors ${cooldownActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            Trigger Delay
+                          </Label>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="w-4 h-4 rounded-full bg-muted-foreground/20 flex items-center justify-center cursor-help">
+                                <span className="text-xs text-muted-foreground">?</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Wait {cooldownValue || 'n'} bars after condition is true before executing swap.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                         <Input
-                          placeholder={
-                            condition === "volume" 
-                              ? "Enter volume in $" 
-                              : condition === "trades" 
-                                ? "Enter number of trades"
-                                : "Enter price in $"
-                          }
-                          className="w-1/2 border-border/50 focus:ring-primary/20"
-                          value={targetValue}
-                          onChange={(e) => setTargetValue(e.target.value)}
+                          placeholder="Enter cooldown period"
+                          className={`w-32 border-border/50 focus:ring-primary/20 transition-all ${
+                            cooldownActive 
+                              ? 'bg-background text-foreground' 
+                              : 'bg-muted/50 text-muted-foreground cursor-not-allowed'
+                          }`}
+                          value={cooldownValue}
+                          onChange={(e) => setCooldownValue(e.target.value)}
+                          disabled={!cooldownActive}
                         />
+                      </div>
+                    </div>
+
+                    {/* Chained Confirmation Section */}
+                    <div className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div
+                            onClick={() => setChainedConfirmation(!chainedConfirmation)}
+                            className={`w-4 h-4 rounded-full border-2 cursor-pointer transition-all duration-200 ${
+                              chainedConfirmation
+                                ? "bg-primary border-primary"
+                                : "bg-transparent border-muted-foreground/30 hover:border-primary/50"
+                            }`}
+                          />
+                          <Label className={`font-semibold transition-colors ${chainedConfirmation ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            Chained confirmation
+                          </Label>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="w-4 h-4 rounded-full bg-muted-foreground/20 flex items-center justify-center cursor-help">
+                                <span className="text-xs text-muted-foreground">?</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>If set, execute swap only if condition was true AND previous bar condition was also true.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Invalidation Halt Section */}
+                    <div className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div
+                            onClick={() => setInvalidationHaltActive(!invalidationHaltActive)}
+                            className={`w-4 h-4 rounded-full border-2 cursor-pointer transition-all duration-200 ${
+                              invalidationHaltActive
+                                ? "bg-primary border-primary"
+                                : "bg-transparent border-muted-foreground/30 hover:border-primary/50"
+                            }`}
+                          />
+                          <Label className={`font-semibold transition-colors ${invalidationHaltActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            Invalidation Halt
+                          </Label>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="w-4 h-4 rounded-full bg-muted-foreground/20 flex items-center justify-center cursor-help">
+                                <span className="text-xs text-muted-foreground">?</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Drop trigger if the negated condition gets validated.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1446,6 +1904,12 @@ export default function TradingPlatform() {
                     <div className="bg-card border border-border/50 p-4 rounded-lg">
                       <div id="ohlcv_tradingview_chart" style={{ width: '100%', height: '500px' }}></div>
                     </div>
+                    <Alert className="border-yellow-600/40 bg-yellow-500/5 text-yellow-500">
+                      <AlertTitle className="font-medium">TradingView limitation:</AlertTitle>
+                      <AlertDescription>
+                        Although Bybit data is used to display the chart, all triggers are based on data fetched from HyperCore.
+                      </AlertDescription>
+                    </Alert>
                   </div>
                 </div>
               )}
