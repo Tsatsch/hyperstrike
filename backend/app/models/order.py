@@ -25,19 +25,61 @@ class SwapData(BaseModel):
         return v
 
 
+
+class IndicatorParameters(BaseModel):
+    length: int
+    OHLC_source: str
+    std_dev: Optional[float] = None
+
+class FirstSource(BaseModel):
+    type: Literal["OHLCV", "indicators"]
+    source: Optional[str] = None
+    indicator: Optional[str] = None
+    parameters: Optional[IndicatorParameters] = None
+
+
+class SecondSource(BaseModel):
+    type: Literal["value","indicators"]
+    indicator: Optional[str] = None
+    parameters: Optional[IndicatorParameters] = None
+    value: Optional[float] = None
+
+
+
+
+class Cooldown(BaseModel):
+    active: Optional[bool] = False
+    value: Optional[int] = None
+
+class ChainedConfirmation(BaseModel):
+    active: Optional[bool] = False
+    
+class InvalidationHalt(BaseModel):
+    active: Optional[bool] = False
+
+
+
+
+
+
 class OhlcvTriggerData(BaseModel):
     pair: str
     timeframe: str
-    source: str
-    trigger: str
-    triggerValue: str
-    lifetime: str = Field(..., description="How long the order should live (e.g., '1h', '24h', '7d')")
+    first_source: FirstSource
+    triggerWhen: str #above, below
+    second_source: SecondSource
+    cooldown: Cooldown
+    chained_confirmation: ChainedConfirmation
+    invalidation_halt: InvalidationHalt
+    lifetime: Optional[str] = None
 
 
 class OrderData(BaseModel):
     type: str  # e.g. "ohlcvTrigger", "walletActivity"
     ohlcvTrigger: Optional[OhlcvTriggerData] = None
     walletActivity: Optional[Dict[str, Any]] = None
+
+    #to add support for other types of orders
 
 
 class OrderCreateRequest(BaseModel):

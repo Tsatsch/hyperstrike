@@ -91,8 +91,8 @@ class RollingRSI:
     def __init__(self, window: int = 14):
         self.window = window
         self.prev_close: Optional[float] = None
-        self.gains: List[float] = []  # Collect first window of gains
-        self.losses: List[float] = []  # Collect first window of losses
+        self.gains: List[float] = []  
+        self.losses: List[float] = []  
         self.avg_gain: Optional[float] = None
         self.avg_loss: Optional[float] = None
 
@@ -118,7 +118,7 @@ class RollingRSI:
                 
             return None
         else:
-            # Use Wilder's smoothing
+
             self.avg_gain = (self.avg_gain * (self.window - 1) + gain) / self.window
             self.avg_loss = (self.avg_loss * (self.window - 1) + loss) / self.window
 
@@ -131,43 +131,118 @@ class RollingRSI:
 
 class RollingBollinger:
     """
-    O(1) rolling Bollinger Bands over N closes using running sum and sumsq.
+    O(1) rolling Bollinger Bands over N closes using different moving average types and OHLC sources.
     Returns (mid, upper, lower) where:
-      mid   = SMA(N)
-      upper = SMA + k * std
-      lower = SMA - k * std
+      mid   = MA(N) [SMA or EMA based on ma_type] of selected OHLC source
+      upper = MA + k * std
+      lower = MA - k * std
     """
-    def __init__(self, window: int, k: float = 2.0):
-        if window <= 1:
-            raise ValueError("Bollinger window must be > 1")
-        self.window = window
+    def __init__(self, length: int, k: float = 2.0, ma_type: str = "sma", source: str = "close"):
+        if length <= 1:
+            raise ValueError("Bollinger length must be > 1")
+        if ma_type not in ["sma", "ema"]:
+            raise ValueError("ma_type must be 'sma' or 'ema'")
+        if source not in ["open", "high", "low", "close", "hl2", "hlc3", "ohlc4"]:
+            raise ValueError("source must be one of: open, high, low, close, hl2, hlc3, ohlc4")
+        
+        self.length = length
         self.k = k
-        self.values: Deque[float] = deque(maxlen=window)
-        self._sum = 0.0
-        self._sumsq = 0.0
+        self.ma_type = ma_type
+        self.source = source
+        
+        if ma_type == "sma":
+            self.values: Deque[float] = deque(maxlen=length)
+            self._sum = 0.0
+            self._sumsq = 0.0
+        else:  # ema
 
-    def push(self, x: float) -> Optional[Tuple[float, float, float]]:
-        # remove oldest if at capacity
-        if len(self.values) == self.window:
-            oldest = self.values[0]
-            self._sum -= oldest
-            self._sumsq -= oldest * oldest
+            self.alpha = 2.0 / (length + 1)
+            self._ema: Optional[float] = None
+            self.values: Deque[float] = deque(maxlen=length)
+            self._sumsq = 0.0
 
-        self.values.append(x)
-        self._sum += x
-        self._sumsq += x * x
+    def _get_source_value(self, candle: dict) -> float:
+        """Extract the appropriate value from candle based on source."""
+        if self.source == "open":
+            return float(candle.get("o", candle.get("open", 0)))
+        elif self.source == "high":
+            return float(candle.get("h", candle.get("high", 0)))
+        elif self.source == "low":
+            return float(candle.get("l", candle.get("low", 0)))
+        elif self.source == "close":
+            return float(candle.get("c", candle.get("close", 0)))
+        elif self.source == "hl2":
+            high = float(candle.get("h", candle.get("high", 0)))
+            low = float(candle.get("l", candle.get("low", 0)))
+            return (high + low) / 2
+        elif self.source == "hlc3":
+            high = float(candle.get("h", candle.get("high", 0)))
+            low = float(candle.get("l", candle.get("low", 0)))
+            close = float(candle.get("c", candle.get("close", 0)))
+            return (high + low + close) / 3
+        elif self.source == "ohlc4":
+            open_val = float(candle.get("o", candle.get("open", 0)))
+            high = float(candle.get("h", candle.get("high", 0)))
+            low = float(candle.get("l", candle.get("low", 0)))
+            close = float(candle.get("c", candle.get("close", 0)))
+            return (open_val + high + low + close) / 4
+        else:
+            return float(candle.get("c", candle.get("close", 0)))
 
-        n = len(self.values)
-        if n < self.window:
-            return None
+    def push(self, candle: dict) -> Optional[Tuple[float, float, float]]:
+        """Push a candle and return (mid, upper, lower) bands."""
+        x = self._get_source_value(candle)
+        
+        if self.ma_type == "sma":
+            if len(self.values) == self.length:
+                oldest = self.values[0]
+                self._sum -= oldest
+                self._sumsq -= oldest * oldest
 
-        mean = self._sum / n
-        # Numerical guard
-        variance = max((self._sumsq / n) - (mean * mean), 0.0)
-        std = math.sqrt(variance)
-        upper = mean + self.k * std
-        lower = mean - self.k * std
-        return (mean, upper, lower)
+            self.values.append(x)
+            self._sum += x
+            self._sumsq += x * x
+
+            n = len(self.values)
+            if n < self.length:
+                return None
+
+            mean = self._sum / n
+            variance = (self._sumsq / n) - (mean * mean)
+            std = math.sqrt(max(variance, 0.0)) 
+            upper = mean + self.k * std
+            lower = mean - self.k * std
+            return (mean, upper, lower)
+        
+        else:  # ema
+            
+            if len(self.values) == self.length:
+                oldest = self.values[0]
+                self._sumsq -= oldest * oldest
+
+            self.values.append(x)
+            self._sumsq += x * x
+
+            
+            if self._ema is None:
+                self._ema = x
+            else:
+                self._ema = self.alpha * x + (1 - self.alpha) * self._ema
+
+            n = len(self.values)
+            if n < self.length:
+                return None
+
+            
+            variance_sum = 0.0
+            for val in self.values:
+                variance_sum += (val - self._ema) ** 2
+            variance = variance_sum / n
+            std = math.sqrt(max(variance, 0.0))  
+            
+            upper = self._ema + self.k * std
+            lower = self._ema - self.k * std
+            return (self._ema, upper, lower)
 from typing import Optional
 
 class RollingEMA:
@@ -198,13 +273,15 @@ class CandleMonitor:
     Monitors one (symbol, interval) stream, keeps rolling SMA on closed candles,
     and calls a user hook on each closed candle.
     """
-    def __init__(self, symbol: Symbol, interval: Interval, sma_windows: List[int], vwap_windows: List[int], rsi_windows: List[int], bollinger_cfg: List[Tuple[int, float]], ema_windows: List[int]):
+    def __init__(self, symbol: Symbol, interval: Interval, sma_windows: List[int], vwap_windows: List[int], rsi_windows: List[int], bollinger_cfg: List[Tuple[int, float, str, str]], ema_windows: List[int]):
         self.symbol = symbol
         self.interval = interval
         self.sma = {w: RollingSMA(w) for w in sma_windows}
         self.vwap = {w: RollingVWAP(w) for w in (vwap_windows or [])}
         self.rsi = {w: RollingRSI(w) for w in (rsi_windows or [])}
-        self.bbands = {(w, k): RollingBollinger(w, k) for w, k in (bollinger_cfg or [])}
+        # Bollinger Bands: (length, k_multiplier, ma_type, source)
+        # When any band is selected, all three (upper, mid, lower) are automatically set
+        self.bbands = {(length, k, ma, source): RollingBollinger(length, k, ma, source) for length, k, ma, source in (bollinger_cfg or [])}
         self.ema = {w: RollingEMA(w) for w in (ema_windows or [])}
         self.last_processed_T: int = 0  # end time (ms) of last processed candle
         self._latest_candle: Optional[dict] = None  # most recent WS snapshot for current (open) candle
@@ -281,8 +358,8 @@ class CandleMonitor:
                     vwap.push(tp, volume)
                 for w, rsi in self.rsi.items():
                     rsi.push(close_f)
-                for w, bb in self.bbands.items():
-                    bb.push(close_f)
+                for (length, k, ma, source), bb in self.bbands.items():
+                    bb.push(c) # Pass the entire candle to the Bollinger Bands
                 for w, ema in self.ema.items():
                     ema.push(close_f)
                 self.last_processed_T = max(self.last_processed_T, int(c["T"]))
@@ -314,13 +391,13 @@ class CandleMonitor:
             for w, rsi in self.rsi.items():
                 rsis[f"rsi_{w}"] = rsi.push(close_f)
             bbands = {}
-            for (w, k), bb in self.bbands.items():
-                res = bb.push(close_f)
+            for (length, k, ma, source), bb in self.bbands.items():
+                res = bb.push(c) # Pass the entire candle to the Bollinger Bands
                 if res is not None:
                     mid, upper, lower = res
-                    bbands[f"bb_{w}_{k}_mid"] = mid
-                    bbands[f"bb_{w}_{k}_upper"] = upper
-                    bbands[f"bb_{w}_{k}_lower"] = lower
+                    bbands[f"bb_{length}_{k}_{ma}_{source}_mid"] = mid
+                    bbands[f"bb_{length}_{k}_{ma}_{source}_upper"] = upper
+                    bbands[f"bb_{length}_{k}_{ma}_{source}_lower"] = lower
             emas = {}
             for w, ema in self.ema.items():
                 emas[f"ema_{w}"] = ema.push(close_f)
@@ -421,19 +498,25 @@ async def run_stream(
     history_lookback_ms: int = 24 * 60 * 60 * 1000,  # 24h
     vwap_windows: List[int] = [210, 400],  
     rsi_windows: List[int] = [14, 21],  
-    bollinger_cfg: List[Tuple[int, float]] = [(20, 2.0), (50, 2.0)],  #add/remove windows as you like
+    bollinger_cfg: List[Tuple[int, float, str, str]] = [(20, 2.0, "sma", "close"), (50, 2.0, "ema", "close")],  #add/remove windows as you like
+    # Bollinger Bands config: (length, k_multiplier, ma_type, source)
+    # ma_type can be "sma" (Simple Moving Average) or "ema" (Exponential Moving Average)
+    # source can be "open", "high", "low", "close", "hl2", "hlc3", "ohlc4"
+    # Examples:
+    # - (20, 2.0, "sma", "close") = 20-period BB with SMA and k=2.0 using close prices
+    # - (50, 2.5, "ema", "hlc3") = 50-period BB with EMA and k=2.5 using (high+low+close)/3
     ema_windows: List[int] = [50, 200],  #add/remove windows as you like
 ) -> None:
     # Ensure symbol is canonical for HL
     canonical_symbol = canonicalize_symbol(symbol)
     if canonical_symbol != symbol:
         logger.info(f"Using canonical symbol {canonical_symbol} for {symbol}/{interval}")
-    monitor = CandleMonitor(canonical_symbol, interval, sma_windows, vwap_windows, rsi_windows, bollinger_cfg)
+    monitor = CandleMonitor(canonical_symbol, interval, sma_windows, vwap_windows, rsi_windows, bollinger_cfg, ema_windows)
     lookback_ms = CandleMonitor.interval_to_ms(interval)*CANDLES_TO_FETCH_AT_START
     
     logger.info(f"Starting stream for {canonical_symbol}/{interval}")
     
-    # Use a single HTTP session for REST
+    
     async with aiohttp.ClientSession() as session:
 
         try:
@@ -455,13 +538,13 @@ async def run_stream(
                 await ws.send(json.dumps(sub))
                 logger.info(f"Subscribed to {canonical_symbol}/{interval}")
 
-                # After subscribing, try finalizing the last open candle periodically
+                
                 async def finalizer():
                     while True:
                         closed = monitor._maybe_finalize_current()
                         if closed:
                             await monitor.on_closed_candle(closed)
-                        await asyncio.sleep(0.5)  # lightweight watchdog
+                        await asyncio.sleep(0.5)  
 
                 finalizer_task = asyncio.create_task(finalizer())
 
@@ -473,9 +556,9 @@ async def run_stream(
         except Exception as e:
             logger.error(f"[WS] error for {canonical_symbol}/{interval}: {type(e).__name__}: {e} — reconnecting soon...")
             await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 30.0)  # exponential backoff capped at 30s
+            backoff = min(backoff * 2, 30.0)  
         else:
-            backoff = 1.0  # reset backoff on clean exit
+            backoff = 1.0  
 
 if __name__ == "__main__":
     asyncio.run(run_stream(
@@ -484,6 +567,6 @@ if __name__ == "__main__":
         sma_windows=[50, 200],  # add/remove windows as you like
         vwap_windows=[210, 400],  #dd/remove windows as you like
         rsi_windows=[14, 21],  #add/remove windows as you like
-        bollinger_cfg=[(20, 2.0), (50, 2.0)],  #add/remove windows as you like
+        bollinger_cfg=[(20, 2.0, "sma", "close"), (50, 2.0, "ema", "close")],  # Example: 20-period SMA BB and 50-period EMA BB
         ema_windows=[50, 200],  #add/remove windows as you like
     ))

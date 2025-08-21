@@ -122,13 +122,32 @@ export default function TradingPlatform() {
   const [toPercentages, setToPercentages] = useState<Record<string, string>>({})
   const [triggerToken, setTriggerToken] = useState<string>("");
   const [timeframe, setTimeframe] = useState<string>("");
-  const [condition, setCondition] = useState<string>("");
+  const [source, setSource] = useState<string>("");
   const [triggerWhen, setTriggerWhen] = useState<string>("above");
   const [targetValue, setTargetValue] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
   const [showSuccessPage, setShowSuccessPage] = useState(false);
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
-  const [indicatorParams, setIndicatorParams] = useState<{ [key: string]: number }>({
+  const [indicatorParams, setIndicatorParams] = useState<{ [key: string]: number | string }>({
+    // SMA parameters
+    sma_length: 14,
+    sma_source: 'close',
+    
+    // EMA parameters
+    ema_length: 14,
+    ema_source: 'close',
+    
+    // RSI parameters
+    rsi_length: 14,
+    rsi_source: 'close',
+    
+    // BB parameters (shared across all BB lines)
+    bb_length: 20,
+    bb_ma_type: 'sma',
+    bb_source: 'close',
+    bb_std: 2,
+    
+    // Legacy keys for backward compatibility
     sma: 14,
     ema: 14,
     rsi: 14,
@@ -669,6 +688,44 @@ export default function TradingPlatform() {
 
       const primaryOutputToken = selectedOutputs[0];
 
+      // Helper function to determine source type
+      const getSourceType = (sourceValue: string): "OHLCV" | "indicators" => {
+        if (["open", "high", "low", "close", "volume"].includes(sourceValue)) {
+          return "OHLCV";
+        }
+        return "indicators";
+      };
+
+      // Helper function to get indicator parameters
+      const getIndicatorParameters = (indicatorKey: string) => {
+        if (indicatorKey === "sma") {
+          return {
+            length: indicatorParams.sma_length,
+            OHLC_source: indicatorParams.sma_source,
+            std_dev: undefined
+          };
+        } else if (indicatorKey === "ema") {
+          return {
+            length: indicatorParams.ema_length,
+            OHLC_source: indicatorParams.ema_source,
+            std_dev: undefined
+          };
+        } else if (indicatorKey === "rsi") {
+          return {
+            length: indicatorParams.rsi_length,
+            OHLC_source: indicatorParams.rsi_source,
+            std_dev: undefined
+          };
+        } else if (indicatorKey.startsWith("bb_")) {
+          return {
+            length: indicatorParams.bb_length,
+            OHLC_source: indicatorParams.bb_source,
+            std_dev: indicatorParams.bb_std
+          };
+        }
+        return undefined;
+      };
+
       const orderPayload = {
         platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
         wallet: '0x0000000000000000000000000000000000000000',
@@ -685,9 +742,29 @@ export default function TradingPlatform() {
           ohlcvTrigger: {
             pair: triggerToken || 'HYPE',
             timeframe: timeframe || '1h',
-            source: condition || 'close',
-            trigger: triggerWhen || 'above',
-            triggerValue: targetValue || '0',
+            firstSource: {
+              type: getSourceType(source),
+              source: getSourceType(source) === "OHLCV" ? source : undefined,
+              indicator: getSourceType(source) === "indicators" ? source : undefined,
+              parameters: getSourceType(source) === "indicators" ? getIndicatorParameters(source) : undefined,
+            },
+            triggerWhen: triggerWhen || 'above',
+            secondSource: {
+              type: secondSourceType === "value" ? "value" : "indicators",
+              value: secondSourceType === "value" ? Number(secondSourceValue) : undefined,
+              indicator: secondSourceType === "indicators" ? source : undefined,
+              parameters: secondSourceType === "indicators" ? getIndicatorParameters(source) : undefined,
+            },
+            cooldown: {
+              active: cooldownActive,
+              value: cooldownActive ? Number(cooldownValue) : null,
+            },
+            chainedConfirmation: {
+              active: chainedConfirmation,
+            },
+            invalidationHalt: {
+              active: invalidationHaltActive,
+            },
             lifetime: orderLifetime || '24h',
           },
           walletActivity: null,
@@ -1431,28 +1508,28 @@ export default function TradingPlatform() {
                     {/* Source Section */}
                     <div className="pb-3 border-b border-dotted border-border/40">
                       <div className="space-y-3">
-                        <Label className="text-foreground font-semibold">First Source</Label>
-                        {/* Two dropdown menus: Candlestick and Indicators */}
+                        <Label className="text-foreground font-semibold">Source</Label>
+                        {/* Two dropdown menus: OHLCV and Indicators */}
                         <div className="grid grid-cols-2 gap-4">
-                          {/* Candlestick Dropdown */}
+                          {/* OHLCV Dropdown */}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                             <button
                                   className={`flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium transition-colors ${
-                                    firstSourceType === "candlestick"
+                                    firstSourceType === "ohlcv"
                                       ? "bg-primary text-primary-foreground border-primary/50"
                                       : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border-border/50"
                                   }`}
                                 >
                                   <img src="/ohlcv.png" alt="logo" className="w-12 h-12" />
-                                  <span>Candlestick</span>
+                                  <span>OHLCV</span>
                             </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="min-w-[14rem]">
                               {["open","high","low","close","volume"].map((src) => (
                                 <DropdownMenuItem key={`candles-${src}`} onClick={() => {
-                                  setCondition(src);
-                                  setFirstSourceType("candlestick");
+                                  setSource(src);
+                                  setFirstSourceType("ohlcv");
                                 }}>
                                   <img src="/ohlcv.png" alt="logo" className="w-4 h-4" />
                                   {src.charAt(0).toUpperCase() + src.slice(1)}
@@ -1488,17 +1565,64 @@ export default function TradingPlatform() {
                                   key={`ind-${ind.key}`}
                                   className="flex items-center justify-between gap-2"
                                   onSelect={() => {
-                                    setCondition(ind.key);
+                                    setSource(ind.key);
                                     setFirstSourceType("indicators");
                                     // Recreate widget with chosen study (TradingView's public tv.js lacks createStudy in v2)
-                                    const length = indicatorParams[ind.key] ?? 14;
+                                    const length = (() => {
+                                      if (ind.key === 'sma') return indicatorParams.sma_length;
+                                      if (ind.key === 'ema') return indicatorParams.ema_length;
+                                      if (ind.key === 'rsi') return indicatorParams.rsi_length;
+                                      if (ind.key?.startsWith('bb_')) return indicatorParams.bb_length;
+                                      return 14;
+                                    })();
+                                    
                                     const studyMap: any = {
-                                      sma: { id: 'MASimple@tv-basicstudies', inputs: { length } },
-                                      ema: { id: 'MAExp@tv-basicstudies',"version": 60, inputs: { length } },
-                                      rsi: { id: 'RSI@tv-basicstudies', inputs: { length } },
-                                      bb_lower: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'lower' } },
-                                      bb_mid: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'basis' } },
-                                      bb_upper: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'upper' } },
+                                      sma: { 
+                                        id: 'MASimple@tv-basicstudies', 
+                                        inputs: { 
+                                          length,
+                                          source: indicatorParams.sma_source || 'close'
+                                        } 
+                                      },
+                                      ema: { 
+                                        id: 'MAExp@tv-basicstudies',
+                                        "version": 60, 
+                                        inputs: { 
+                                          length,
+                                          source: indicatorParams.ema_source || 'close'
+                                        } 
+                                      },
+                                      rsi: { 
+                                        id: 'RSI@tv-basicstudies', 
+                                        inputs: { 
+                                          length,
+                                          source: indicatorParams.rsi_source || 'close'
+                                        } 
+                                      },
+                                      bb_lower: { 
+                                        id: 'BB@tv-basicstudies', 
+                                        inputs: { 
+                                          length: indicatorParams.bb_length || 20, 
+                                          std: indicatorParams.bb_std || 2, 
+                                          source: 'lower'
+                                        } 
+                                      },
+                                      bb_mid: { 
+                                        id: 'BB@tv-basicstudies', 
+                                        inputs: { 
+                                          length: indicatorParams.bb_length || 20, 
+                                          std: indicatorParams.bb_std || 2, 
+                                          source: 'basis'
+                                        } 
+                                      },
+                                      bb_upper: { 
+                                        id: 'BB@tv-basicstudies', 
+                                        inputs: { 
+                                          length: indicatorParams.bb_length || 20, 
+                                          std: indicatorParams.bb_std || 2, 
+                                          source: 'upper'
+                                        } 
+                                      },
                                     };
                                     const selected = studyMap[ind.key];
                                     const container = 'ohlcv_tradingview_chart';
@@ -1564,18 +1688,121 @@ export default function TradingPlatform() {
                           <DialogTitle>{openParamFor ? openParamFor.toUpperCase() + ' Settings' : 'Settings'}</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-3">
-                          <label className="text-sm">Lookback window</label>
+                          {/* Length parameter for all indicators */}
+                          <label className="text-sm">Length</label>
                           <input
                             type="number"
                             min={1}
                             className="w-full px-3 py-2 rounded-md border bg-background"
-                            value={indicatorParams[openParamFor || ''] ?? 14}
+                            value={(() => {
+                              if (openParamFor?.startsWith('bb_')) return indicatorParams.bb_length;
+                              if (openParamFor === 'sma') return indicatorParams.sma_length;
+                              if (openParamFor === 'ema') return indicatorParams.ema_length;
+                              if (openParamFor === 'rsi') return indicatorParams.rsi_length;
+                              return 14;
+                            })()}
                             onChange={(e) => {
                               const newValue = Number(e.target.value);
-                              setIndicatorParams(prev => ({ ...prev, [openParamFor || '']: newValue }));
+                              if (openParamFor?.startsWith('bb_')) {
+                                setIndicatorParams(prev => ({ ...prev, bb_length: newValue }));
+                              } else if (openParamFor === 'sma') {
+                                setIndicatorParams(prev => ({ ...prev, sma_length: newValue }));
+                              } else if (openParamFor === 'ema') {
+                                setIndicatorParams(prev => ({ ...prev, ema_length: newValue }));
+                              } else if (openParamFor === 'rsi') {
+                                setIndicatorParams(prev => ({ ...prev, rsi_length: newValue }));
+                              }
                             }}
                           />
-                          <div className="text-xs text-muted-foreground">Provide the number of periods for {openParamFor ? openParamFor.toUpperCase() : 'indicator'}.</div>
+                          
+                          {/* OHLC Source parameter for SMA, EMA, RSI */}
+                          {(openParamFor === 'sma' || openParamFor === 'ema' || openParamFor === 'rsi') && (
+                            <>
+                              <label className="text-sm">OHLC Source</label>
+                              <Select 
+                                value={(() => {
+                                  if (openParamFor === 'sma') return String(indicatorParams.sma_source);
+                                  if (openParamFor === 'ema') return String(indicatorParams.ema_source);
+                                  if (openParamFor === 'rsi') return String(indicatorParams.rsi_source);
+                                  return 'close';
+                                })()}
+                                onValueChange={(value) => {
+                                  if (openParamFor === 'sma') {
+                                    setIndicatorParams(prev => ({ ...prev, sma_source: value }));
+                                  } else if (openParamFor === 'ema') {
+                                    setIndicatorParams(prev => ({ ...prev, ema_source: value }));
+                                  } else if (openParamFor === 'rsi') {
+                                    setIndicatorParams(prev => ({ ...prev, rsi_source: value }));
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select OHLC Source" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="open">Open</SelectItem>
+                                  <SelectItem value="high">High</SelectItem>
+                                  <SelectItem value="low">Low</SelectItem>
+                                  <SelectItem value="close">Close</SelectItem>
+                                  <SelectItem value="hl2">(High + Low) / 2</SelectItem>
+                                  <SelectItem value="hlc3">(High + Low + Close) / 3</SelectItem>
+                                  <SelectItem value="ohlc4">(Open + High + Low + Close) / 4</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </>
+                          )}
+                          
+                          {/* Bollinger Bands specific parameters */}
+                          {openParamFor?.startsWith('bb_') && (
+                            <>
+                              <label className="text-sm">OHLC Source</label>
+                              <Select 
+                                value={String(indicatorParams.bb_source)}
+                                onValueChange={(value) => {
+                                  setIndicatorParams(prev => ({ ...prev, bb_source: value }));
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select OHLC Source" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="open">Open</SelectItem>
+                                  <SelectItem value="high">High</SelectItem>
+                                  <SelectItem value="low">Low</SelectItem>
+                                  <SelectItem value="close">Close</SelectItem>
+                                  <SelectItem value="hl2">(High + Low) / 2</SelectItem>
+                                  <SelectItem value="hlc3">(High + Low + Close) / 3</SelectItem>
+                                  <SelectItem value="ohlc4">(Open + High + Low + Close) / 4</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              
+                              <label className="text-sm">Standard Deviation</label>
+                              <input
+                                type="number"
+                                min={0.1}
+                                step={0.1}
+                                className="w-full px-3 py-2 rounded-md border bg-background"
+                                value={indicatorParams.bb_std}
+                                onChange={(e) => {
+                                  const newValue = Number(e.target.value);
+                                  setIndicatorParams(prev => ({ ...prev, bb_std: newValue }));
+                                }}
+                              />
+                            </>
+                          )}
+                          
+                          <div className="text-xs text-muted-foreground">
+                            {openParamFor?.startsWith('bb_') 
+                              ? `Configure Bollinger Bands with ${indicatorParams.bb_source} source.`
+                              : `Configure ${openParamFor?.toUpperCase()} with ${(() => {
+                                  if (openParamFor === 'sma') return indicatorParams.sma_source;
+                                  if (openParamFor === 'ema') return indicatorParams.ema_source;
+                                  if (openParamFor === 'rsi') return indicatorParams.rsi_source;
+                                  return 'close';
+                                })()} source.`
+                            }
+                          </div>
+                          
                           <div className="flex gap-2 pt-2">
                             <Button 
                               variant="outline" 
@@ -1586,17 +1813,65 @@ export default function TradingPlatform() {
                             </Button>
                             <Button 
                               onClick={() => {
-                                // Update chart with new lookback if this indicator is currently active
-                                if (openParamFor && condition === openParamFor) {
-                                  const length = indicatorParams[openParamFor] ?? 14;
+                                // Update chart with new parameters if this indicator is currently active
+                                if (openParamFor && source === openParamFor) {
+                                  const length = (() => {
+                                    if (openParamFor?.startsWith('bb_')) return indicatorParams.bb_length;
+                                    if (openParamFor === 'sma') return indicatorParams.sma_length;
+                                    if (openParamFor === 'ema') return indicatorParams.ema_length;
+                                    if (openParamFor === 'rsi') return indicatorParams.rsi_length;
+                                    return 14;
+                                  })();
+                                  
                                   const studyMap: any = {
-                                    sma: { id: 'MASimple@tv-basicstudies', inputs: { length } },
-                                    ema: { id: 'MAExp@tv-basicstudies', "version": 60, inputs: { length } },
-                                    rsi: { id: 'RSI@tv-basicstudies', inputs: { length } },
-                                    bb_lower: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'lower' } },
-                                    bb_mid: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'basis' } },
-                                    bb_upper: { id: 'BB@tv-basicstudies', inputs: { length, std: 2, source: 'upper' } },
+                                    sma: { 
+                                      id: 'MASimple@tv-basicstudies', 
+                                      inputs: { 
+                                        length,
+                                        source: indicatorParams.sma_source || 'close'
+                                      } 
+                                    },
+                                    ema: { 
+                                      id: 'MAExp@tv-basicstudies', 
+                                      "version": 60, 
+                                      inputs: { 
+                                        length,
+                                        source: indicatorParams.ema_source || 'close'
+                                      } 
+                                    },
+                                    rsi: { 
+                                      id: 'RSI@tv-basicstudies', 
+                                      inputs: { 
+                                        length,
+                                        source: indicatorParams.rsi_source || 'close'
+                                      } 
+                                    },
+                                    bb_lower: { 
+                                      id: 'BB@tv-basicstudies', 
+                                      inputs: { 
+                                        length: indicatorParams.bb_length || 20, 
+                                        std: indicatorParams.bb_std || 2, 
+                                        source: 'lower'
+                                      } 
+                                    },
+                                    bb_mid: { 
+                                      id: 'BB@tv-basicstudies', 
+                                      inputs: { 
+                                        length: indicatorParams.bb_length || 20, 
+                                        std: indicatorParams.bb_std || 2, 
+                                        source: 'basis'
+                                      } 
+                                    },
+                                    bb_upper: { 
+                                      id: 'BB@tv-basicstudies', 
+                                      inputs: { 
+                                        length: indicatorParams.bb_length || 20, 
+                                        std: indicatorParams.bb_std || 2, 
+                                        source: 'upper'
+                                      } 
+                                    },
                                   };
+                                  
                                   const selected = studyMap[openParamFor];
                                   if (selected) {
                                     const container = 'ohlcv_tradingview_chart';
@@ -1679,9 +1954,9 @@ export default function TradingPlatform() {
                     <div className="pb-3 border-b border-dotted border-border/40">
                       <div className="space-y-3">
                         <Label className="text-foreground font-semibold">Second Source</Label>
-                        <div className={`grid gap-4 ${["volume", "rsi"].includes(condition) ? "grid-cols-1" : "grid-cols-2"}`}>
+                        <div className={`grid gap-4 ${["volume", "rsi"].includes(source) ? "grid-cols-1" : "grid-cols-2"}`}>
                           {/* Value Button - Transforms to input field */}
-                          <div className={`space-y-2 ${["volume", "rsi"].includes(condition) ? "col-span-1" : ""}`}>
+                          <div className={`space-y-2 ${["volume", "rsi"].includes(source) ? "col-span-1" : ""}`}>
                             {!showValueInput ? (
                               <button
                                 className={`flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium transition-colors ${
@@ -1694,12 +1969,10 @@ export default function TradingPlatform() {
                                   setSecondSourceType("value");
                                 }}
                               >
-                                <img src="/123.png" alt="logo" className="w-12 h-12" />
                                 <span>{secondSourceValue ? secondSourceValue : "Value"}</span>
                               </button>
                             ) : (
                               <div className="flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium bg-background border-primary/50">
-                                <img src="/123.png" alt="logo" className="w-8 h-8" />
                                 <Input
                                   type="number"
                                   placeholder="Enter value"
@@ -1725,7 +1998,7 @@ export default function TradingPlatform() {
                           </div>
 
                           {/* Indicators Button - Hidden when Source One is Volume or RSI */}
-                          {!["volume", "rsi"].includes(condition) && (
+                          {!["volume", "rsi"].includes(source) && (
                             <div className="space-y-2">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -1743,7 +2016,7 @@ export default function TradingPlatform() {
                                 <DropdownMenuContent className="min-w-[14rem]">
                                   {(() => {
                                     // Different indicator options based on Source One selection
-                                    if (["sma", "ema"].includes(condition)) {
+                                    if (["sma", "ema"].includes(source)) {
                                       // If SMA/EMA is selected, allow EMA, SMA, BB.lower, BB.upper
                                       return [
                                         { key: "sma", label: "SMA" },
@@ -1751,11 +2024,20 @@ export default function TradingPlatform() {
                                         { key: "bb_lower", label: "BB.lower" },
                                         { key: "bb_upper", label: "BB.upper" },
                                       ];
-                                    } else if (["bb_lower", "bb_mid", "bb_upper"].includes(condition)) {
+                                    } else if (["bb_lower", "bb_mid", "bb_upper"].includes(source)) {
                                       // If BB components are selected, allow only SMA, EMA
                                       return [
                                         { key: "sma", label: "SMA" },
                                         { key: "ema", label: "EMA" },
+                                      ];
+                                    } else if (["open", "high", "low", "close", "volume"].includes(source)) {
+                                      // If OHLCV is selected, show all indicators
+                                      return [
+                                        { key: "sma", label: "SMA" },
+                                        { key: "ema", label: "EMA" },
+                                        { key: "bb_lower", label: "BB.lower" },
+                                        { key: "bb_mid", label: "BB.mid" },
+                                        { key: "bb_upper", label: "BB.upper" },
                                       ];
                                     } else {
                                       // Default: show all indicators (for candlestick selections)
@@ -1772,7 +2054,7 @@ export default function TradingPlatform() {
                                       key={`ind-${ind.key}`}
                                       className="flex items-center justify-between gap-2"
                                       onSelect={() => {
-                                        setCondition(ind.key);
+                                        setSource(ind.key);
                                         setSecondSourceType("indicators");
                                         // Clear value when selecting indicators
                                         setSecondSourceValue("");
@@ -1967,14 +2249,45 @@ export default function TradingPlatform() {
                 <Button variant="outline" onClick={() => setCurrentStep(3)} className="border-border/50 cursor-pointer">
                   Back
                 </Button>
-                <Button 
-                  onClick={() => setCurrentStep(5)}
-                  disabled={!triggerToken || !timeframe || !condition || !triggerWhen || !targetValue}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
-                >
-                  Continue
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
+                <div className="flex gap-3">
+                  <div className="relative">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="inline-block">
+                          <Button 
+                            disabled={true}
+                            className="bg-blue-400 hover:bg-blue-500 text-white shadow-lg cursor-not-allowed relative"
+                          >
+                            Backtest
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-sm">
+                          We're working on displaying a backtest of your trigger on historical data so that you can see the post-trigger performance and validate your strategy before execution.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="absolute -top-1 -right-1 bg-blue-400 text-white text-[10px] px-1.5 py-0.5 rounded-full transform rotate-12 font-medium shadow-sm">
+                      Coming Soon
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={() => setCurrentStep(5)}
+                    disabled={
+                      !triggerToken || // pair
+                      !timeframe || // timeframe
+                      !source || // first source
+                      !triggerWhen || // trigger when
+                      !secondSourceType || // second source
+                      (secondSourceType === "value" && !secondSourceValue) // if second source is "value", value is required
+                    }
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
+                  >
+                    Continue
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -2034,9 +2347,9 @@ export default function TradingPlatform() {
                       {conditionTypes.find((c) => c.id === conditionType)?.name}
                     </Badge>
                     <div className="text-sm text-muted-foreground text-center">
-                      {triggerToken && condition && timeframe && triggerWhen && targetValue ? (
+                      {triggerToken && source && timeframe && triggerWhen && targetValue ? (
                         <span>
-                          {condition.charAt(0).toUpperCase() + condition.slice(1)} goes {triggerWhen} {targetValue} on {timeframe} chart of {triggerToken}
+                          {source.charAt(0).toUpperCase() + source.slice(1)} goes {triggerWhen} {targetValue} on {timeframe} chart of {triggerToken}
                           <br />
                           <span className="text-xs">Order will expire after {orderLifetime}</span>
                     </span>
@@ -2126,7 +2439,7 @@ export default function TradingPlatform() {
                       setToPercentages({});
                       setTriggerToken("");
                       setTimeframe("");
-                      setCondition("");
+                      setSource("");
                       setTriggerWhen("above");
                       setTargetValue("");
                     }}
