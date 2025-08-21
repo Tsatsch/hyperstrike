@@ -30,7 +30,7 @@ async def get_orders(current_user=Depends(get_current_user)):
 async def delete_order(payload: DeleteOrderRequest, current_user=Depends(get_current_user)):
     try:
         # Signature validation to be added when scheme finalized
-        delete_order_for_user(payload.orderId, current_user["user_id"]) 
+        delete_order_for_user(payload.order_id, current_user["user_id"]) 
         return {"status": "deleted"}
     except Exception as exc:
         detail = str(exc)
@@ -48,7 +48,7 @@ async def order_triggered(payload: OrderTriggeredRequest, current_user=Depends(g
     try:
         user_id = current_user["user_id"]
         ensure_user_has_xp_column_default(user_id)
-        xp_delta = int(max(0.0, float(payload.inputValueUsd)) * 0.01)
+        xp_delta = int(max(0.0, float(payload.input_value_usd)) * 0.01)
         if xp_delta > 0:
             increment_user_xp(user_id, xp_delta)
         # Persist execution details and mark as done_successful
@@ -56,14 +56,14 @@ async def order_triggered(payload: OrderTriggeredRequest, current_user=Depends(g
         update = {
             "state": "done_successful",
             "termination_message": "Triggered",
-            "triggered_price": float(payload.triggeredPrice),
+            "triggered_price": float(payload.triggered_price),
         }
-        if payload.actualOutputs is not None:
+        if payload.actual_outputs is not None:
             # Convert to JSON-serializable structure
             update["actual_outputs"] = [
-                {"token": item.token, "amount": float(item.amount)} for item in payload.actualOutputs
+                {"token": item.token, "amount": float(item.amount)} for item in payload.actual_outputs
             ]
-        supabase.table("orders").update(update).eq("id", payload.orderId).eq("user_id", user_id).execute()
+        supabase.table("orders").update(update).eq("id", payload.order_id).eq("user_id", user_id).execute()
         return {"xp_awarded": xp_delta}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -85,7 +85,7 @@ async def order_expire(orderId: int, reason: str = "time ran out", current_user=
 @router.post("/order/state", response_model=OrderOut)
 async def update_order_state(payload: UpdateOrderStateRequest, current_user=Depends(get_current_user)):
     try:
-        updated = update_order_state_for_user(payload.orderId, current_user["user_id"], payload.state, payload.termination_message)
+        updated = update_order_state_for_user(payload.order_id, current_user["user_id"], payload.state, payload.termination_message)
         return updated
     except Exception as exc:
         detail = str(exc)

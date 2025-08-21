@@ -22,13 +22,13 @@ class StartupService:
             orders = get_all_open_orders()
             for order in orders:
                 try:
-                    if (order.orderData and 
-                        order.orderData.type == "ohlcvTrigger" and
-                        order.orderData.ohlcvTrigger and
-                        order.orderData.ohlcvTrigger.pair and
-                        order.orderData.ohlcvTrigger.timeframe):
-                        symbol = order.orderData.ohlcvTrigger.pair
-                        timeframe = order.orderData.ohlcvTrigger.timeframe
+                    if (order.order_data and
+                        order.order_data.type == "ohlcvTrigger" and
+                        order.order_data.ohlcv_trigger and
+                        order.order_data.ohlcv_trigger.pair and
+                        order.order_data.ohlcv_trigger.timeframe):
+                        symbol = order.order_data.ohlcv_trigger.pair
+                        timeframe = order.order_data.ohlcv_trigger.timeframe
                         subscriptions.add((symbol, timeframe))
                 except Exception:
                     continue
@@ -94,11 +94,11 @@ class StartupService:
                     
                     for order in orders:
                         try:
-                            if (order.orderData and 
-                                order.orderData.type == "ohlcvTrigger" and
-                                order.orderData.ohlcvTrigger and
-                                order.orderData.ohlcvTrigger.lifetime):
-                                lifetime_ms = StartupService._timeframe_to_ms(order.orderData.ohlcvTrigger.lifetime)
+                            if (order.order_data and 
+                                order.order_data.type == "ohlcvTrigger" and
+                                order.order_data.ohlcv_trigger and
+                                order.order_data.ohlcv_trigger.lifetime):
+                                lifetime_ms = StartupService._timeframe_to_ms(order.order_data.ohlcv_trigger.lifetime)
                                 if lifetime_ms > 0:
                                     created_time = order.time * 1000
                                     expires_at = created_time + lifetime_ms

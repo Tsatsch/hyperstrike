@@ -38,10 +38,10 @@ def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet: str) 
     
     # Try to subscribe to market data for this order (non-blocking)
     try:
-        if (saved.get("orderData") and 
-            saved["orderData"].get("type") == "ohlcvTrigger" and
-            saved["orderData"].get("ohlcvTrigger")):
-            trigger = saved["orderData"]["ohlcvTrigger"]
+        if (saved.get("order_data") and 
+            saved["order_data"].get("type") == "ohlcvTrigger" and
+            saved["order_data"].get("ohlcv_trigger")):
+            trigger = saved["order_data"]["ohlcv_trigger"]
             symbol = trigger.get("pair")
             timeframe = trigger.get("timeframe")
             if symbol and timeframe:
@@ -91,11 +91,11 @@ def get_open_orders_by_symbol_timeframe(symbol: str, timeframe: str) -> List[Ord
             try:
                 order = OrderOut(**order_data)
                 # Check if this order has OHLCV trigger data that matches our symbol/timeframe
-                if (order.orderData and 
-                    order.orderData.type == "ohlcvTrigger" and
-                    order.orderData.ohlcvTrigger and
-                    _canonicalize_symbol_for_hyperliquid(order.orderData.ohlcvTrigger.pair) == requested_symbol and
-                    order.orderData.ohlcvTrigger.timeframe == timeframe):
+                if (order.order_data and 
+                    order.order_data.type == "ohlcvTrigger" and
+                    order.order_data.ohlcv_trigger and
+                    _canonicalize_symbol_for_hyperliquid(order.order_data.ohlcv_trigger.pair) == requested_symbol and
+                    order.order_data.ohlcv_trigger.timeframe == timeframe):
                     orders.append(order)
             except Exception:
                 continue

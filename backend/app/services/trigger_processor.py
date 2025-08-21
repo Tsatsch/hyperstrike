@@ -34,10 +34,10 @@ class TriggerProcessor:
     def _is_order_expired(self, order: OrderOut) -> bool:
         """Check if an order has expired based on its lifetime"""
         try:
-            if not order.orderData or order.orderData.type != "ohlcvTrigger":
+            if not order.order_data or order.order_data.type != "ohlcvTrigger":
                 return False
             
-            trigger = order.orderData.ohlcvTrigger
+            trigger = order.order_data.ohlcv_trigger
             if not trigger or not trigger.lifetime:
                 return False
             
@@ -69,10 +69,10 @@ class TriggerProcessor:
     def evaluate_trigger_condition(self, order: OrderOut, candle_data: Dict[str, Any]) -> bool:
         """Evaluate if an order's trigger condition is met"""
         try:
-            if not order.orderData or order.orderData.type != "ohlcvTrigger":
+            if not order.order_data or order.order_data.type != "ohlcvTrigger":
                 return False
             
-            trigger = order.orderData.ohlcvTrigger
+            trigger = order.order_data.ohlcv_trigger
             if not trigger:
                 return False
             

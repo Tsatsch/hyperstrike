@@ -9,11 +9,11 @@ class OutputSplit(BaseModel):
 
 
 class SwapData(BaseModel):
-    inputToken: str
-    inputAmount: float
+    input_token: str    
+    input_amount: float
     # Legacy single-output fields (kept optional for backward compatibility)
-    outputToken: Optional[str] = None
-    outputAmount: Optional[float] = None  # deprecated, no longer populated by frontend
+    output_token: Optional[str] = None
+    output_amount: Optional[float] = None  # deprecated, no longer populated by frontend
     # New multi-output percentage-based splits (max 4)
     outputs: Optional[List[OutputSplit]] = None
 
@@ -66,7 +66,7 @@ class OhlcvTriggerData(BaseModel):
     pair: str
     timeframe: str
     first_source: FirstSource
-    triggerWhen: str #above, below
+    trigger_when: str #above, below
     second_source: SecondSource
     cooldown: Cooldown
     chained_confirmation: ChainedConfirmation
@@ -76,17 +76,17 @@ class OhlcvTriggerData(BaseModel):
 
 class OrderData(BaseModel):
     type: str  # e.g. "ohlcvTrigger", "walletActivity"
-    ohlcvTrigger: Optional[OhlcvTriggerData] = None
-    walletActivity: Optional[Dict[str, Any]] = None
+    ohlcv_trigger: Optional[OhlcvTriggerData] = None
+    wallet_activity: Optional[Dict[str, Any]] = None
 
-    #to add support for other types of orders
+    #to add later
 
 
 class OrderCreateRequest(BaseModel):
     platform: Literal["hyperevm", "hypercore", "notifications"]
     wallet: str
-    swapData: SwapData
-    orderData: OrderData
+    swap_data: SwapData  
+    order_data: OrderData
     signature: Optional[str] = None
     time: int = Field(..., description="Unix timestamp (seconds or ms)")
 
@@ -96,8 +96,8 @@ class OrderOut(BaseModel):
     user_id: int
     wallet: str
     platform: str
-    swapData: SwapData
-    orderData: OrderData
+    swap_data: SwapData
+    order_data: OrderData
     signature: Optional[str] = None
     time: int
     state: Literal["open", "done_successful", "done_failed", "successful", "failed", "deleted"] = "open"
@@ -113,7 +113,7 @@ class OrderOut(BaseModel):
 class DeleteOrderRequest(BaseModel):
     wallet: str
     signature: Optional[str] = None
-    orderId: int
+    order_id: int
 
 
 
@@ -123,21 +123,21 @@ class ActualOutput(BaseModel):
 
 
 class OrderTriggeredRequest(BaseModel):
-    orderId: int
-    inputValueUsd: float = Field(..., description="Executed input notional in USD")
-    triggeredPrice: float = Field(..., description="Price at the moment the order triggered on-chain")
-    actualOutputs: Optional[List[ActualOutput]] = Field(None, description="Realized outputs per token from the smart contract")
+    order_id: int
+    input_value_usd: float = Field(..., description="Executed input notional in USD")
+    triggered_price: float = Field(..., description="Price at the moment the order triggered on-chain")
+    actual_outputs: Optional[List[ActualOutput]] = Field(None, description="Realized outputs per token from the smart contract")
     
-    @field_validator("actualOutputs")
+    @field_validator("actual_outputs")
     @classmethod
     def validate_actual_outputs_max_len(cls, v):
         if v is not None and len(v) > 4:
-            raise ValueError("actualOutputs must have at most 4 items")
+            raise ValueError("actual_outputs must have at most 4 items")
         return v
 
 
 class UpdateOrderStateRequest(BaseModel):
-    orderId: int
+    order_id: int
     state: Literal["open", "done_successful", "done_failed", "successful", "failed", "deleted"]
     termination_message: Optional[str] = None
 
