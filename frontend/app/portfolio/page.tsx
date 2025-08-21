@@ -32,7 +32,7 @@ interface OrderOut {
     output_amount?: number
     outputs?: { token: string; percentage: number }[]
   }
-  order_data: {
+  order_data?: {
     type: string
     ohlcv_trigger?: {
       pair: string
@@ -352,7 +352,7 @@ export default function DashboardAliasPage() {
       ? outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
       : legacyOutText
 
-    const od = (o as any).orderData || {}
+    const od = o.order_data || {} as any
     const trig = od.ohlcv_trigger || {}
     const tf = trig.timeframe || ''
     const source = (trig.first_source?.source || 'close') as string
@@ -550,13 +550,13 @@ export default function DashboardAliasPage() {
                           })()}
                         </div>
                                                   {(() => {
-                            const od = (o as any).orderData || {}
-                            const trig = od.ohlcvTrigger || {}
-                          const tf = trig.timeframe || trig.interval || ''
-                          const source = (trig.source || 'close') as string
-                          const dir = (trig.trigger || trig.above) ? ((trig.trigger === 'above' || trig.above) ? 'above' : 'below') : ''
-                          const trigVal = trig.triggerValue ?? trig.threshold
-                          const pair = trig.pair || od.pair || ''
+                            const od = o.order_data || {} as any
+                            const trig = od.ohlcv_trigger || {}
+                            const tf = trig.timeframe || ''
+                            const source = (trig.first_source?.source || 'close') as string
+                            const dir = trig.trigger_when || ''
+                            const trigVal = trig.second_source?.value || 0
+                            const pair = trig.pair || ''
                           const metricLabel = (() => {
                             const s = (source || '').toLowerCase()
                             if (s === 'close') return 'price'
@@ -644,13 +644,13 @@ export default function DashboardAliasPage() {
                           })()}
                         </div>
                           {(() => {
-                            const od = (o as any).orderData || {}
-                            const trig = od.ohlcvTrigger || {}
-                            const tf = trig.timeframe || trig.interval || ''
-                            const source = (trig.source || 'close') as string
-                            const dir = (trig.trigger || trig.above) ? ((trig.trigger === 'above' || trig.above) ? 'above' : 'below') : ''
-                            const trigVal = trig.triggerValue ?? trig.threshold
-                            const pair = trig.pair || od.pair || ''
+                            const od = o.order_data || {} as any
+                            const trig = od.ohlcv_trigger || {}
+                            const tf = trig.timeframe || ''
+                            const source = (trig.first_source?.source || 'close') as string
+                            const dir = trig.trigger_when || ''
+                            const trigVal = trig.second_source?.value || 0
+                            const pair = trig.pair || ''
                             const metricLabel = (() => {
                               const s = (source || '').toLowerCase()
                               if (s === 'close') return 'price'

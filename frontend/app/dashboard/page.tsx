@@ -25,14 +25,56 @@ interface OrderOut {
   user_id: number
   wallet: string
   platform: string
-  swapData: {
-    inputToken: string
-    inputAmount: number
-    outputToken?: string
-    outputAmount?: number
+  swap_data: {
+    input_token: string
+    input_amount: number
+    output_token?: string
+    output_amount?: number
     outputs?: { token: string; percentage: number }[]
   }
-  orderData?: any
+  order_data?: {
+    type: string
+    ohlcv_trigger?: {
+      pair: string
+      timeframe: string
+      first_source: {
+        type: string
+        source?: string
+        indicator?: string
+        parameters?: {
+          length: number
+          OHLC_source: string
+          std_dev?: number
+        }
+      }
+      trigger_when: string
+      second_source: {
+        type: string
+        value?: number
+        indicator?: string
+        parameters?: {
+          length: number
+          OHLC_source: string
+          std_dev?: number
+        }
+      }
+      cooldown: {
+        active: boolean
+        value?: number
+      }
+      chained_confirmation: {
+        active: boolean
+      }
+      invalidation_halt: {
+        active: boolean
+      }
+      lifetime?: string
+    }
+    wallet_activity?: {
+      type: string
+      wallet_activity?: any
+    }
+  }
   signature?: string
   time: number
   state: "open" | "deleted" | "done_successful" | "done_failed" | "successful" | "failed"
@@ -298,25 +340,25 @@ export default function DashboardPage() {
   // Countdown is computed inline per order using created_at + timeframe
 
   const formatOrderSummary = (o: OrderOut) => {
-    const inSym = addressToSymbol((o.swapData as any)?.inputToken)
-    const inAmt = (o.swapData as any)?.inputAmount
+    const inSym = addressToSymbol(o.swap_data?.input_token)
+    const inAmt = o.swap_data?.input_amount
 
-    const outputs = ((o.swapData as any)?.outputs || []) as { token: string; percentage: number }[]
+    const outputs = (o.swap_data?.outputs || []) as { token: string; percentage: number }[]
     const hasSplits = Array.isArray(outputs) && outputs.length > 0
-    const outSym = addressToSymbol((o.swapData as any)?.outputToken)
-    const outAmt = (o.swapData as any)?.outputAmount
+    const outSym = addressToSymbol(o.swap_data?.output_token)
+    const outAmt = o.swap_data?.output_amount
     const legacyOutText = `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
     const splitsText = hasSplits
       ? outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
       : legacyOutText
 
-    const od = (o as any).orderData || {}
-    const trig = od.ohlcvTrigger || {}
-    const tf = trig.timeframe || trig.interval || ''
-    const source = (trig.source || 'close') as string
-    const dir = (trig.trigger || trig.above) ? ((trig.trigger === 'above' || trig.above) ? 'above' : 'below') : ''
-    const trigVal = trig.triggerValue ?? trig.threshold
-    const pair = trig.pair || od.pair || ''
+    const od = o.order_data || {} as any
+    const trig = od.ohlcv_trigger || {}
+    const tf = trig.timeframe || ''
+    const source = (trig.first_source?.source || 'close') as string
+    const dir = trig.trigger_when || ''
+    const trigVal = trig.second_source?.value || 0
+    const pair = trig.pair || ''
     const metricLabel = (() => {
       const s = (source || '').toLowerCase()
       if (s === 'close') return 'price'
@@ -497,24 +539,24 @@ export default function DashboardPage() {
                       />
                       <div className="flex items-center justify-between">
                         <div className="text-foreground font-medium">
-                          {formatAmount((o.swapData as any).inputAmount)} {addressToSymbol((o.swapData as any).inputToken)} → {(() => {
-                            const outputs = ((o.swapData as any)?.outputs || []) as { token: string; percentage: number }[]
+                          {formatAmount(o.swap_data?.input_amount)} {addressToSymbol(o.swap_data?.input_token)} → {(() => {
+                            const outputs = (o.swap_data?.outputs || []) as { token: string; percentage: number }[]
                             if (Array.isArray(outputs) && outputs.length > 0) {
                               return outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
                             }
-                            const outSym = addressToSymbol((o.swapData as any)?.outputToken)
-                            const outAmt = (o.swapData as any)?.outputAmount
+                            const outSym = addressToSymbol(o.swap_data?.output_token)
+                            const outAmt = o.swap_data?.output_amount
                             return `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
                           })()}
                         </div>
                         {(() => {
-                          const od = (o as any).orderData || {}
-                          const trig = od.ohlcvTrigger || {}
-                          const tf = trig.timeframe || trig.interval || ''
-                          const source = (trig.source || 'close') as string
-                          const dir = (trig.trigger || trig.above) ? ((trig.trigger === 'above' || trig.above) ? 'above' : 'below') : ''
-                          const trigVal = trig.triggerValue ?? trig.threshold
-                          const pair = trig.pair || od.pair || ''
+                          const od = o.order_data || {} as any
+                          const trig = od.ohlcv_trigger || {}
+                          const tf = trig.timeframe || ''
+                          const source = (trig.first_source?.source || 'close') as string
+                          const dir = trig.trigger_when || ''
+                          const trigVal = trig.second_source?.value || 0
+                          const pair = trig.pair || ''
                           const metricLabel = (() => {
                             const s = (source || '').toLowerCase()
                             if (s === 'close') return 'price'
@@ -591,24 +633,24 @@ export default function DashboardPage() {
                         <div className={`pointer-events-none absolute inset-0 rounded-lg ${o.state === 'failed' ? 'ring-2 ring-red-500/30' : 'ring-2 ring-green-500/30'} opacity-0 transition-opacity duration-150 group-hover:opacity-100`} />
                         <div className="flex items-center justify-between">
                           <div className="text-foreground font-medium">
-                            {formatAmount((o.swapData as any).inputAmount)} {addressToSymbol((o.swapData as any).inputToken)} → {(() => {
-                              const outputs = ((o.swapData as any)?.outputs || []) as { token: string; percentage: number }[]
+                            {formatAmount(o.swap_data?.input_amount)} {addressToSymbol(o.swap_data?.input_token)} → {(() => {
+                              const outputs = (o.swap_data?.outputs || []) as { token: string; percentage: number }[]
                               if (Array.isArray(outputs) && outputs.length > 0) {
                                 return outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
                               }
-                              const outSym = addressToSymbol((o.swapData as any)?.outputToken)
-                              const outAmt = (o.swapData as any)?.outputAmount
+                              const outSym = addressToSymbol(o.swap_data?.output_token)
+                              const outAmt = o.swap_data?.output_amount
                               return `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
                             })()}
                           </div>
                           {(() => {
-                            const od = (o as any).orderData || {}
-                            const trig = od.ohlcvTrigger || {}
-                            const tf = trig.timeframe || trig.interval || ''
-                            const source = (trig.source || 'close') as string
-                            const dir = (trig.trigger || trig.above) ? ((trig.trigger === 'above' || trig.above) ? 'above' : 'below') : ''
-                            const trigVal = trig.triggerValue ?? trig.threshold
-                            const pair = trig.pair || od.pair || ''
+                            const od = o.order_data || {} as any
+                            const trig = od.ohlcv_trigger || {}
+                            const tf = trig.timeframe || ''
+                            const source = (trig.first_source?.source || 'close') as string
+                            const dir = trig.trigger_when || ''
+                            const trigVal = trig.second_source?.value || 0
+                            const pair = trig.pair || ''
                             const metricLabel = (() => {
                               const s = (source || '').toLowerCase()
                               if (s === 'close') return 'price'
