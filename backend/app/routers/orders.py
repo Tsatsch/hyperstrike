@@ -41,16 +41,29 @@ async def delete_order(payload: DeleteOrderRequest, current_user=Depends(get_cur
 
 @router.post("/order/triggered")
 async def order_triggered(payload: OrderTriggeredRequest, current_user=Depends(get_current_user)):
-    """Called when an order gets executed; awards 1% of input USD value as XP and marks done_successful."""
+    """Called when an order gets executed; awards 1% of input USD value as XP and marks done_successful.
+
+    Persists `triggered_price` and `actual_outputs` coming from the smart contract execution.
+    """
     try:
         user_id = current_user["user_id"]
         ensure_user_has_xp_column_default(user_id)
         xp_delta = int(max(0.0, float(payload.inputValueUsd)) * 0.01)
         if xp_delta > 0:
             increment_user_xp(user_id, xp_delta)
-        # mark order as done_successful for this user
+        # Persist execution details and mark as done_successful
         from app.db.sb import supabase
-        supabase.table("orders").update({"state": "done_successful", "termination_message": "Triggered"}).eq("id", payload.orderId).eq("user_id", user_id).execute()
+        update = {
+            "state": "done_successful",
+            "termination_message": "Triggered",
+            "triggered_price": float(payload.triggeredPrice),
+        }
+        if payload.actualOutputs is not None:
+            # Convert to JSON-serializable structure
+            update["actual_outputs"] = [
+                {"token": item.token, "amount": float(item.amount)} for item in payload.actualOutputs
+            ]
+        supabase.table("orders").update(update).eq("id", payload.orderId).eq("user_id", user_id).execute()
         return {"xp_awarded": xp_delta}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

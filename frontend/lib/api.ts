@@ -144,4 +144,14 @@ export async function claimDailyXp(): Promise<{ awarded: number; nextEligibleAt?
   return response.json();
 }
 
+export async function getDailyEligibility(): Promise<{ eligible: boolean; nextEligibleAt?: string } | null> {
+  const jwt = getBackendJwt();
+  if (!jwt) return null;
+  const response = await fetch(`${config.apiUrl}/api/xp/daily_eligibility`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!response.ok) return null;
+  return response.json();
+}
+
 

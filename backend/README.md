@@ -77,6 +77,22 @@ create table if not exists public.orders (
 ALTER TABLE public.orders
 ADD COLUMN lifetime text
 GENERATED ALWAYS AS (("orderData"->'ohlcvTrigger'->>'lifetime')) STORED;
+
+-- Execution details
+ALTER TABLE public.orders
+ADD COLUMN triggered_price numeric;
+
+ALTER TABLE public.orders
+ADD COLUMN actual_outputs jsonb;
+
+ALTER TABLE public.orders
+ADD CONSTRAINT orders_actual_outputs_len
+CHECK (
+  actual_outputs IS NULL OR (
+    jsonb_typeof(actual_outputs) = 'array' AND
+    jsonb_array_length(actual_outputs) <= 4
+  )
+);
 ```
 
 #### orders.swapData JSON structure
@@ -98,3 +114,17 @@ The `swapData` column stores the swap request in JSON. It supports both a legacy
 Notes:
 - Backend validation enforces at most 4 items in `outputs`.
 - When `outputs` is provided, percentages represent the split of `inputAmount` per output token.
+
+#### orders.actual_outputs JSON structure
+
+Stores the realized swap results per token after execution (accounts for slippage and fees).
+
+- `actual_outputs: Array<{ token: string; amount: number }>` with a maximum of 4 items total
+  - For legacy single-output orders, store a single item reflecting the realized amount
+  - `token` should mirror the token identifiers used in `swapData`
+  - `amount` is the actual on-chain amount received for that token
+
+#### orders.triggered_price
+
+- `triggered_price: numeric` — price at the moment the order was triggered/evaluated
+- Use this to audit execution conditions and for UX display

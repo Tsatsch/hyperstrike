@@ -75,9 +75,23 @@ class DeleteOrderRequest(BaseModel):
 
 
 
+class ActualOutput(BaseModel):
+    token: str
+    amount: float
+
+
 class OrderTriggeredRequest(BaseModel):
     orderId: int
     inputValueUsd: float = Field(..., description="Executed input notional in USD")
+    triggeredPrice: float = Field(..., description="Price at the moment the order triggered on-chain")
+    actualOutputs: Optional[List[ActualOutput]] = Field(None, description="Realized outputs per token from the smart contract")
+    
+    @field_validator("actualOutputs")
+    @classmethod
+    def validate_actual_outputs_max_len(cls, v):
+        if v is not None and len(v) > 4:
+            raise ValueError("actualOutputs must have at most 4 items")
+        return v
 
 
 class UpdateOrderStateRequest(BaseModel):

@@ -41,8 +41,8 @@ export default function DocsPage() {
               <span className="text-xl font-bold">Hyperstrike</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
+              <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>
-              <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">Portfolio</a>
               <a href="/docs" className="font-medium text-primary">Docs</a>
             </nav>
           </div>

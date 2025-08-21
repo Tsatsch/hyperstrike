@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Activity, Wallet, ChevronDown, ChevronUp, RefreshCw } from "lucide-react"
+import { Activity, Wallet, ChevronDown, ChevronUp } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { XpButton } from "@/components/XpButton"
@@ -92,7 +92,7 @@ function useEphemeralDoneState(orders: OrderOut[]) {
   return { doneIds, clearDone }
 }
 
-export default function DashboardAliasPage() {
+export default function DashboardPage() {
   const { ready, authenticated, user, getAccessToken, login } = usePrivy()
   const [orders, setOrders] = useState<OrderOut[]>([])
   const [loadingOrders, setLoadingOrders] = useState(false)
@@ -188,7 +188,7 @@ export default function DashboardAliasPage() {
           setPriceCache(finalPriceCache)
         }
       } catch (error) {
-        console.warn('Error fetching portfolio prices:', error)
+        console.warn('Error fetching dashboard prices:', error)
       }
     }
 
@@ -756,7 +756,7 @@ export default function DashboardAliasPage() {
               </div>
               <div className="space-y-2">
                 <h3 className="text-2xl font-bold text-foreground">Connect Your Wallet</h3>
-                <p className="text-muted-foreground">Please connect your wallet to view your portfolio and orders.</p>
+                <p className="text-muted-foreground">Please connect your wallet to view your dashboard and orders.</p>
               </div>
               <div className="space-y-3">
                 <Button 
@@ -781,4 +781,6 @@ export default function DashboardAliasPage() {
     </div>
   )
 }
+
+ 
 

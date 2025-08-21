@@ -15,6 +15,8 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { exchangePrivyForBackendJwt, listOrders } from '@/lib/api';
 import { config } from '@/lib/config';
+import { resolveHlName, resolveHlProfile, HlProfile } from '@/lib/hlnames';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // Blockscout URLs for different networks
 const BLOCKSCOUT_URLS: { [key: string]: string } = {
@@ -34,6 +36,8 @@ export function WalletButton() {
   const { login, logout, authenticated, user, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [hlName, setHlName] = useState<string | null>(null);
+  const [hlProfile, setHlProfile] = useState<HlProfile | null>(null);
 
   const currentWalletAddress = user?.wallet?.address;
 
@@ -103,6 +107,32 @@ export function WalletButton() {
     exchangeJwtAndPrefetchOrders();
   }, [authenticated, currentWalletAddress]);
 
+  // Resolve .hl name for display
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!currentWalletAddress) {
+        setHlName(null);
+        setHlProfile(null);
+        return;
+      }
+      try {
+        const name = await resolveHlName(currentWalletAddress);
+        if (!cancelled) setHlName(name);
+      } catch {
+        if (!cancelled) setHlName(null);
+      }
+      try {
+        const profile = await resolveHlProfile(currentWalletAddress);
+        if (!cancelled) setHlProfile(profile);
+      } catch {
+        if (!cancelled) setHlProfile(null);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [currentWalletAddress]);
+
   const handleCopyAddress = async () => {
     if (currentWalletAddress) {
       await navigator.clipboard.writeText(currentWalletAddress);
@@ -141,17 +171,25 @@ export function WalletButton() {
           variant="outline"
           className="hidden sm:inline-flex"
         >
-          <Wallet className="mr-2 h-4 w-4" />
-          {currentWalletAddress ? shortenAddress(currentWalletAddress) : 'Connected'}
+          <div className="mr-2">
+            <Avatar className="h-5 w-5">
+              <AvatarImage
+                src={(hlProfile?.avatarUrl && hlProfile.avatarUrl.startsWith('https://')) ? hlProfile.avatarUrl : '/placeholder-user.jpg'}
+                alt={hlName || currentWalletAddress || 'avatar'}
+              />
+              <AvatarFallback>{(hlName || currentWalletAddress || 'U')[0]?.toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </div>
+          {hlName ?? (currentWalletAddress ? shortenAddress(currentWalletAddress) : 'Connected')}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem 
           className="py-3 cursor-pointer"
-          onClick={() => { window.location.href = '/portfolio' }}
+          onClick={() => { window.location.href = '/dashboard' }}
         >
           <User className="mr-2 h-4 w-4" />
-          <span>Portfolio</span>
+          <span>Dashboard</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem 

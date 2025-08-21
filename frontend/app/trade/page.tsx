@@ -687,15 +687,9 @@ export default function TradingPlatform() {
               <span className="text-xl font-bold">Hyperstrike</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
-              <a href="/trade" className="font-medium text-primary">
-                Trade
-              </a>
-              <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">
-                Portfolio
-              </a>
-              <a href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">
-                Docs
-              </a>
+              <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
+              <a href="/trade" className="font-medium text-primary">Trade</a>
+              <a href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">Docs</a>
             </nav>
           </div>
           <div className="ml-auto flex items-center space-x-4">
@@ -1678,10 +1672,10 @@ export default function TradingPlatform() {
                   </Button>
                   <Button 
                     variant="outline" 
-                    onClick={() => window.location.href = '/portfolio'}
+                    onClick={() => window.location.href = '/dashboard'}
                     className="w-full border-border/50 cursor-pointer"
                   >
-                    My Portfolio
+                    Go to Dashboard
                   </Button>
                 </div>
               </CardContent>

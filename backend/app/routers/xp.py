@@ -68,3 +68,36 @@ async def xp_daily_claim(current_user=Depends(get_current_user)):
         return {"awarded": 10}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/xp/daily_eligibility")
+async def xp_daily_eligibility(current_user=Depends(get_current_user)):
+    """Return whether the user can claim daily XP now, and when they can next claim."""
+    try:
+        user_id = current_user["user_id"]
+        ensure_user_has_xp_column_default(user_id)
+        now = datetime.now(timezone.utc)
+        # Read last claim
+        res = (
+            supabase.table("users")
+            .select("last_daily_xp_at")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        last_raw = None
+        if getattr(res, "data", None):
+            last_raw = res.data[0].get("last_daily_xp_at")
+        last = None
+        if last_raw:
+            try:
+                last = datetime.fromisoformat(last_raw.replace('Z', '+00:00'))
+            except Exception:
+                last = None
+        eligible = (last is None) or ((now - last) >= timedelta(hours=24))
+        if eligible:
+            return {"eligible": True}
+        next_eligible = (last + timedelta(hours=24)) if last else (now + timedelta(hours=24))
+        return {"eligible": False, "nextEligibleAt": next_eligible.isoformat()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

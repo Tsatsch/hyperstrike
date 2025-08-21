@@ -101,7 +101,7 @@ export default function LandingPage() {
           </div>
           <div className="ml-auto flex items-center space-x-4">
             <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <a href="/trade" className="flex items-center">
+              <a href="/dashboard" className="flex items-center">
                 Launch d'App
               </a>
             </Button>
@@ -130,7 +130,7 @@ export default function LandingPage() {
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
               <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
-                <a href="/trade" className="flex items-center">
+                <a href="/dashboard" className="flex items-center">
                   <Play className="w-4 h-4 mr-2" />
                   Start Trading
                 </a>
@@ -246,7 +246,7 @@ export default function LandingPage() {
               Execute sophisticated trading strategies with conditional logic.
             </p>
             <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
-              <a href="/trade" className="flex items-center">
+              <a href="/dashboard" className="flex items-center">
                 <Play className="w-4 h-4 mr-2" />
                 Launch d'App
               </a>

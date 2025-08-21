@@ -3,15 +3,18 @@
 import { Button } from "@/components/ui/button"
 import { usePrivy } from '@privy-io/react-auth'
 import { useEffect, useState } from 'react'
-import { exchangePrivyForBackendJwt, getBackendJwt, getUserXp, getOrCreateUser, getUserMe, getLeaderboard, claimDailyXp, UserMe } from '@/lib/api'
+import { exchangePrivyForBackendJwt, getBackendJwt, getUserXp, getOrCreateUser, getUserMe, getLeaderboard, claimDailyXp, getDailyEligibility, UserMe } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, ChevronRight } from "lucide-react"
 import { Activity, Wallet } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { XpButton } from "@/components/XpButton"
 import { Footer } from "@/components/footer"
+import { resolveHlName, resolveHlProfile, type HlProfile } from "@/lib/hlnames"
+import { shortenAddress } from "@/lib/wallet-utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export default function XpPage() {
   const { ready, authenticated, user, getAccessToken, login } = usePrivy()
@@ -21,7 +24,11 @@ export default function XpPage() {
   const [leaders, setLeaders] = useState<Array<{ user_id: number; wallet_address: string; xp: number }>>([])
   const [claiming, setClaiming] = useState(false)
   const [claimMsg, setClaimMsg] = useState<string>("")
+  const [eligible, setEligible] = useState<boolean | null>(null)
   const [showConnectPrompt, setShowConnectPrompt] = useState(false)
+  const [hlNames, setHlNames] = useState<Record<string, string>>({})
+  const [hlProfiles, setHlProfiles] = useState<Record<string, HlProfile>>({})
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const run = async () => {
@@ -38,6 +45,18 @@ export default function XpPage() {
         }
         if (me?.referral_code) setRefCode(me.referral_code)
         try { setLeaders(await getLeaderboard(20)) } catch {}
+        try {
+          const elig = await getDailyEligibility()
+          if (elig) {
+            setEligible(elig.eligible)
+            if (!elig.eligible) {
+              const timeStr = elig.nextEligibleAt ? new Date(elig.nextEligibleAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''
+              setClaimMsg(`Come back tomorrow at ${timeStr} to claim again`)
+            } else {
+              setClaimMsg("")
+            }
+          }
+        } catch {}
       }
     }
     run()
@@ -58,22 +77,87 @@ export default function XpPage() {
 
   const onClaimDaily = async () => {
     setClaiming(true)
-    setClaimMsg("")
     try {
       const res = await claimDailyXp()
       if (res) {
         if (res.awarded > 0) {
           setClaimMsg(`+${res.awarded} XP claimed`)
           setXp(xp + res.awarded)
+          setEligible(false)
         } else if (res.nextEligibleAt) {
-          setClaimMsg(`Come back at ${new Date(res.nextEligibleAt).toLocaleString()} to claim again`)
+          const timeStr = new Date(res.nextEligibleAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          setClaimMsg(`Come back tomorrow at ${timeStr} to claim again`)
+          setEligible(false)
         }
       }
     } finally {
       setClaiming(false)
-      setTimeout(() => setClaimMsg(""), 3000)
     }
   }
+
+  // Resolve .hl names for leaderboard addresses (quick display)
+  useEffect(() => {
+    if (!leaders || leaders.length === 0) return
+    let cancelled = false
+    const run = async () => {
+      const addressList = leaders.map(l => l.wallet_address.toLowerCase())
+      const missing = addressList.filter(a => hlNames[a] === undefined)
+      if (missing.length === 0) return
+      try {
+        const results = await Promise.all(
+          missing.map(async (addr) => {
+            try {
+              const name = await resolveHlName(addr)
+              return [addr, name || ""] as const
+            } catch {
+              return [addr, ""] as const
+            }
+          })
+        )
+        if (!cancelled) {
+          setHlNames(prev => {
+            const next = { ...prev }
+            for (const [addr, name] of results) next[addr] = name
+            return next
+          })
+        }
+      } catch {}
+    }
+    run()
+    return () => { cancelled = true }
+  }, [leaders])
+
+  // Resolve full HL profiles for records/avatar on demand for leaderboard
+  useEffect(() => {
+    if (!leaders || leaders.length === 0) return
+    let cancelled = false
+    const run = async () => {
+      const addressList = leaders.map(l => l.wallet_address.toLowerCase())
+      const missing = addressList.filter(a => hlProfiles[a] === undefined)
+      if (missing.length === 0) return
+      try {
+        const results = await Promise.all(
+          missing.map(async (addr) => {
+            try {
+              const profile = await resolveHlProfile(addr)
+              return [addr, profile] as const
+            } catch {
+              return [addr, { name: '', namehash: null, texts: {}, avatarUrl: null } as HlProfile] as const
+            }
+          })
+        )
+        if (!cancelled) {
+          setHlProfiles(prev => {
+            const next = { ...prev }
+            for (const [addr, profile] of results) next[addr] = profile
+            return next
+          })
+        }
+      } catch {}
+    }
+    run()
+    return () => { cancelled = true }
+  }, [leaders])
 
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -86,8 +170,8 @@ export default function XpPage() {
               <span className="text-xl font-bold">HyperTrade</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
+              <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
               <a href="/trade" className="text-muted-foreground hover:text-foreground transition-colors">Trade</a>
-              <a href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">Portfolio</a>
               <a href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">Docs</a>
             </nav>
           </div>
@@ -121,8 +205,14 @@ export default function XpPage() {
               </div>
               <div className="text-xs text-muted-foreground mt-2">More actions earn more XP</div>
               <div className="mt-3 flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={onClaimDaily} disabled={claiming}>
-                  {claiming ? 'Claiming...' : 'Claim Daily 10 XP'}
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={onClaimDaily}
+                  disabled={claiming || eligible === false}
+                  className={eligible === false ? 'bg-rose-400 hover:bg-rose-500 text-foreground disabled:opacity-100' : eligible === true ? 'bg-teal-400 hover:bg-teal-500 text-foreground' : ''}
+                >
+                  {claiming ? 'Claiming...' : eligible === false ? 'Daily XP unavailable' : 'Claim Daily 10 XP'}
                 </Button>
                 {claimMsg && <div className="text-xs text-muted-foreground">{claimMsg}</div>}
               </div>
@@ -150,15 +240,52 @@ export default function XpPage() {
                 <div className="text-sm text-muted-foreground">No leaders yet</div>
               ) : (
                 <div className="space-y-2">
-                  {leaders.map((u, idx) => (
-                    <div key={u.user_id} className="flex items-center justify-between border border-border/50 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 text-muted-foreground">{idx + 1}</div>
-                        <div className="text-foreground text-sm font-medium">{u.wallet_address.slice(0, 6)}...{u.wallet_address.slice(-4)}</div>
+                  {leaders.map((u, idx) => {
+                    const key = u.wallet_address.toLowerCase()
+                    const displayName = hlNames[key] || shortenAddress(u.wallet_address)
+                    const hasHlName = !!hlNames[key]
+                    const profile = hlProfiles[key]
+                    const avatarUrl = profile?.avatarUrl || ''
+                    const isExpanded = !!expanded[key]
+                    // pick up to two non-avatar records from texts
+                    const entries = profile ? Object.entries(profile.texts) : []
+                    const nonAvatarEntries = entries.filter(([k]) => !k.toLowerCase().includes('avatar'))
+                    const firstTwo = nonAvatarEntries.slice(0, 2)
+                    return (
+                      <div key={u.user_id} className="border border-border/50 rounded-lg px-3 py-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 text-muted-foreground">{idx + 1}</div>
+                            <Avatar className="h-6 w-6">
+                              <AvatarImage src={(avatarUrl && avatarUrl.startsWith('https://')) ? avatarUrl : '/placeholder-user.jpg'} alt={displayName} />
+                              <AvatarFallback>{(displayName || 'U')[0]?.toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-foreground text-sm font-medium">{displayName}</span>
+                            {hasHlName && (
+                              <button
+                                aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                onClick={() => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))}
+                              >
+                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-foreground text-sm font-semibold">{u.xp}</div>
+                        </div>
+                        {hasHlName && isExpanded && firstTwo.length > 0 && (
+                          <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                            {firstTwo.map(([k, v]) => (
+                              <div key={k} className="break-words">
+                                <span className="font-medium text-foreground">{k}:</span>{' '}
+                                <span>{String(v)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-foreground text-sm font-semibold">{u.xp}</div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
