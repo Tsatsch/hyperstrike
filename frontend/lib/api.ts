@@ -66,7 +66,7 @@ export async function setOrderState(orderId: number, state: 'open' | 'deleted' |
   const response = await fetch(`${config.apiUrl}/api/order/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
-    body: JSON.stringify({ orderId, state, termination_message }),
+    body: JSON.stringify({ order_id: orderId, state, termination_message }),
   });
   return response.ok;
 }

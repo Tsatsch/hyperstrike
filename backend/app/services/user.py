@@ -1,6 +1,9 @@
 from app.db.sb import supabase  # your existing Supabase client
 import secrets
 import string
+import logging
+
+logger = logging.getLogger(__name__)
 
 def create_or_get_user(wallet_address: str) -> dict:
     # Normalize address (important!)
@@ -113,24 +116,53 @@ def ensure_referral_code(user_id: int) -> str:
 
 def get_user_by_referral_code(code: str) -> dict | None:
     try:
-        res = supabase.table("users").select("user_id, wallet_address").eq("referral_code", code).limit(1).execute()
+        # Normalize code to uppercase (our generator uses A-Z0-9)
+        normalized = (code or "").strip().upper()
+        if not normalized:
+            return None
+        res = (
+            supabase
+            .table("users")
+            .select("user_id, wallet_address")
+            .eq("referral_code", normalized)
+            .limit(1)
+            .execute()
+        )
         if getattr(res, "data", None):
             return res.data[0]
         return None
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"Failed to lookup referral code '{code}': {exc}")
         return None
 
 
 def set_referred_by_if_empty(user_id: int, inviter_user_id: int) -> bool:
     if user_id == inviter_user_id:
+        logger.info(
+            "Skipping referral assignment because user invited themselves (user_id=%s)",
+            user_id,
+        )
         return False
     try:
-        res = supabase.table("users").select("referred_by_user_id").eq("user_id", user_id).limit(1).execute()
+        res = (
+            supabase
+            .table("users")
+            .select("referred_by_user_id")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
         if not getattr(res, "data", None):
             return False
         if res.data[0].get("referred_by_user_id"):
             return False
         supabase.table("users").update({"referred_by_user_id": inviter_user_id}).eq("user_id", user_id).execute()
         return True
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Failed to set referred_by_user_id for user_id=%s with inviter_user_id=%s: %s",
+            user_id,
+            inviter_user_id,
+            exc,
+        )
         return False

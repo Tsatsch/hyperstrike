@@ -8,8 +8,9 @@ import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getNativeToken } from '@/lib/
 import { updateAllTokenPrices } from '@/lib/hyperliquid-prices'
 
 import { Button } from "@/components/ui/button"
+ 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+ 
 import { Separator } from "@/components/ui/separator"
 import { Activity, Wallet, ChevronDown, ChevronUp } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
@@ -149,6 +150,8 @@ export default function DashboardPage() {
   const [closingAllDone, setClosingAllDone] = useState(false)
   const [closingIds, setClosingIds] = useState<Set<number>>(new Set())
   const [showAllTokens, setShowAllTokens] = useState(false)
+  const [cancellingIds, setCancellingIds] = useState<Set<number>>(new Set())
+  const [confirmCancelIds, setConfirmCancelIds] = useState<Set<number>>(new Set())
 
   // Done state (ephemeral) to briefly show newly closed orders
   const { doneIds, clearDone } = useEphemeralDoneState(orders)
@@ -289,6 +292,39 @@ export default function DashboardPage() {
       }))
     } finally {
       setClosingAllDone(false)
+    }
+  }
+
+  const requestOnChainAllowanceDecrease = async (order: OrderOut) => {
+    try {
+      // Placeholder for future on-chain allowance decrease per order
+      console.warn('On-chain allowance decrease not implemented yet for order', order.id)
+    } catch (e) {
+      console.warn('Allowance decrease placeholder error:', e)
+    }
+  }
+
+  const handleCancelOpenOrder = async (order: OrderOut) => {
+    if (!order || order.state !== 'open') return
+    try {
+      setCancellingIds(prev => new Set(prev).add(order.id))
+      const ok = await setOrderState(order.id, 'failed', 'Canceled')
+      if (ok) {
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, state: 'failed', termination_message: 'Canceled' } : o))
+        // Fire-and-forget placeholder for future on-chain action
+        requestOnChainAllowanceDecrease(order)
+      }
+    } finally {
+      setCancellingIds(prev => {
+        const next = new Set(prev)
+        next.delete(order.id)
+        return next
+      })
+      setConfirmCancelIds(prev => {
+        const next = new Set(prev)
+        next.delete(order.id)
+        return next
+      })
     }
   }
 
@@ -435,9 +471,22 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Orders on the left (wider) */}
           <Card className="border-border/50 lg:col-span-2">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-foreground">Orders</CardTitle>
-              <CardDescription>Open, recently closed (done), and closed orders</CardDescription>
+              <div className="text-xs text-muted-foreground flex flex-col items-end gap-1 text-right">
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  open
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500" />
+                </span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  success
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" />
+                </span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  failed
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />
+                </span>
+              </div>
             </CardHeader>
             <CardContent>
             {/* Open */}
@@ -468,7 +517,21 @@ export default function DashboardPage() {
                               {s.tfLabel ? (s.ruleText ? ' • ' : '') + `TF ${s.tfLabel}` : null}
                             </div>
                           )}
-                          <Badge variant="outline" className="bg-blue-500/10 border-blue-500/40 text-blue-500">open</Badge>
+                          <Button
+                            variant={confirmCancelIds.has(o.id) ? "destructive" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                              if (confirmCancelIds.has(o.id)) {
+                                handleCancelOpenOrder(o)
+                              } else {
+                                setConfirmCancelIds(prev => new Set(prev).add(o.id))
+                              }
+                            }}
+                            disabled={cancellingIds.has(o.id)}
+                            className="cursor-pointer"
+                          >
+                            {cancellingIds.has(o.id) ? 'Canceling…' : (confirmCancelIds.has(o.id) ? 'Confirm cancel' : 'Cancel')}
+                          </Button>
                         </div>
                         <div className="text-[11px] text-muted-foreground mt-1">
                           {(() => {
@@ -582,12 +645,6 @@ export default function DashboardPage() {
                           ) : null
                         })()}
                         <div className="flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className={`${o.state === 'done_failed' ? 'bg-red-500/10 border-red-500/40 text-red-500' : 'bg-green-500/10 border-green-500/40 text-green-500'}`}
-                          >
-                            {o.state === 'done_successful' ? 'successful' : 'failed'}
-                          </Badge>
                           <Button
                             variant="outline"
                             size="sm"
@@ -675,7 +732,7 @@ export default function DashboardPage() {
                               </div>
                             ) : null
                           })()}
-                          <Badge variant="outline" className={`${o.state === 'failed' ? 'bg-red-500/10 border-red-500/40 text-red-500' : 'bg-green-500/10 border-green-500/40 text-green-500'}`}>{o.state}</Badge>
+                          
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}{o.termination_message ? ` • ${o.termination_message}` : ''}</div>
                       </div>

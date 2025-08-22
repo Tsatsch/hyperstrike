@@ -55,7 +55,7 @@ create table if not exists public.users (
   wallet_address text unique not null,
   xp int not null default 0,
   referral_code text unique,
-  referred_by_user_id int references users(user_id),
+  referred_by_user_id bigint references users(user_id),
   last_daily_xp_at timestamptz
 );
 

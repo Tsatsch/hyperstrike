@@ -1206,7 +1206,7 @@ export default function TradingPlatform() {
                       setCurrentStep(3)
                     }} 
                     disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid}
-                    className={`relative overflow-hidden border shadow-lg cursor-pointer ${
+                    className={`relative overflow-hidden border shadow-lg cursor-pointer bg-transparent hover:bg-transparent ${
                       isPercentageExceeding ? 'border-red-500' : 'border-border/50'
                     } text-primary-foreground`}
                   >

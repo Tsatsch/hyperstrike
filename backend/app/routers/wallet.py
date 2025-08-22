@@ -15,6 +15,9 @@ from app.services.user import (
 from app.db.sb import supabase
 from app.auth.privy import verify_privy_token
 from app.auth.session import get_current_user
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -68,9 +71,18 @@ async def register_user(wallet: str, authorization: str = Header(None), referral
             code = ensure_referral_code(uid)
             # If referral code provided on first login, attach inviter
             if referral:
+                logger.info("Referral param received for existing user_id=%s: %s", uid, referral)
                 inviter = get_user_by_referral_code(referral)
-                if inviter and set_referred_by_if_empty(uid, inviter["user_id"]):
-                    increment_user_xp(inviter["user_id"], 200)
+                if inviter:
+                    attached = set_referred_by_if_empty(uid, inviter["user_id"])
+                    logger.info(
+                        "Referral attach attempt for user_id=%s by inviter_user_id=%s: attached=%s",
+                        uid,
+                        inviter["user_id"],
+                        attached,
+                    )
+                    if attached:
+                        increment_user_xp(inviter["user_id"], 200)
             return UserCreateResponse(user_id=uid, wallet=wallet_norm, created=False, xp=get_user_xp(uid), referral_code=code)
 
         user = create_or_get_user(wallet_norm)
@@ -78,9 +90,18 @@ async def register_user(wallet: str, authorization: str = Header(None), referral
         code = ensure_referral_code(user["user_id"])
         # If referral code provided, attach inviter and reward
         if referral:
+            logger.info("Referral param received for new user_id=%s: %s", user["user_id"], referral)
             inviter = get_user_by_referral_code(referral)
-            if inviter and set_referred_by_if_empty(user["user_id"], inviter["user_id"]):
-                increment_user_xp(inviter["user_id"], 200)
+            if inviter:
+                attached = set_referred_by_if_empty(user["user_id"], inviter["user_id"])
+                logger.info(
+                    "Referral attach attempt for user_id=%s by inviter_user_id=%s: attached=%s",
+                    user["user_id"],
+                    inviter["user_id"],
+                    attached,
+                )
+                if attached:
+                    increment_user_xp(inviter["user_id"], 200)
         return UserCreateResponse(user_id=user["user_id"], wallet=wallet_norm, created=True, xp=get_user_xp(user["user_id"]), referral_code=code)
     except HTTPException:
         raise
