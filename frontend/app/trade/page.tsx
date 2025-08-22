@@ -167,6 +167,15 @@ export default function TradingPlatform() {
   const { resolvedTheme } = useTheme();
   const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>({});
   const [orderLifetime, setOrderLifetime] = useState<string>("24h");
+  const [leverage, setLeverage] = useState<number>(20);
+  const [showLeverageModal, setShowLeverageModal] = useState(false);
+  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [positionSize, setPositionSize] = useState<number>(100);
+  const [showTpSl, setShowTpSl] = useState(false);
+  const [tpPrice, setTpPrice] = useState("");
+  const [slPrice, setSlPrice] = useState("");
+  const [gainType, setGainType] = useState<"%" | "$">("%");
+  const [lossType, setLossType] = useState<"%" | "$">("%");
 
   // Generate mapping from contract address to tokens using centralized config
   const contractAddressToToken: { [key: string]: Token | undefined } = {}
@@ -179,7 +188,7 @@ export default function TradingPlatform() {
   // All tokens from HYPERLIQUID_TOKENS are now properly mapped
 
   useEffect(() => {
-    if (showFromTokenModal || showToTokenModal) {
+    if (showFromTokenModal || showToTokenModal || showLeverageModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
@@ -187,7 +196,7 @@ export default function TradingPlatform() {
     return () => {
       document.body.style.overflow = 'auto';
     };
-  }, [showFromTokenModal, showToTokenModal]);
+  }, [showFromTokenModal, showToTokenModal, showLeverageModal]);
 
   const filteredTokens = tokens.filter(
     (token) =>
@@ -438,7 +447,7 @@ export default function TradingPlatform() {
   const tvReadyRef = useRef<boolean>(false);
   const chartRef = useRef<any>(null);
   const currentStudyIdRef = useRef<number | null>(null);
-  const initTradingView = (containerId: string, studies?: any[]) => {
+  const initTradingView = (containerId: string, symbol: string = "BYBIT:HYPEUSDT", studies?: any[]) => {
     const container = document.getElementById(containerId);
     if (!container) return;
 
@@ -496,36 +505,57 @@ export default function TradingPlatform() {
         return perpsMap[base] || spotMap[base] || `BYBIT:${base}USDT`
       };
 
-      tvWidgetRef.current = new (window as any).TradingView.widget({
-        autosize: true,
-        symbol: getTradingViewSymbol(triggerToken || 'HYPE'),
-        interval: getTradingViewInterval(timeframe || '1h'),
-        timezone: "Etc/UTC",
-        theme: (resolvedTheme === 'light') ? 'light' : 'dark',
-        style: "1",
-        locale: "en",
-        toolbar_bg: (resolvedTheme === 'light') ? "#ffffff" : "#0b0b0b",
-        enable_publishing: false,
-        allow_symbol_change: true,
-        container_id: containerId,
-        width: "100%",
-        height: "500",
-        studies: studies || []
-      });
+      // Use different logic for HyperCore vs HyperEVM
+      if (containerId === "hypercore_tradingview_chart") {
+        // Simple HyperCore chart
+        new (window as any).TradingView.widget({
+          autosize: true,
+          symbol: symbol,
+          interval: "1H",
+          timezone: "Etc/UTC",
+          theme: (resolvedTheme === 'light') ? 'light' : 'dark',
+          style: "1",
+          locale: "en",
+          toolbar_bg: (resolvedTheme === 'light') ? "#ffffff" : "#0b0b0b",
+          enable_publishing: false,
+          allow_symbol_change: true,
+          container_id: containerId,
+          width: "140%",
+          height: "400"
+        });
+      } else {
+        // Complex HyperEVM chart with studies
+        tvWidgetRef.current = new (window as any).TradingView.widget({
+          autosize: true,
+          symbol: getTradingViewSymbol(triggerToken || 'HYPE'),
+          interval: getTradingViewInterval(timeframe || '1h'),
+          timezone: "Etc/UTC",
+          theme: (resolvedTheme === 'light') ? 'light' : 'dark',
+          style: "1",
+          locale: "en",
+          toolbar_bg: (resolvedTheme === 'light') ? "#ffffff" : "#0b0b0b",
+          enable_publishing: false,
+          allow_symbol_change: true,
+          container_id: containerId,
+          width: "100%",
+          height: "500",
+          studies: studies || []
+        });
 
-      // Wait for chart to be ready, cache reference
-      tvWidgetRef.current.onChartReady?.(() => {
-        tvReadyRef.current = true;
-        chartRef.current = tvWidgetRef.current.activeChart?.();
-      });
+        // Wait for chart to be ready, cache reference (only for HyperEVM)
+        tvWidgetRef.current.onChartReady?.(() => {
+          tvReadyRef.current = true;
+          chartRef.current = tvWidgetRef.current.activeChart?.();
+        });
+      }
     }
   };
 
-  // Load TradingView script only when needed (in OHLCV config)
-  const loadTradingViewScript = (containerId: string) => {
+  // Load TradingView script only when needed
+  const loadTradingViewScript = (containerId: string, symbol: string = "BYBIT:HYPEUSDT", studies?: any[]) => {
     // Check if TradingView is already loaded
     if ((window as any).TradingView) {
-      initTradingView(containerId);
+      initTradingView(containerId, symbol, studies);
       return;
     }
 
@@ -534,7 +564,7 @@ export default function TradingPlatform() {
     script.type = 'text/javascript';
     script.src = 'https://s3.tradingview.com/tv.js';
     script.async = true;
-    script.onload = () => initTradingView(containerId);
+    script.onload = () => initTradingView(containerId, symbol, studies);
     script.onerror = () => {
       console.error('Failed to load TradingView script');
     };
@@ -640,20 +670,30 @@ export default function TradingPlatform() {
     fetchBalances()
   }, [authenticated, user?.wallet?.address, tokens]);
 
-  // Load TradingView widget when OHLCV configuration step is reached
+  // Load TradingView widget when OHLCV configuration step is reached or HyperCore platform is selected
   useEffect(() => {
     if (currentStep === 4 && conditionType === "ohlcvn") {
-      loadTradingViewScript("ohlcv_tradingview_chart");
+      loadTradingViewScript("ohlcv_tradingview_chart", "BYBIT:HYPEUSDT");
     }
     
-    // Cleanup when leaving the OHLCV step
+    // Load TradingView widget for HyperCore platform
+    if (currentStep === 2 && selectedPlatform === "hypercore") {
+      loadTradingViewScript("hypercore_tradingview_chart", "BYBIT:HYPEUSDT", []);
+    }
+    
+    // Cleanup when leaving the OHLCV step or HyperCore platform
     return () => {
-      const container = document.getElementById('ohlcv_tradingview_chart');
-      if (container) {
-        container.innerHTML = '';
+      const ohlcvContainer = document.getElementById('ohlcv_tradingview_chart');
+      if (ohlcvContainer) {
+        ohlcvContainer.innerHTML = '';
+      }
+      
+      const hypercoreContainer = document.getElementById('hypercore_tradingview_chart');
+      if (hypercoreContainer) {
+        hypercoreContainer.innerHTML = '';
       }
     };
-  }, [currentStep, conditionType, triggerToken, timeframe, resolvedTheme]);
+  }, [currentStep, conditionType, triggerToken, timeframe, resolvedTheme, selectedPlatform]);
 
   // Handle creating conditional swap
   const handleCreateSwap = async () => {
@@ -803,6 +843,28 @@ export default function TradingPlatform() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <style jsx>{`
+        .slider::-webkit-slider-thumb {
+          appearance: none;
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: hsl(var(--primary));
+          cursor: pointer;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .slider::-moz-range-thumb {
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: hsl(var(--primary));
+          cursor: pointer;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+      `}</style>
       {/* Header */}
       <header className="border-b bg-card">
         <div className="flex h-16 items-center px-6">
@@ -826,38 +888,7 @@ export default function TradingPlatform() {
       </header>
 
       <div className="flex-1 container mx-auto px-4 py-8">
-        {/* Progress Steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-center space-x-4">
-            {[
-              { step: 1, title: "Platform" },
-              { step: 2, title: "Swap Pair" },
-              { step: 3, title: "Condition Type" },
-              { step: 4, title: "Configure" },
-              { step: 5, title: "Review" },
-            ].map((item, index) => (
-              <div key={item.step} className="flex items-center">
-                <div
-                  className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-all ${
-                    currentStep >= item.step 
-                      ? "bg-primary text-primary-foreground shadow-lg" 
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {item.step}
-                </div>
-                <span
-                  className={`ml-2 text-sm font-medium transition-colors ${
-                    currentStep >= item.step ? "text-primary" : "text-muted-foreground"
-                  }`}
-                >
-                  {item.title}
-                </span>
-                {index < 4 && <ArrowRight className="w-4 h-4 mx-4 text-muted-foreground" />}
-              </div>
-            ))}
-          </div>
-        </div>
+
 
         {/* Step 1: Choose Platform */}
         {currentStep === 1 && (
@@ -929,8 +960,8 @@ export default function TradingPlatform() {
                         Core trading platform with advanced features and enhanced security
                       </p>
                       <div className="mt-3 flex items-center space-x-2">
-                        <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800 border-yellow-200">
-                          Coming Soon
+                        <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
+                          Available
                         </Badge>
                         <Badge variant="outline" className="text-xs">
                           Core Platform
@@ -1398,25 +1429,284 @@ export default function TradingPlatform() {
 
         {/* Step 2: HyperCore (Coming Soon) */}
         {currentStep === 2 && selectedPlatform === "hypercore" && (
-          <Card className="max-w-2xl mx-auto border-border/50 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-foreground">HyperCore Coming Soon</CardTitle>
-              <CardDescription>This platform is currently under development</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="text-center py-8">
-                <Target className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-foreground mb-2">HyperCore Platform</h3>
-                <p className="text-muted-foreground mb-4">
-                  Our advanced core trading platform is currently under development. 
-                  Please check back later for updates.
-                </p>
-                <Button variant="outline" onClick={() => setCurrentStep(1)}>
-                  Go Back
-                </Button>
+          <div className="max-w-7xl mx-auto px-2">
+            {/* Header with Market Info */}
+            <div className="bg-card border border-border/50 rounded-lg p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xl font-bold text-foreground">HYPE-USDT</span>
+                    <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    <span>Mark: 4,344.8</span>
+                    <span className="mx-2">•</span>
+                    <span>Oracle: 4,350.5</span>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-6 text-sm">
+                  <div>
+                    <div className="text-teal-500">+178.9 / +4.29%</div>
+                    <div className="text-muted-foreground">24h Change</div>
+                  </div>
+                  <div>
+                    <div className="text-foreground">$1,721,696.97</div>
+                    <div className="text-muted-foreground">24h Volume</div>
+                  </div>
+                  <div>
+                    <div className="text-foreground">$5,113,217.48</div>
+                    <div className="text-muted-foreground">Open Interest</div>
+                  </div>
+                  <div>
+                    <div className="text-red-500">-0.0059% 00:13:26</div>
+                    <div className="text-muted-foreground">Funding / Countdown</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {/* Chart Section - Takes up 4/5 of the space */}
+              <div className="lg:col-span-4">
+                <Card className="border-border/50 shadow-lg">
+                  <CardContent className="p-0">
+
+
+                    {/* TradingView Chart */}
+                    <div className="relative">
+                                              <div id="hypercore_tradingview_chart" style={{ width: '100%', height: '600px' }}></div>
+                      
+                      {/* Liquidation Price Line */}
+                      <div className="absolute left-0 right-0 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                        <div className="border-t-2 border-dashed border-red-500/50"></div>
+                        <div className="absolute left-4 top-0 transform -translate-y-1/2 bg-red-500 text-white text-xs px-2 py-1 rounded">
+                          Liq. Price 4,108.6
+                        </div>
+                      </div>
+
+                      {/* PNL Overlay */}
+                      <div className="absolute top-20 left-20 bg-black/80 text-white text-xs p-2 rounded">
+                        <div>PNL $0.15</div>
+                        <div>0.0043</div>
+                      </div>
               </div>
             </CardContent>
           </Card>
+              </div>
+
+              {/* Trading Panel - Takes up 1/5 of the space */}
+              <div className="lg:col-span-1">
+                <Card className="border-border/50 shadow-lg h-full">
+                  <CardContent className="p-4 space-y-4">
+                    {/* Leverage Selector */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-foreground">Leverage</span>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => setShowLeverageModal(true)}
+                          className="px-2 py-1 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                        >
+                          {leverage}x
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Order Type Selector */}
+                    <div className="flex bg-muted rounded-lg p-0.5">
+                      <button
+                        onClick={() => setOrderType("market")}
+                        className={`flex-1 px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
+                          orderType === "market"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        }`}
+                      >
+                        Market
+                      </button>
+                      <button
+                        onClick={() => setOrderType("limit")}
+                        className={`flex-1 px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
+                          orderType === "limit"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        }`}
+                      >
+                        Limit
+                      </button>
+                    </div>
+
+                    {/* Buy/Sell Buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className="px-3 py-2 text-xs font-medium rounded bg-teal-600 text-white hover:bg-teal-700 transition-colors">
+                        Buy / Long
+                      </button>
+                      <button className="px-3 py-2 text-xs font-medium rounded bg-red-600 text-white hover:bg-red-700 transition-colors">
+                        Sell / Short
+                      </button>
+                    </div>
+
+                    {/* Size Input */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-foreground">Size</label>
+                      <div className="flex items-center space-x-1">
+                        <Input
+                          type="number"
+                          placeholder="0.0043"
+                          className="flex-1 text-xs h-8"
+                          defaultValue="0.0043"
+                        />
+                        <div className="flex items-center space-x-1 px-2 py-1 bg-muted rounded text-xs">
+                          <span className="font-medium">HYPE</span>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      {/* Percentage Slider */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>0%</span>
+                          <span>100%</span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={positionSize}
+                            onChange={(e) => setPositionSize(parseInt(e.target.value))}
+                            className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer slider"
+                            style={{
+                              background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${positionSize}%, hsl(var(--muted)) ${positionSize}%, hsl(var(--muted)) 100%)`
+                            }}
+                          />
+                        </div>
+                        <div className="text-center text-xs text-foreground font-medium">{positionSize}%</div>
+                      </div>
+                    </div>
+
+                    {/* Take Profit / Stop Loss */}
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          id="tp-sl" 
+                          className="rounded" 
+                          checked={showTpSl}
+                          onChange={(e) => setShowTpSl(e.target.checked)}
+                        />
+                        <label htmlFor="tp-sl" className="text-sm text-foreground">Take Profit / Stop Loss</label>
+                      </div>
+                      
+                      {/* TP/SL Form */}
+                      {showTpSl && (
+                        <div className="space-y-2 p-2 border border-border/50 rounded-lg bg-muted/20">
+                          {/* TP Price */}
+                          <div className="grid grid-cols-2 gap-1">
+                            <div>
+                              <label className="text-xs text-muted-foreground">TP Price</label>
+                              <Input
+                                type="number"
+                                placeholder="TP Price"
+                                value={tpPrice}
+                                onChange={(e) => setTpPrice(e.target.value)}
+                                className="text-xs h-6"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Gain</label>
+                              <div className="flex">
+                                <Input
+                                  type="number"
+                                  placeholder="Gain"
+                                  className="text-xs h-6 rounded-r-none"
+                                />
+                                <button
+                                  onClick={() => setGainType(gainType === "%" ? "$" : "%")}
+                                  className="px-1 h-6 text-xs bg-muted border border-l-0 border-border/50 rounded-r text-muted-foreground hover:bg-accent"
+                                >
+                                  {gainType}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* SL Price */}
+                          <div className="grid grid-cols-2 gap-1">
+                            <div>
+                              <label className="text-xs text-muted-foreground">SL Price</label>
+                              <Input
+                                type="number"
+                                placeholder="SL Price"
+                                value={slPrice}
+                                onChange={(e) => setSlPrice(e.target.value)}
+                                className="text-xs h-6"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Loss</label>
+                              <div className="flex">
+                                <Input
+                                  type="number"
+                                  placeholder="Loss"
+                                  className="text-xs h-6 rounded-r-none"
+                                />
+                                <button
+                                  onClick={() => setLossType(lossType === "%" ? "$" : "%")}
+                                  className="px-1 h-6 text-xs bg-muted border border-l-0 border-border/50 rounded-r text-muted-foreground hover:bg-accent"
+                                >
+                                  {lossType}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Button */}
+                    <button className="w-full px-3 py-2 text-xs font-medium rounded bg-muted text-muted-foreground cursor-not-allowed">
+                      Not Enough Margin
+                    </button>
+
+                    {/* Order Details */}
+                    <div className="space-y-2 pt-3 border-t border-border/50">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Liquidation Price</span>
+                        <span className="text-foreground">4,211.9</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Order Value</span>
+                        <span className="text-foreground">$18.67</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Margin Required</span>
+                        <span className="text-foreground">$0.93</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Slippage</span>
+                        <span className="text-foreground text-right">Est: 0.0173%<br />Max: 20.00%</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Fees</span>
+                        <span className="text-foreground">0.0450% / 0.0150%</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            {/* Back Button */}
+            <div className="flex justify-start mt-6">
+              <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border/50 cursor-pointer">
+                Back to Platform Selection
+              </Button>
+            </div>
+          </div>
         )}
 
         {/* Step 4: Configure Condition */}
@@ -2462,6 +2752,81 @@ export default function TradingPlatform() {
       </div>
 
 
+
+      {/* Leverage Selection Modal */}
+      {showLeverageModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card border border-border/50 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-300">
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-foreground">Select Leverage</h3>
+                <button
+                  onClick={() => setShowLeverageModal(false)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {/* Leverage Display */}
+              <div className="text-center">
+                <div className="text-3xl font-bold text-primary">{leverage}x</div>
+                <div className="text-sm text-muted-foreground mt-1">Leverage</div>
+              </div>
+              
+              {/* Leverage Slider */}
+              <div className="space-y-4">
+                <div className="relative">
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    value={leverage}
+                    onChange={(e) => setLeverage(parseInt(e.target.value))}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer slider"
+                    style={{
+                      background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${((leverage - 1) / 19) * 100}%, hsl(var(--muted)) ${((leverage - 1) / 19) * 100}%, hsl(var(--muted)) 100%)`
+                    }}
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                    <span>1x</span>
+                    <span>5x</span>
+                    <span>10x</span>
+                    <span>15x</span>
+                    <span>20x</span>
+                  </div>
+                </div>
+                
+                {/* Quick Select Buttons */}
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 5, 10, 20].map((lev) => (
+                    <button
+                      key={lev}
+                      onClick={() => setLeverage(lev)}
+                      className={`px-3 py-2 text-sm rounded transition-colors ${
+                        leverage === lev
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-accent"
+                      }`}
+                    >
+                      {lev}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Apply Button */}
+              <button
+                onClick={() => setShowLeverageModal(false)}
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-3 rounded-lg transition-colors"
+              >
+                Apply Leverage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Wallet Connection Prompt Modal */}
       {showWalletPrompt && (
