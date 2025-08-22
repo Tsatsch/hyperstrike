@@ -107,7 +107,7 @@ export default function TradingPlatform() {
   const [showWalletPrompt, setShowWalletPrompt] = useState(false)
   const [pendingPlatform, setPendingPlatform] = useState<"hyperevm" | "hypercore" | null>(null)
   const [tokens, setTokens] = useState<Token[]>(initialTokens)
-  const [fromToken, setFromToken] = useState<Token | null>(initialTokens.find(t => t.symbol === "USDT") || null)
+  const [fromToken, setFromToken] = useState<Token | null>(initialTokens.find(t => t.symbol === "HYPE") || null)
   const [toTokens, setToTokens] = useState<Token[]>([])
   const [tokenBalances, setTokenBalances] = useState<Record<string, string>>({})
   const [conditionType, setConditionType] = useState("")
@@ -382,7 +382,7 @@ export default function TradingPlatform() {
     fromFiatValue !== "Loading..." && 
     toFiatValue !== "Loading..." && 
     parseFloat(toFiatValue) > parseFloat(fromFiatValue)
-  const isInputValid = fromAmount && parseFloat(fromAmount) > 0
+  const isInputValid = !!fromAmount && parseFloat(fromAmount) > 0
   const isOutputValid = toTokens.length > 0 && toTokens.every(token => {
     const percentage = toPercentages[token.symbol] || "0"
     return percentage && parseFloat(percentage) > 0
@@ -395,6 +395,17 @@ export default function TradingPlatform() {
   }, 0)
   
   const isPercentageExceeding = totalPercentage > 100
+
+  // EVM: check available balance for Sell token (compute directly to avoid helper order dependency)
+  const fromTokenBalance = fromToken ? (() => {
+    if (authenticated && fromToken.address && tokenBalances[fromToken.address]) {
+      const balanceNum = parseFloat(tokenBalances[fromToken.address])
+      return isNaN(balanceNum) ? 0 : balanceNum
+    }
+    const fallback = parseFloat(String(fromToken.balance ?? 0))
+    return isNaN(fallback) ? 0 : fallback
+  })() : 0
+  const isBalanceInsufficient = selectedPlatform === 'hyperevm' && !!fromToken && isInputValid && parseFloat(fromAmount || '0') > fromTokenBalance
 
   // Helper function to remove a token from toTokens
   const removeToToken = (tokenSymbol: string) => {
@@ -526,28 +537,28 @@ export default function TradingPlatform() {
         });
       } else {
         // Complex HyperEVM chart with studies
-        tvWidgetRef.current = new (window as any).TradingView.widget({
-          autosize: true,
-          symbol: getTradingViewSymbol(triggerToken || 'HYPE'),
-          interval: getTradingViewInterval(timeframe || '1h'),
-          timezone: "Etc/UTC",
-          theme: (resolvedTheme === 'light') ? 'light' : 'dark',
-          style: "1",
-          locale: "en",
-          toolbar_bg: (resolvedTheme === 'light') ? "#ffffff" : "#0b0b0b",
-          enable_publishing: false,
-          allow_symbol_change: true,
-          container_id: containerId,
-          width: "100%",
-          height: "500",
-          studies: studies || []
-        });
+      tvWidgetRef.current = new (window as any).TradingView.widget({
+        autosize: true,
+        symbol: getTradingViewSymbol(triggerToken || 'HYPE'),
+        interval: getTradingViewInterval(timeframe || '1h'),
+        timezone: "Etc/UTC",
+        theme: (resolvedTheme === 'light') ? 'light' : 'dark',
+        style: "1",
+        locale: "en",
+        toolbar_bg: (resolvedTheme === 'light') ? "#ffffff" : "#0b0b0b",
+        enable_publishing: false,
+        allow_symbol_change: true,
+        container_id: containerId,
+        width: "100%",
+        height: "500",
+        studies: studies || []
+      });
 
         // Wait for chart to be ready, cache reference (only for HyperEVM)
-        tvWidgetRef.current.onChartReady?.(() => {
-          tvReadyRef.current = true;
-          chartRef.current = tvWidgetRef.current.activeChart?.();
-        });
+      tvWidgetRef.current.onChartReady?.(() => {
+        tvReadyRef.current = true;
+        chartRef.current = tvWidgetRef.current.activeChart?.();
+      });
       }
     }
   };
@@ -1036,6 +1047,11 @@ export default function TradingPlatform() {
                         </Button>
                       </div>
                     </div>
+                    {selectedPlatform === 'hyperevm' && isBalanceInsufficient && (
+                      <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500">
+                        Insufficient balance. You have {fromTokenBalance.toFixed(6)} {fromToken?.symbol}.
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col items-end">
                     <Button
@@ -1087,10 +1103,11 @@ export default function TradingPlatform() {
                   </div>
                   
                   {/* Dynamic Token Grid */}
-                  <div className="grid grid-cols-1 gap-3">
+                  <div className={`grid gap-3 ${toTokens.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                     {/* Selected Token Cards */}
                     {toTokens.map((token, index) => {
                       const tokenPercentage = toPercentages[token.symbol] || "0"
+                      const percentNumber = Math.min(100, Math.max(0, parseFloat(tokenPercentage) || 0))
                       const tokenAmount = fromAmount ? (parseFloat(tokenPercentage) / 100) * parseFloat(fromAmount) : 0
                       const tokenValue = tokenAmount * getCachedPrice(token.symbol)
                       
@@ -1114,16 +1131,49 @@ export default function TradingPlatform() {
                         <span className="text-foreground font-medium text-sm">{token.symbol}</span>
                       </div>
                       
-                      {/* Percentage Input */}
+                      {/* Percentage Input (Manual) */}
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="Enter percentage"
                         value={toPercentages[token.symbol] || ""}
-                        onChange={(e) => updateToTokenPercentage(token.symbol, e.target.value)}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          const cleaned = raw.replace(/[^0-9.]/g, '')
+                          updateToTokenPercentage(token.symbol, cleaned)
+                        }}
+                        onBlur={() => {
+                          const raw = toPercentages[token.symbol] || ""
+                          const num = parseFloat(raw)
+                          if (isNaN(num)) {
+                            updateToTokenPercentage(token.symbol, "")
+                          } else {
+                            const clamped = Math.min(100, Math.max(0, num))
+                            updateToTokenPercentage(token.symbol, String(clamped))
+                          }
+                        }}
                         className="text-base font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground mb-2"
-                        max="100"
-                        min="0"
                       />
+                      {/* Percentage Slider */}
+                      <div className="relative mt-1">
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-between">
+                          {[...Array(11)].map((_, i) => (
+                            <div key={i} className="w-px h-2 bg-muted-foreground/30"></div>
+                          ))}
+                        </div>
+                        <input
+                          type="range"
+                        min="0"
+                          max="100"
+                          step="1"
+                          value={percentNumber}
+                          onChange={(e) => updateToTokenPercentage(token.symbol, e.target.value)}
+                          className="relative w-full h-0.5 bg-muted rounded-lg appearance-none cursor-pointer slider"
+                          style={{
+                            background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${percentNumber}%, hsl(var(--muted)) ${percentNumber}%, hsl(var(--muted)) 100%)`
+                          }}
+                        />
+                      </div>
                       
                                              {/* Token Details */}
                        <div className="space-y-1">
@@ -1179,7 +1229,7 @@ export default function TradingPlatform() {
                       {isPercentageExceeding ? (
                         <span className="text-sm font-medium text-foreground">
                           Total percentage of <span className="text-red-500">{totalPercentage.toFixed(1)}%</span> exceeds 100%
-                        </span>
+                      </span>
                       ) : (
                         <span className="text-sm font-medium text-foreground">{totalPercentage.toFixed(1)}%</span>
                       )}
@@ -1196,7 +1246,7 @@ export default function TradingPlatform() {
                   Back
                 </Button>
                 <div className="flex flex-col items-stretch">
-                  <Button 
+                <Button 
                     onClick={() => {
                       if (totalPercentage !== 100) {
                         setShowContinueWarning(true)
@@ -1205,20 +1255,22 @@ export default function TradingPlatform() {
                       setShowContinueWarning(false)
                       setCurrentStep(3)
                     }} 
-                    disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid}
-                    className={`relative overflow-hidden border shadow-lg cursor-pointer bg-transparent hover:bg-transparent ${
+                    disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid || (selectedPlatform === 'hyperevm' && isBalanceInsufficient)}
+                    className={`relative overflow-hidden border shadow-lg cursor-pointer bg-muted hover:bg-muted ${
                       isPercentageExceeding ? 'border-red-500' : 'border-border/50'
-                    } text-primary-foreground`}
+                    }`}
                   >
                     <div 
                       className={`absolute inset-y-0 left-0 ${isPercentageExceeding ? 'bg-red-500' : 'bg-primary'} transition-[width] duration-300 ease-in-out`} 
                       style={{ width: `${Math.min(Math.max(totalPercentage, 0), 100)}%` }}
                     />
-                    <span className="relative z-10 flex items-center">
-                      Continue
-                      <ArrowRight className="w-4 h-4 ml-2" />
+                    <span className={`relative z-10 flex items-center ${
+                      (totalPercentage === 100 || isPercentageExceeding) ? 'text-primary-foreground' : 'text-foreground'
+                    }`}>
+                  Continue
+                  <ArrowRight className="w-4 h-4 ml-2" />
                     </span>
-                  </Button>
+                </Button>
                   {showContinueWarning && totalPercentage !== 100 && (
                     <div className="mt-2 text-center">
                       <span className="text-xs text-white">Output percentage must be 100%</span>
@@ -1566,10 +1618,22 @@ export default function TradingPlatform() {
                       <label className="text-xs font-medium text-foreground">Size</label>
                       <div className="flex items-center space-x-1">
                         <Input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           placeholder="0.0043"
                           className="flex-1 text-xs h-8"
-                          defaultValue="0.0043"
+                          value={positionSize.toString()}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/[^0-9.]/g, '')
+                            const parts = cleaned.split('.')
+                            const normalized = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned
+                            const num = parseFloat(normalized)
+                            if (isNaN(num)) {
+                              setPositionSize(0)
+                            } else {
+                              setPositionSize(num)
+                            }
+                          }}
                         />
                         <div className="flex items-center space-x-1 px-2 py-1 bg-muted rounded text-xs">
                           <span className="font-medium">HYPE</span>
@@ -1579,26 +1643,27 @@ export default function TradingPlatform() {
                         </div>
                       </div>
                       
-                      {/* Percentage Slider */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>0%</span>
-                          <span>100%</span>
+                      {/* Quick Size Actions */}
+                      <div className="flex items-center justify-between pt-1">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPositionSize(50)}
+                            className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
+                          >
+                            50%
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPositionSize(100)}
+                            className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
+                          >
+                            100%
+                </Button>
                         </div>
-                        <div className="relative">
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={positionSize}
-                            onChange={(e) => setPositionSize(parseInt(e.target.value))}
-                            className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer slider"
-                            style={{
-                              background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${positionSize}%, hsl(var(--muted)) ${positionSize}%, hsl(var(--muted)) 100%)`
-                            }}
-                          />
-                        </div>
-                        <div className="text-center text-xs text-foreground font-medium">{positionSize}%</div>
+                        <div className="text-xs text-muted-foreground">{positionSize}%</div>
                       </div>
                     </div>
 
@@ -1708,9 +1773,9 @@ export default function TradingPlatform() {
                         <span className="text-muted-foreground">Fees</span>
                         <span className="text-foreground">0.0450% / 0.0150%</span>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+              </div>
+            </CardContent>
+          </Card>
               </div>
             </div>
 

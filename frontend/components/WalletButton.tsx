@@ -63,12 +63,17 @@ export function WalletButton() {
         try {
           const token = await getAccessToken?.();
           if (!token) return;
-          // Read referral code from URL if present
+          // Read referral code from URL if present; fall back to localStorage snapshot
           let referralParam = '';
           try {
             const url = new URL(window.location.href);
             const ref = url.searchParams.get('ref');
-            if (ref) referralParam = `&referral=${encodeURIComponent(ref)}`;
+            if (ref) {
+              referralParam = `&referral=${encodeURIComponent(ref)}`;
+            } else {
+              const stored = localStorage.getItem('Hyperstrike_referral_code');
+              if (stored) referralParam = `&referral=${encodeURIComponent(stored)}`;
+            }
           } catch {}
 
           await fetch(`${config.apiUrl}/api/user?wallet=${currentWalletAddress}${referralParam}`, {

@@ -99,7 +99,12 @@ export async function getOrCreateUser(getAccessToken?: () => Promise<string | nu
     try {
       const url = new URL(window.location.href);
       const ref = url.searchParams.get('ref');
-      if (ref) referralParam = `&referral=${encodeURIComponent(ref)}`;
+      if (ref) {
+        referralParam = `&referral=${encodeURIComponent(ref)}`;
+      } else {
+        const stored = localStorage.getItem('Hyperstrike_referral_code');
+        if (stored) referralParam = `&referral=${encodeURIComponent(stored)}`;
+      }
     } catch {}
     const response = await fetch(`${config.apiUrl}/api/user?wallet=${walletAddress}${referralParam}`, {
       method: 'POST',

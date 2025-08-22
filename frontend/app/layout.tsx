@@ -3,6 +3,7 @@ import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 import { Providers } from './providers'
+import { ReferralCapture } from '@/components/ReferralCapture'
 
 export const metadata: Metadata = {
   title: 'Hyperstrike - Conditional Trading Platform',
@@ -48,6 +49,7 @@ html {
       </head>
       <body suppressHydrationWarning>
         <Providers>
+          <ReferralCapture />
           {children}
         </Providers>
       </body>
