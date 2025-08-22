@@ -176,6 +176,7 @@ export default function TradingPlatform() {
   const [slPrice, setSlPrice] = useState("");
   const [gainType, setGainType] = useState<"%" | "$">("%");
   const [lossType, setLossType] = useState<"%" | "$">("%");
+  const [showContinueWarning, setShowContinueWarning] = useState(false);
 
   // Generate mapping from contract address to tokens using centralized config
   const contractAddressToToken: { [key: string]: Token | undefined } = {}
@@ -1171,18 +1172,16 @@ export default function TradingPlatform() {
 
                 {/* Total Percentage Display */}
                 {toTokens.length > 0 && (
-                  <div className={`flex justify-between items-center p-3 rounded-lg ${
+                  <div className={`flex items-center justify-center p-3 rounded-lg ${
                     isPercentageExceeding ? 'bg-red-500/10 border border-red-500/20' : 'bg-muted/50'
                   }`}>
-                    <span className="text-sm font-medium text-foreground">Total Percentage:</span>
                     <div className="flex items-center space-x-2">
-                      <span className={`text-sm font-medium ${
-                        isPercentageExceeding ? 'text-red-500' : 'text-foreground'
-                      }`}>
-                        {totalPercentage.toFixed(1)}%
-                      </span>
-                      {isPercentageExceeding && (
-                        <span className="text-xs text-red-500">Exceeds 100%</span>
+                      {isPercentageExceeding ? (
+                        <span className="text-sm font-medium text-foreground">
+                          Total percentage of <span className="text-red-500">{totalPercentage.toFixed(1)}%</span> exceeds 100%
+                        </span>
+                      ) : (
+                        <span className="text-sm font-medium text-foreground">{totalPercentage.toFixed(1)}%</span>
                       )}
                     </div>
                   </div>
@@ -1190,27 +1189,42 @@ export default function TradingPlatform() {
                   </div>
 
                   {/* Validation Message */}
-                  {isPercentageExceeding && (
-                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                      <p className="text-xs text-red-500 text-center">
-                        Total percentage ({totalPercentage.toFixed(1)}%) cannot exceed 100%. 
-                        Please reduce the percentages for your selected tokens.
-                      </p>
-                    </div>
-                  )}
+                  
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border/50 cursor-pointer">
                   Back
                 </Button>
-                <Button 
-                  onClick={() => setCurrentStep(3)} 
-                  disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid || isPercentageExceeding}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
-                >
-                  Continue
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
+                <div className="flex flex-col items-stretch">
+                  <Button 
+                    onClick={() => {
+                      if (totalPercentage !== 100) {
+                        setShowContinueWarning(true)
+                        return
+                      }
+                      setShowContinueWarning(false)
+                      setCurrentStep(3)
+                    }} 
+                    disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid}
+                    className={`relative overflow-hidden border shadow-lg cursor-pointer ${
+                      isPercentageExceeding ? 'border-red-500' : 'border-border/50'
+                    } text-primary-foreground`}
+                  >
+                    <div 
+                      className={`absolute inset-y-0 left-0 ${isPercentageExceeding ? 'bg-red-500' : 'bg-primary'} transition-[width] duration-300 ease-in-out`} 
+                      style={{ width: `${Math.min(Math.max(totalPercentage, 0), 100)}%` }}
+                    />
+                    <span className="relative z-10 flex items-center">
+                      Continue
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </span>
+                  </Button>
+                  {showContinueWarning && totalPercentage !== 100 && (
+                    <div className="mt-2 text-center">
+                      <span className="text-xs text-white">Output percentage must be 100%</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
