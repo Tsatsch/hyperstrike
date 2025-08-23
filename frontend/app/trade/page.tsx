@@ -58,8 +58,8 @@ const initialTokens: Token[] = HYPERLIQUID_TOKENS.map(token => ({
 
 const conditionTypes = [
   {
-    id: "ohlcvn",
-    name: "OHLCV",
+    id: "ohlcv_trigger",
+    name: "OHLCV Trigger",
     description: "Execute based on OHLCV data of a token",
     icon: TrendingUp,
     popular: true,
@@ -790,7 +790,7 @@ export default function TradingPlatform() {
           outputs: selectedOutputs,
         },
         order_data: {
-          type: 'ohlcvTrigger',
+          type: 'ohlcv_trigger',
           ohlcv_trigger: {
             pair: triggerToken || 'HYPE',
             timeframe: timeframe || '1h',

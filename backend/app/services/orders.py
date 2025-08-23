@@ -1,14 +1,14 @@
 from typing import List, Optional, Dict, Any
 from app.db.sb import supabase
-from app.models.order import OrderCreateRequest, OrderOut
+from app.models.order import OrderCreateRequest, OrderOut, OhlcvTriggerData
 import asyncio
 import logging
+from app.services.candle_watcher import register_trigger
 
 logger = logging.getLogger(__name__)
 
 def _normalize_wallet(wallet: str) -> str:
     return wallet.lower()
-
 
 def _canonicalize_symbol_for_hyperliquid(symbol: str) -> str:
     """Map internal symbols (e.g., UBTC) to Hyperliquid canonical form (e.g., BTC)."""
@@ -20,8 +20,10 @@ def _canonicalize_symbol_for_hyperliquid(symbol: str) -> str:
     return s
 
 
-def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet: str) -> OrderOut:
+
+async def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet: str) -> OrderOut:
     """Insert order into Supabase and return saved record."""
+
     # Exclude None values so JSON payloads remain compact (and omit legacy fields when unused)
     data = order_req.model_dump(exclude_none=True)
     # Authoritative wallet comes from session, not client payload
@@ -39,15 +41,22 @@ def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet: str) 
     # Try to subscribe to market data for this order (non-blocking)
     try:
         if (saved.get("order_data") and 
-            saved["order_data"].get("type") == "ohlcvTrigger" and
+            saved["order_data"].get("type") == "ohlcv_trigger" and
             saved["order_data"].get("ohlcv_trigger")):
-            trigger = saved["order_data"]["ohlcv_trigger"]
-            symbol = trigger.get("pair")
-            timeframe = trigger.get("timeframe")
-            if symbol and timeframe:
-                # Start subscription in background
-                asyncio.create_task(_subscribe_to_market_data(symbol, timeframe))
+            trigger = OhlcvTriggerData(**saved["order_data"]["ohlcv_trigger"])
+            await register_trigger(trigger)
+        
+        # elif (saved.get("order_data") and 
+        #     saved["order_data"].get("type") == "wallet_activity"):
+        #     trigger = saved["order_data"]["wallet_activity"]
+        #     asyncio.create_task(register_trigger(trigger))
+        
+        # else:
+        #     logger.warning(f"Failed to subscribe to market data for new order: {e}")
     except Exception as e:
+
+
+        #to extend later 
         logger.warning(f"Failed to subscribe to market data for new order: {e}")
     
     return OrderOut(**saved)
@@ -139,5 +148,7 @@ def update_order_state_for_user(order_id: int, user_id: int, state: str, message
     if not response.data:
         raise Exception("Order not found or not owned by user")
     return OrderOut(**response.data[0])
+
+
 
 

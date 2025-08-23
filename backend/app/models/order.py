@@ -53,7 +53,7 @@ class Cooldown(BaseModel):
 
 class ChainedConfirmation(BaseModel):
     active: Optional[bool] = False
-    
+    value: Optional[int] = None
 class InvalidationHalt(BaseModel):
     active: Optional[bool] = False
 
@@ -75,7 +75,7 @@ class OhlcvTriggerData(BaseModel):
 
 
 class OrderData(BaseModel):
-    type: str  # e.g. "ohlcvTrigger", "walletActivity"
+    type: str  # e.g. "ohlcv_trigger", "wallet_activity"
     ohlcv_trigger: Optional[OhlcvTriggerData] = None
     wallet_activity: Optional[Dict[str, Any]] = None
 
