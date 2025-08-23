@@ -4,8 +4,16 @@ import { useEffect, useMemo, useState } from "react"
 import { usePrivy } from '@privy-io/react-auth'
 import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, getUserXp, setOrderState } from '@/lib/api'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
-import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getNativeToken } from '@/lib/tokens'
+import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getNativeToken, getTokenBySymbol } from '@/lib/tokens'
 import { updateAllTokenPrices } from '@/lib/hyperliquid-prices'
+import { 
+  getCoreAccount, 
+  getCorePerpPositions, 
+  getCoreSpotBalances, 
+  HypercoreAccountSummary,
+  HypercorePerpPosition,
+  HypercoreSpotBalance
+} from '@/lib/hypercore'
 
 import { Button } from "@/components/ui/button"
  
@@ -141,6 +149,10 @@ export default function DashboardPage() {
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [balances, setBalances] = useState<Record<string, string>>({})
   const [loadingBalances, setLoadingBalances] = useState(false)
+  const [loadingCore, setLoadingCore] = useState(false)
+  const [coreAccount, setCoreAccount] = useState<HypercoreAccountSummary | null>(null)
+  const [corePerps, setCorePerps] = useState<HypercorePerpPosition[]>([])
+  const [coreSpots, setCoreSpots] = useState<HypercoreSpotBalance[]>([])
   const [showClosed, setShowClosed] = useState(false)
   const [xp, setXp] = useState<number>(0)
   const [showConnectPrompt, setShowConnectPrompt] = useState(false)
@@ -217,6 +229,31 @@ export default function DashboardPage() {
         setBalances({})
       } finally {
         setLoadingBalances(false)
+      }
+    }
+    run()
+  }, [authenticated, user?.wallet?.address])
+
+  // Fetch HyperCore account, spot, and perps (MAINNET)
+  useEffect(() => {
+    const run = async () => {
+      if (!authenticated || !user?.wallet?.address) return
+      setLoadingCore(true)
+      try {
+        const [acct, perps, spots] = await Promise.all([
+          getCoreAccount(user.wallet.address),
+          getCorePerpPositions(user.wallet.address),
+          getCoreSpotBalances(user.wallet.address)
+        ])
+        setCoreAccount(acct)
+        setCorePerps(Array.isArray(perps) ? perps : [])
+        setCoreSpots(Array.isArray(spots) ? spots : [])
+      } catch {
+        setCoreAccount(null)
+        setCorePerps([])
+        setCoreSpots([])
+      } finally {
+        setLoadingCore(false)
       }
     }
     run()
@@ -335,6 +372,30 @@ export default function DashboardPage() {
     if (lower === HYPE_ADDRESS.toLowerCase()) return 'HYPE'
     const found = TOKENS.find(t => t.address?.toLowerCase() === lower)
     return found?.symbol || address.slice(0, 6) + '...' + address.slice(-4)
+  }
+
+  // Map HyperCore symbols to our internal symbol set for price lookup
+  const toInternalSymbol = (sym: string): string => {
+    const s = (sym || '').toUpperCase()
+    if (s === 'ETH') return 'UETH'
+    if (s === 'BTC') return 'UBTC'
+    if (s === 'SOL') return 'USOL'
+    if (s === 'USDE' || s === 'USDE.E' || s === 'USDEUSD') return 'USDE'
+    if (s === 'FART') return 'UFART'
+    return s
+  }
+
+  const getDisplayNameForSymbol = (sym: string): string => {
+    const cfg = getTokenBySymbol(sym)
+    if (cfg?.name) return cfg.name
+    if (sym.toUpperCase() === 'USDC') return 'USD Coin'
+    return sym
+  }
+
+  const formatAmount4 = (num: number): string => {
+    if (!isFinite(num)) return '0.0000'
+    const truncated = Math.trunc(num * 10000) / 10000
+    return truncated.toFixed(4)
   }
 
   // ---
@@ -749,8 +810,8 @@ export default function DashboardPage() {
             <Card className="border-border/50">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-foreground">Your Tokens</CardTitle>
-                  <CardDescription>Your current token holdings</CardDescription>
+                  <CardTitle className="text-foreground">Your Tokens (EVM)</CardTitle>
+                  <CardDescription>HyperEVM balances</CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -800,7 +861,7 @@ export default function DashboardPage() {
                               </div>
                               <div className="text-right">
                                 <div className="text-foreground text-sm font-semibold">${valueUsd.toFixed(2)}</div>
-                                <div className="text-[10px] text-muted-foreground">{balanceStr}</div>
+                                <div className="text-[10px] text-muted-foreground">{formatAmount4(parseFloat(balanceStr || '0') || 0)}</div>
                               </div>
                             </div>
                           ))}
@@ -817,6 +878,148 @@ export default function DashboardPage() {
                           )}
                         </>
                       )
+                    })()}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* HyperCore Spot */}
+            <Card className="border-border/50">
+              <CardHeader>
+                <CardTitle className="text-foreground">HyperCore Spot</CardTitle>
+                <CardDescription>Balances on Core</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingCore ? (
+                  <div className="text-center py-6">
+                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    <p className="text-muted-foreground mt-2 text-sm">Loading…</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(() => {
+                      const rows = (coreSpots || [])
+                        .map(s => {
+                          const symbol = toInternalSymbol(s.symbol)
+                          const price = priceCache[symbol]?.price ?? (symbol === 'USDC' ? 1 : 0)
+                          const amountNum = Number(s.balance) || 0
+                          const valueUsd = amountNum * price
+                          return { symbol, amountNum, valueUsd }
+                        })
+                        .filter(r => r.amountNum > 0)
+                        .sort((a, b) => b.valueUsd - a.valueUsd)
+                      if (rows.length === 0) return (
+                        <div className="text-muted-foreground text-sm">No spot balances</div>
+                      )
+                      return rows.map((r, idx) => {
+                        const cfg = getTokenBySymbol(r.symbol)
+                        return (
+                          <div key={`${r.symbol}-${idx}`} className="flex items-center justify-between border border-border/50 rounded-lg px-3 py-2">
+                            <div className="flex items-center space-x-2">
+                              {(() => {
+                                const icon = cfg?.icon || (r.symbol === 'USDC' ? 'https://app.hyperliquid.xyz/coins/USDT_USDC.svg' : '')
+                                return icon ? (
+                                  <img src={icon} alt={r.symbol} className="w-5 h-5 rounded-full" loading="eager" width={20} height={20} />
+                                ) : null
+                              })()}
+                              <div>
+                                <div className="text-foreground text-sm font-medium">{r.symbol}</div>
+                                <div className="text-[10px] text-muted-foreground">{cfg?.name || (r.symbol === 'USDC' ? 'USD Coin' : r.symbol)}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-foreground text-sm font-semibold">${r.valueUsd.toFixed(2)}</div>
+                              <div className="text-[10px] text-muted-foreground">{formatAmount4(r.amountNum)}</div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* HyperCore Perps */}
+            <Card className="border-border/50">
+              <CardHeader>
+                <CardTitle className="text-foreground">HyperCore Perps</CardTitle>
+                <CardDescription>Open positions on Core</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingCore ? (
+                  <div className="text-center py-6">
+                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    <p className="text-muted-foreground mt-2 text-sm">Loading…</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {typeof coreAccount?.availableBalance === 'number' && coreAccount.availableBalance > 0 && (() => {
+                      const sym = 'USDC'
+                      const amountNum = Number(coreAccount.availableBalance) || 0
+                      const cfg = getTokenBySymbol(sym)
+                      return (
+                        <div key={`perps-available-${sym}`} className="flex items-center justify-between border border-border/50 rounded-lg px-3 py-2">
+                          <div className="flex items-center space-x-2">
+                            {(() => {
+                              const icon = cfg?.icon || 'https://app.hyperliquid.xyz/coins/USDT_USDC.svg'
+                              return icon ? (
+                                <img src={icon} alt={sym} className="w-5 h-5 rounded-full" loading="eager" width={20} height={20} />
+                              ) : null
+                            })()}
+                            <div>
+                              <div className="text-foreground text-sm font-medium">{sym}</div>
+                              <div className="text-[10px] text-muted-foreground">{cfg?.name || 'USD Coin'}</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-foreground text-sm font-semibold">${amountNum.toFixed(2)}</div>
+                            <div className="text-[10px] text-muted-foreground">{formatAmount4(amountNum)}</div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                    {(() => {
+                      const rows = (corePerps || [])
+                        .map(p => {
+                          // Display notional in USD = |size| * price
+                          const baseSym = toInternalSymbol(String(p.asset || '').replace('-PERP', '').replace('/USDC', ''))
+                          const price = priceCache[baseSym]?.price ?? 0
+                          const sizeNum = Number(p.size) || 0
+                          const valueUsd = Math.abs(sizeNum) * price
+                          return { symbol: String(p.asset || baseSym), sizeNum, valueUsd }
+                        })
+                        .filter(r => r.sizeNum !== 0)
+                        .sort((a, b) => b.valueUsd - a.valueUsd)
+                      if (rows.length === 0) return (
+                        <div className="text-muted-foreground text-sm">No open perps positions</div>
+                      )
+                      return rows.map((r, idx) => {
+                        const sym = String(r.symbol)
+                        const base = toInternalSymbol(sym.replace('-PERP', '').replace('/USDC', ''))
+                        const cfg = getTokenBySymbol(base)
+                        return (
+                          <div key={`${r.symbol}-${idx}`} className="flex items-center justify-between border border-border/50 rounded-lg px-3 py-2">
+                            <div className="flex items-center space-x-2">
+                              {(() => {
+                                const icon = cfg?.icon || (base === 'USDC' ? 'https://app.hyperliquid.xyz/coins/USDT_USDC.svg' : '')
+                                return icon ? (
+                                  <img src={icon} alt={sym} className="w-5 h-5 rounded-full" loading="eager" width={20} height={20} />
+                                ) : null
+                              })()}
+                              <div>
+                                <div className="text-foreground text-sm font-medium">{sym}</div>
+                                <div className="text-[10px] text-muted-foreground">{cfg?.name || (base === 'USDC' ? 'USD Coin' : base)}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-foreground text-sm font-semibold">${r.valueUsd.toFixed(2)}</div>
+                              <div className="text-[10px] text-muted-foreground">{formatAmount4(r.sizeNum)}</div>
+                            </div>
+                          </div>
+                        )
+                      })
                     })()}
                   </div>
                 )}

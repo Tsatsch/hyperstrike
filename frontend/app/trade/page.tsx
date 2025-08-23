@@ -8,6 +8,7 @@ import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
 import { getBatchTokenData, TokenMetadata, TokenMarketData } from '@/lib/alchemy'
 import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getTokenByAddress } from '@/lib/tokens'
 import { updateAllTokenPrices } from '@/lib/hyperliquid-prices'
+import { getCoreAccount, HypercoreAccountSummary } from '@/lib/hypercore'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -158,6 +159,8 @@ export default function TradingPlatform() {
   const [showLeverageModal, setShowLeverageModal] = useState(false);
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [positionSize, setPositionSize] = useState<number>(100);
+  const [coreAccount, setCoreAccount] = useState<HypercoreAccountSummary | null>(null)
+  const [loadingCoreAccount, setLoadingCoreAccount] = useState<boolean>(false)
   const [showTpSl, setShowTpSl] = useState(false);
   const [tpPrice, setTpPrice] = useState("");
   const [slPrice, setSlPrice] = useState("");
@@ -185,6 +188,24 @@ export default function TradingPlatform() {
       document.body.style.overflow = 'auto';
     };
   }, [showFromTokenModal, showToTokenModal, showLeverageModal]);
+
+  // Fetch HyperCore account summary when on HyperCore flow
+  useEffect(() => {
+    const run = async () => {
+      if (!authenticated || !user?.wallet?.address) return
+      if (selectedPlatform !== 'hypercore') return
+      setLoadingCoreAccount(true)
+      try {
+        const acct = await getCoreAccount(user.wallet.address)
+        setCoreAccount(acct)
+      } catch {
+        setCoreAccount(null)
+      } finally {
+        setLoadingCoreAccount(false)
+      }
+    }
+    run()
+  }, [authenticated, user?.wallet?.address, selectedPlatform])
 
   const filteredTokens = tokens.filter(
     (token) =>
@@ -1731,6 +1752,9 @@ export default function TradingPlatform() {
                           {leverage}x
                         </button>
                       </div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Available (Core): {loadingCoreAccount ? 'Loading…' : (typeof coreAccount?.availableBalance === 'number' ? `$${coreAccount.availableBalance.toFixed(2)}` : '—')}
                     </div>
 
                     {/* Order Type Selector */}

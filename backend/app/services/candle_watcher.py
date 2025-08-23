@@ -19,10 +19,8 @@ import httpx
 
 
 
-
 BACKEND_JWT = os.getenv("BACKEND_JWT")
 spot_mappings = json.load(open("app/utils/name_coin_mapping.json"))
-
 # from app.services.trigger_processor import TriggerProcessor
 
 HYPER_WS = "wss://api.hyperliquid.xyz/ws"
@@ -37,6 +35,8 @@ logging.basicConfig(
     force=True,  # overwrite any prior config (handy in notebooks/frameworks)
 )
 logger = logging.getLogger(__name__)
+
+
 
 # Global trigger processor instance
 # trigger_processor = TriggerProcessor()

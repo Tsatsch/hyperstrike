@@ -4,6 +4,7 @@ import os
 from app.routers import wallet
 from app.routers import orders as orders_router
 from app.routers import xp as xp_router
+from app.routers import hypercore as hypercore_router
 from app.auth import routers as auth_router
 from app.services.startup_service import start_background_tasks
 import asyncio
@@ -28,6 +29,7 @@ app.add_middleware(
 app.include_router(wallet.router, prefix="/api", tags=["wallet"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
 app.include_router(xp_router.router, prefix="/api", tags=["xp"])
+app.include_router(hypercore_router.router, prefix="/api", tags=["hypercore"])
 app.include_router(auth_router.router, prefix="/api", tags=["auth"])
 
 @app.on_event("startup")
