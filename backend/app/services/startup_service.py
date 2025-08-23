@@ -46,7 +46,7 @@ class StartupService:
             for symbol, timeframe in subscriptions:
                 try:
                     await ensure_subscription(symbol, timeframe)
-                    logger.info(f"Started subscription for {symbol}/{timeframe}")
+
                 except Exception as e:
                     logger.error(f"Failed to start subscription for {symbol}/{timeframe}: {e}")
                     continue

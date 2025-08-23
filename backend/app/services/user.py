@@ -2,6 +2,7 @@ from app.db.sb import supabase  # your existing Supabase client
 import secrets
 import string
 import logging
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +72,11 @@ def increment_user_xp(user_id: int, delta: int) -> int:
     """Increment a user's XP by delta and return the new total. Best-effort if column missing."""
     try:
         current = get_user_xp(user_id)
+        logger.info(f"Current XP for user {user_id}: {current}")
         new_total = max(0, current + int(delta))
         supabase.table("users").update({"xp": new_total}).eq("user_id", user_id).execute()
+        logger.info(f"Incremented user {user_id} XP by {delta} to {new_total}")
+        logger.info(f"New XP for user {user_id}: {new_total}")
         return new_total
     except Exception:
         # Ignore if column missing
@@ -114,7 +118,7 @@ def ensure_referral_code(user_id: int) -> str:
         return ""
 
 
-def get_user_by_referral_code(code: str) -> dict | None:
+def get_user_by_referral_code(code: str) -> Optional[Dict]:
     try:
         # Normalize code to uppercase (our generator uses A-Z0-9)
         normalized = (code or "").strip().upper()

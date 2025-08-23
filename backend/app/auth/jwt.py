@@ -1,7 +1,8 @@
 import jwt
 from datetime import datetime, timedelta
+import os
 
-SECRET = "to paste later"
+SECRET = os.getenv("JWT_SECRET")
 ALGORITHM = "HS256"
 
 def create_jwt(user_id: int, wallet: str) -> str:
@@ -14,3 +15,6 @@ def create_jwt(user_id: int, wallet: str) -> str:
 
 def decode_jwt(token: str) -> dict:
     return jwt.decode(token, SECRET, algorithms=[ALGORITHM])
+
+
+

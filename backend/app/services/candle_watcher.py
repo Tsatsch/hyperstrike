@@ -10,18 +10,24 @@ import aiohttp
 import websockets
 import math
 import os
+import dotenv
+dotenv.load_dotenv()
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from app.models.order import OhlcvTriggerData
+from app.models.order import OhlcvTriggerData, OrderTriggeredRequest, UpdateOrderStateRequest, ActualOutput, OrderOut
+import httpx
 
 
 
 
-spot_mappings = json.load(open("backend/app/utils/mappings.json"))
+
+BACKEND_JWT = os.getenv("BACKEND_JWT")
+spot_mappings = json.load(open("app/utils/name_coin_mapping.json"))
+
 # from app.services.trigger_processor import TriggerProcessor
 
 HYPER_WS = "wss://api.hyperliquid.xyz/ws"
 HYPER_REST = "https://api.hyperliquid.xyz/info"
-CANDLES_TO_FETCH_AT_START = 1000
+CANDLES_TO_FETCH_AT_START = 500
 
 
 logging.basicConfig(
@@ -44,18 +50,41 @@ class RuntimeTrigger:
 active_triggers: Dict[Tuple[str, str], List[RuntimeTrigger]] = {}
 active_subscriptions: Dict[Tuple[str, str], bool] = {}
 
-def get_coin_for_hyperliquid_pair(symbol:str) -> str:
+def get_coin_for_hyperliquid_pair(symbol: str) -> str:
     if '-' in symbol:
         # Perp pairs are formatted as "coin-USDC"
         coin = symbol[:symbol.find('-')]
-        print(f"Perp pair: {coin}")
+        #print(f"Perp pair: {coin}")
         return coin
     else:
-        # Spot pairs are formatted as "coin/USDC"
-        coin = symbol[:symbol.find('/')]
-        print(f"Spot pair: {coin}")
-        return spot_mappings.get(coin, 'coin/USDC')
-
+        # Spot pairs are formatted as "coin/USDC" or "coin/USDT"
+        parts = symbol.split('/')
+        if len(parts) != 2:
+            return symbol  # Return original if format is unexpected
+            
+        coin = parts[0]
+        quote = parts[1]
+        
+        #print(f"Spot pair: {coin}/{quote}")
+        
+        if quote == 'USDC':
+            # For USDC pairs, prefer unique mapping or name_1
+            if coin in spot_mappings:
+                return spot_mappings[coin]
+            elif f"{coin}_1" in spot_mappings:
+                return spot_mappings[f"{coin}_1"]
+            else:
+                return coin  # Fallback to original coin name
+                
+        elif quote == 'USDT':
+            # For USDT pairs, always use name_2
+            if f"{coin}_2" in spot_mappings:
+                return spot_mappings[f"{coin}_2"]
+            else:
+                return coin  # Fallback if name_2 doesn't exist
+        else:
+            # For other quote currencies, use original logic
+            return spot_mappings.get(coin, coin)
 
 
 
@@ -108,28 +137,7 @@ class RollingSMA:
         if len(self.values) < self.window:
             return None
         return self._sum / len(self.values)
-class RollingVWAP:
-    """O(1) rolling VWAP over N candles using deques for pv and vol."""
-    def __init__(self, window: int):
-        if window <= 0:
-            raise ValueError("VWAP window must be > 0")
-        self.window = window
-        self._pv = deque(maxlen=window)   # stores TP*V
-        self._vol = deque(maxlen=window)  # stores V
-        self._sum_pv = 0.0
-        self._sum_vol = 0.0
 
-    def push(self, tp: float, vol: float) -> float:
-        # remove oldest contributions if at capacity
-        if len(self._pv) == self.window:
-            self._sum_pv -= self._pv[0]
-            self._sum_vol -= self._vol[0]
-        pv = tp * vol
-        self._pv.append(pv)
-        self._vol.append(vol)
-        self._sum_pv += pv
-        self._sum_vol += vol
-        return (self._sum_pv / self._sum_vol) if self._sum_vol > 0 else float("nan")
 class RollingRSI:
     def __init__(self, window: int = 14, source: str = "close"):
         if source not in ["open", "high", "low", "close", "hl2", "hlc3", "ohlc4"]:
@@ -335,12 +343,12 @@ class CandleMonitor:
     Monitors one (symbol, interval) stream, keeps rolling SMA on closed candles,
     and calls a user hook on each closed candle.
     """
-    def __init__(self, symbol: str, interval: str, sma_config: List[Tuple[int, str]], vwap_windows: List[int], rsi_config: List[Tuple[int, str]], bollinger_cfg: List[Tuple[int, float, str, str]], ema_config: List[Tuple[int, str]]):
+    def __init__(self, order: OrderOut, symbol: str, interval: str, sma_config: List[Tuple[int, str]], rsi_config: List[Tuple[int, str]], bollinger_cfg: List[Tuple[int, float, str, str]], ema_config: List[Tuple[int, str]]):
+        self.order = order
         self.symbol = symbol
         self.interval = interval
         # SMA config: (window, source) where source can be "close", "hl2", "hlc3", "ohlc4", etc.
         self.sma = {w: RollingSMA(w, source) for w, source in (sma_config or [])}
-        self.vwap = {w: RollingVWAP(w) for w in (vwap_windows or [])}
         # RSI config: (window, source) where source can be "close", "hl2", "hlc3", "ohlc4", etc.
         self.rsi = {w: RollingRSI(w, source) for w, source in (rsi_config or [])}
         # Bollinger Bands: (length, k_multiplier, source)
@@ -356,9 +364,13 @@ class CandleMonitor:
         return int(time.time() * 1000)
 
     async def seed_history(self, session: aiohttp.ClientSession, lookback_ms: int) -> None:
+        print(f"Trying to seed history for {self.symbol}/{self.interval}")
         """Seed with enough history to warm up SMA windows."""
+        
         end_ms = self._now_ms()
         start_ms = end_ms - lookback_ms
+        # print(f"Start time: {start_ms}, End time: {end_ms}")
+        # print(f"Lookback: {lookback_ms}")
 
         body = {
             "type": "candleSnapshot",
@@ -369,10 +381,11 @@ class CandleMonitor:
                 "endTime": end_ms,
             },
         }
-
+        
         max_attempts = 5
         base_backoff_seconds = 1.0
         data = []
+        
         for attempt in range(1, max_attempts + 1):
             try:
                 async with session.post(HYPER_REST, json=body, timeout=15) as r:
@@ -419,11 +432,9 @@ class CandleMonitor:
                 high_f = float(c.get("h", 0))
                 close_f = float(c["c"])
                 tp = (close_f + low_f + high_f) / 3
-                for w, vwap in self.vwap.items():
-                    vwap.push(tp, volume)
                 for w, rsi in self.rsi.items():
                     rsi.push(c)
-                for (length, k, ma, source), bb in self.bbands.items():
+                for (length, k, source), bb in self.bbands.items():
                     bb.push(c) # Pass the entire candle to the Bollinger Bands
                 for w, ema in self.ema.items():
                     ema.push(c)
@@ -445,13 +456,9 @@ class CandleMonitor:
             smas = {}
             for w, sma in self.sma.items():
                 smas[f"sma_{w}_{sma.source}"] = sma.push(c)
-            vwaps = {}
-            volume = float(c.get("v", 0))
             low_f = float(c.get("l", 0))
             high_f = float(c.get("h", 0))
             tp = (close_f + low_f + high_f) / 3
-            for w, vwap in self.vwap.items():
-                vwaps[f"vwap_{w}"] = vwap.push(tp, volume)
             rsis = {}
             for w, rsi in self.rsi.items():
                 rsis[f"rsi_{w}_{rsi.source}"] = rsi.push(c)
@@ -468,7 +475,6 @@ class CandleMonitor:
                 emas[f"ema_{w}_{ema.source}"] = ema.push(c)
             closed = dict(c)    
             closed.update(smas)
-            closed.update(vwaps)
             closed.update(rsis)
             closed.update(bbands)
             closed.update(emas)
@@ -522,12 +528,13 @@ class CandleMonitor:
         try:
             key = (self.symbol, self.interval)
             triggers = active_triggers.get(key, [])
-
+            print(f"Triggers: {triggers}")
+            print(f"Candle: {candle}")
             for rt in triggers[:]:  # iterate over copy since we may remove
                 trig = rt.trigger
 
-                lhs = resolve_source(trig.first_source.model_dump(), candle)
-                rhs = resolve_source(trig.second_source.model_dump(), candle)
+                lhs = resolve_source_value(trig.first_source.model_dump(), candle)
+                rhs = resolve_source_value(trig.second_source.model_dump(), candle)
                 if lhs is None or rhs is None:
                     continue
 
@@ -567,31 +574,57 @@ class CandleMonitor:
                         f"🔥 Trigger fired for {trig.pair} {trig.timeframe}: "
                         f"{lhs} {trig.trigger_when} {rhs}"
                     )
+                    
                     # TODO: action: swap, update db
+                    triggered_order = OrderTriggeredRequest(
+                        order_id=self.order.id,
+                        input_value_usd=100, #to change later
+                        triggered_price=float(candle["c"]), # to change later
+                        actual_outputs=[] #to change later
+                    )
+                    await order_triggered(triggered_order, key, rt)
                     # await notify_trigger(trig, candle)
+
+                #print out the current info of the source1 and source2
+                else:
+                    logger.info(f"Still monitoring: {lhs} {trig.trigger_when} {rhs} to be triggered")
 
         except Exception as e:
             logger.error(f"Error processing closed candle: {e}")
 
+async def order_triggered(triggered_order: OrderTriggeredRequest, key: Tuple[str, str], rt: RuntimeTrigger):
+    active_triggers[key].remove(rt)
+    async with httpx.AsyncClient() as client:
+        await client.post(f"{os.getenv('BACKEND_URL')}/api/order/triggered", json=triggered_order.model_dump(), headers={"Authorization": f"Bearer {BACKEND_JWT}"})
+    
+    
 
 
-async def register_trigger(trigger: OhlcvTriggerData):
+
+
+
+async def register_ohlcv_trigger(order: OrderOut):
+    trigger = order.order_data.ohlcv_trigger
     coin = get_coin_for_hyperliquid_pair(trigger.pair)
     key = (coin, trigger.timeframe)
     rt = RuntimeTrigger(trigger)
     active_triggers.setdefault(key, []).append(rt)
-    await ensure_subscription(coin, trigger.timeframe)
+    await ensure_subscription(order)
 
 
-async def ensure_subscription(symbol: str, interval: str) -> None:
+async def ensure_subscription(order: OrderOut) -> None:
     """Ensure we have an active subscription for a symbol/interval pair"""
-
+    symbol = order.order_data.ohlcv_trigger.pair
+    interval = order.order_data.ohlcv_trigger.timeframe
+    if "-" in symbol or "/" in symbol:
+        symbol = get_coin_for_hyperliquid_pair(symbol)
     key = (symbol, interval)
     if key not in active_subscriptions:
         active_subscriptions[key] = True
         logger.info(f"Starting subscription for {symbol}/{interval}")
         # Start monitoring in background
-        asyncio.create_task(run_stream(symbol, interval))
+        source_config = resolve_source_config(order)
+        asyncio.create_task(run_stream(order, symbol, interval, source_config["sma_config"], source_config["rsi_config"], source_config["bollinger_cfg"], source_config["ema_config"]))
 
 async def maybe_unsubscribe(symbol: str, interval: str) -> None:
     """Unsubscribe from a symbol/interval if no more triggers need it"""
@@ -612,13 +645,42 @@ def cooldown_ok(rt: RuntimeTrigger, trig: OhlcvTriggerData, candle_T: int, inter
     return bars_since >= trig.cooldown.value
 
 
+def resolve_source_config(order: OrderOut) -> Optional[float]:
+    #return source indicator name and parameters to pass to run_stream
+    #returns sma_config, rsi_config, bollinger_cfg, ema_config
+    order_data = order.order_data
+    config = {
+        "sma_config": [],
+        "rsi_config": [],
+        "bollinger_cfg": [],
+        "ema_config": []
+    }
+    if order_data.type == "ohlcv_trigger":
+        trigger = order_data.ohlcv_trigger
+        if trigger.first_source.type == "indicators":
+            if trigger.first_source.indicator == "sma":
+                config["sma_config"].append((trigger.first_source.parameters.length, trigger.first_source.parameters.OHLC_source))
+            elif trigger.first_source.indicator == "ema":
+                config["ema_config"].append((trigger.first_source.parameters.length, trigger.first_source.parameters.OHLC_source))
+            elif trigger.first_source.indicator == "rsi":
+                config["rsi_config"].append((trigger.first_source.parameters.length, trigger.first_source.parameters.OHLC_source))
+            elif trigger.first_source.indicator == "bb_upper":
+                config["bollinger_cfg"].append((trigger.first_source.parameters.length, trigger.first_source.parameters.std_dev, trigger.first_source.parameters.OHLC_source))
+            elif trigger.first_source.indicator == "bb_lower":
+                config["bollinger_cfg"].append((trigger.first_source.parameters.length, trigger.first_source.parameters.std_dev, trigger.first_source.parameters.OHLC_source))
+            elif trigger.first_source.indicator == "bb_mid":
+                config["bollinger_cfg"].append((trigger.first_source.parameters.length, trigger.first_source.parameters.std_dev, trigger.first_source.parameters.OHLC_source))
+        return config
+            
 
-def resolve_source(source: dict, candle: dict) -> Optional[float]:
+
+    
+def resolve_source_value(source: dict, candle: dict) -> Optional[float]:
     stype = source["type"]
     if stype == "value":
         return float(source["value"])
-    if stype == "ohlc":
-        return float(candle.get(source["source"]))  # e.g. "open", "close"
+    if stype == "OHLCV":
+        return float(candle.get(source["source"][:1]))  
     if stype == "indicators":
         ind = source["indicator"].lower()
         params = source.get("parameters", {})
@@ -649,10 +711,10 @@ def resolve_source(source: dict, candle: dict) -> Optional[float]:
 
 
 async def run_stream(
+    order: OrderOut,
     symbol: str = "BTC",
     interval: str = "1m",
     sma_config: List[Tuple[int, str]] = [(5, "close"), (20, "close")],
-    vwap_windows: List[int] = [210, 400],  
     rsi_config: List[Tuple[int, str]] = [(14, "close"), (21, "close")],  
     bollinger_cfg: List[Tuple[int, float, str]] = [(20, 2.0, "close"), (50, 2.0, "close")],  #add/remove windows as you like
     # Bollinger Bands config: (length, k_multiplier, source)
@@ -663,7 +725,7 @@ async def run_stream(
     ema_config: List[Tuple[int, str]] = [(50, "close"), (200, "close")],  #add/remove windows as you like
 ) -> None:
 
-    monitor = CandleMonitor(symbol, interval, sma_config, vwap_windows, rsi_config, bollinger_cfg, ema_config)
+    monitor = CandleMonitor(order, symbol, interval, sma_config, rsi_config, bollinger_cfg, ema_config)
     lookback_ms = CandleMonitor.interval_to_ms(interval)*CANDLES_TO_FETCH_AT_START
     
     logger.info(f"Starting stream for {symbol}/{interval}")
@@ -713,18 +775,19 @@ async def run_stream(
             backoff = 1.0  
 
 if __name__ == "__main__":
-    asyncio.run(run_stream(
-        symbol="BTC",
-        interval="1m",
-        sma_config=[(50, "close"), (200, "close")],  # add/remove windows as you like
-        vwap_windows=[210, 400],  #dd/remove windows as you like
-        rsi_config=[(14, "close"), (21, "close")],  #add/remove windows as you like
-        bollinger_cfg=[(20, 2.0, "close"), (50, 2.0, "close")],  # Example: 20-period BB and 50-period BB
-        ema_config=[(50, "close"), (200, "close")],  #add/remove windows as you like
-    ))
+    # asyncio.run(run_stream(
+    #     symbol="BTC",
+    #     interval="1m",
+    #     sma_config=[(50, "close"), (200, "close")],  # add/remove windows as you like
 
-
-
+    #     rsi_config=[(14, "close"), (21, "close")],  #add/remove windows as you like
+    #     bollinger_cfg=[(20, 2.0, "close"), (50, 2.0, "close")],  # Example: 20-period BB and 50-period BB
+    #     ema_config=[(50, "close"), (200, "close")],  #add/remove windows as you like
+    # ))
 
     print(get_coin_for_hyperliquid_pair("UBTC/USDC"))
-    print(get_coin_for_hyperliquid_pair("UBTC-USDC"))
+    print(get_coin_for_hyperliquid_pair("BTC-USDC"))
+    print(get_coin_for_hyperliquid_pair("UBTC/USDT"))
+    print(get_coin_for_hyperliquid_pair("HYPE/USDC"))
+    print(get_coin_for_hyperliquid_pair("HYPE/USDT"))
+    print(get_coin_for_hyperliquid_pair("XAUT0/USDT"))

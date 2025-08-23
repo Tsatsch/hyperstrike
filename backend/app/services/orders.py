@@ -3,7 +3,7 @@ from app.db.sb import supabase
 from app.models.order import OrderCreateRequest, OrderOut, OhlcvTriggerData
 import asyncio
 import logging
-from app.services.candle_watcher import register_trigger
+from app.services.candle_watcher import register_ohlcv_trigger
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ async def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet:
             saved["order_data"].get("type") == "ohlcv_trigger" and
             saved["order_data"].get("ohlcv_trigger")):
             trigger = OhlcvTriggerData(**saved["order_data"]["ohlcv_trigger"])
-            await register_trigger(trigger)
+            await register_ohlcv_trigger(OrderOut(**saved))
         
         # elif (saved.get("order_data") and 
         #     saved["order_data"].get("type") == "wallet_activity"):

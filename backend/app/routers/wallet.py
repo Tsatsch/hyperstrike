@@ -25,8 +25,8 @@ class UserCreateResponse(BaseModel):
     user_id: int
     wallet: str
     created: bool
-    xp: int | None = None
-    referral_code: str | None = None
+    xp: Optional[int] = None
+    referral_code: Optional[str] = None
 
 @router.get("/test")
 async def test_endpoint():
@@ -46,7 +46,7 @@ async def get_all_connections():
 
 
 @router.post("/user", response_model=UserCreateResponse)
-async def register_user(wallet: str, authorization: str = Header(None), referral: str | None = None):
+async def register_user(wallet: str, authorization: str = Header(None), referral: Optional[str] = None):
     """Register user if not exists; requires Authorization: Bearer <Privy token>."""
     wallet_norm = wallet.lower()
     if not authorization:
@@ -113,7 +113,7 @@ class UserMeResponse(BaseModel):
     user_id: int
     wallet: str
     xp: int
-    referral_code: str | None = None
+    referral_code: Optional[str] = None
 
 
 @router.get("/user/me", response_model=UserMeResponse)
