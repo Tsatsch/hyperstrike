@@ -21,7 +21,7 @@ import { useRef } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown, Activity, Copy, ExternalLink, X } from "lucide-react"
+import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown, Activity, Copy, ExternalLink, X, Zap } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { XpButton } from "@/components/XpButton"
@@ -79,20 +79,6 @@ const conditionTypes = [
     popular: false,
   },
   {
-    id: "volume_trigger",
-    name: "Volume Trigger",
-    description: "Execute when trading volume reaches threshold",
-    icon: BarChart3,
-    popular: false,
-  },
-  {
-    id: "multi_token",
-    name: "Multi-Token Condition",
-    description: "Execute based on multiple token price movements",
-    icon: Target,
-    popular: false,
-  },
-  {
     id: "social_sentiment",
     name: "Social Sentiment",
     description: "Execute based on social media sentiment analysis",
@@ -111,6 +97,7 @@ export default function TradingPlatform() {
   const [toTokens, setToTokens] = useState<Token[]>([])
   const [tokenBalances, setTokenBalances] = useState<Record<string, string>>({})
   const [conditionType, setConditionType] = useState("")
+  const [isConditionSelectionUnlocked, setIsConditionSelectionUnlocked] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedPlatform, setSelectedPlatform] = useState<"hyperevm" | "hypercore" | null>(null)
   const [tokenSearchTerm, setTokenSearchTerm] = useState("")
@@ -383,7 +370,7 @@ export default function TradingPlatform() {
     toFiatValue !== "Loading..." && 
     parseFloat(toFiatValue) > parseFloat(fromFiatValue)
   const isInputValid = !!fromAmount && parseFloat(fromAmount) > 0
-  const isOutputValid = toTokens.length > 0 && toTokens.every(token => {
+  const isOutputValid = toTokens.length > 0 && toTokens.some(token => {
     const percentage = toPercentages[token.symbol] || "0"
     return percentage && parseFloat(percentage) > 0
   })
@@ -395,6 +382,7 @@ export default function TradingPlatform() {
   }, 0)
   
   const isPercentageExceeding = totalPercentage > 100
+  const isValidTotalPercentage = Math.abs(totalPercentage - 100) < 0.01 // Allow small floating point differences
 
   // EVM: check available balance for Sell token (compute directly to avoid helper order dependency)
   const fromTokenBalance = fromToken ? (() => {
@@ -415,13 +403,97 @@ export default function TradingPlatform() {
     setToPercentages(newToPercentages)
   }
 
-  // Helper function to update percentage for a specific token
+  // Helper function to update percentage for a specific token with auto-adjustment
   const updateToTokenPercentage = (tokenSymbol: string, percentage: string) => {
-    setToPercentages(prev => ({
-      ...prev,
-      [tokenSymbol]: percentage
-    }))
+    const newPercentage = parseFloat(percentage) || 0
+    
+    setToPercentages(prev => {
+      const currentTokens = toTokens.filter(t => t.symbol !== tokenSymbol)
+      const otherTokensCount = currentTokens.length
+      
+      if (otherTokensCount === 0) {
+        // Only one token, allow up to 100%
+        const clampedPercentage = Math.min(100, Math.max(0, newPercentage))
+        return { [tokenSymbol]: String(parseFloat(clampedPercentage.toFixed(2))) }
+      }
+      
+      // Clamp the new percentage to a reasonable range
+      const clampedPercentage = Math.min(100, Math.max(0, newPercentage))
+      
+      // Calculate remaining percentage for other tokens
+      const remainingPercentage = Math.max(0, 100 - clampedPercentage)
+      const percentagePerOtherToken = remainingPercentage / otherTokensCount
+      
+      // Build new percentages object with precise rounding
+      const newPercentages: Record<string, string> = {}
+      
+      // Set the main token
+      newPercentages[tokenSymbol] = String(parseFloat(clampedPercentage.toFixed(2)))
+      
+      // Distribute remaining among other tokens
+      let distributedTotal = parseFloat(clampedPercentage.toFixed(2))
+      
+      currentTokens.forEach((token, index) => {
+        if (index === currentTokens.length - 1) {
+          // For the last token, use exact remaining to ensure total is 100%
+          const lastPercentage = parseFloat((100 - distributedTotal).toFixed(2))
+          newPercentages[token.symbol] = String(Math.max(0, lastPercentage))
+        } else {
+          const roundedPercentage = parseFloat(percentagePerOtherToken.toFixed(2))
+          newPercentages[token.symbol] = String(Math.max(0, roundedPercentage))
+          distributedTotal += roundedPercentage
+        }
+      })
+      
+      // Final safety check: ensure total never exceeds 100%
+      const finalTotal = Object.values(newPercentages).reduce((sum, val) => sum + parseFloat(val), 0)
+      if (finalTotal > 100) {
+        // If somehow we exceed 100%, proportionally reduce all values
+        const scaleFactor = 100 / finalTotal
+        Object.keys(newPercentages).forEach(symbol => {
+          const scaledValue = parseFloat(newPercentages[symbol]) * scaleFactor
+          newPercentages[symbol] = String(parseFloat(scaledValue.toFixed(2)))
+        })
+      }
+      
+      return newPercentages
+    })
   }
+
+  // Auto-distribute percentages when toTokens changes
+  useEffect(() => {
+    if (toTokens.length > 0) {
+      const equalPercentage = 100 / toTokens.length
+      const newPercentages: Record<string, string> = {}
+      
+      // Set ALL tokens to equal percentage (redistribute everything)
+      let distributedTotal = 0
+      
+      toTokens.forEach((token, index) => {
+        if (index === toTokens.length - 1) {
+          // For the last token, use exact remaining to ensure total is exactly 100%
+          const lastPercentage = parseFloat((100 - distributedTotal).toFixed(2))
+          newPercentages[token.symbol] = String(Math.max(0, lastPercentage))
+        } else {
+          const roundedPercentage = parseFloat(equalPercentage.toFixed(2))
+          newPercentages[token.symbol] = String(roundedPercentage)
+          distributedTotal += roundedPercentage
+        }
+      })
+      
+      // Only update if there's an actual change in tokens or percentages need redistribution
+      const currentTokenSymbols = Object.keys(toPercentages).sort()
+      const newTokenSymbols = toTokens.map(t => t.symbol).sort()
+      const tokensChanged = currentTokenSymbols.join(',') !== newTokenSymbols.join(',')
+      
+      if (tokensChanged) {
+        setToPercentages(newPercentages)
+      }
+    } else {
+      // Clear all percentages if no tokens selected
+      setToPercentages({})
+    }
+  }, [toTokens.length, toTokens.map(t => t.symbol).join(',')]) // Only trigger when tokens change
 
   // Helper function to get real balance or fallback to placeholder
   const getTokenBalance = (token: Token | null): string => {
@@ -861,7 +933,7 @@ export default function TradingPlatform() {
           height: 20px;
           width: 20px;
           border-radius: 50%;
-          background: hsl(var(--primary));
+          background: #22c55e;
           cursor: pointer;
           border: 2px solid white;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -871,7 +943,7 @@ export default function TradingPlatform() {
           height: 20px;
           width: 20px;
           border-radius: 50%;
-          background: hsl(var(--primary));
+          background: #22c55e;
           cursor: pointer;
           border: 2px solid white;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -1005,14 +1077,18 @@ export default function TradingPlatform() {
           </Card>
         )}
 
-        {/* Step 2: Swap Pair */}
+        {/* Step 2: Swap Pair & Condition Type */}
         {currentStep === 2 && selectedPlatform === "hyperevm" && (
-          <Card className="max-w-md mx-auto border-border/50 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-foreground">Swap Pair</CardTitle>
-              <CardDescription>Choose the tokens you want to trade and configure amounts</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex gap-6 transition-all duration-500 flex-col lg:flex-row lg:justify-center lg:items-start">
+              {/* Swap Pair - Consistent size */}
+              <div className="w-full max-w-md mx-auto lg:mx-0">
+                <Card className="border-border/50 shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-foreground">Swap Pair</CardTitle>
+                    <CardDescription>Choose the tokens you want to trade and configure amounts</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                   
                   {/* From Token (Sell) */}
                   <div className="space-y-2">
@@ -1102,123 +1178,153 @@ export default function TradingPlatform() {
                     )}
                   </div>
                   
-                  {/* Dynamic Token Grid */}
-                  <div className={`grid gap-3 ${toTokens.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                    {/* Selected Token Cards */}
-                    {toTokens.map((token, index) => {
-                      const tokenPercentage = toPercentages[token.symbol] || "0"
-                      const percentNumber = Math.min(100, Math.max(0, parseFloat(tokenPercentage) || 0))
-                      const tokenAmount = fromAmount ? (parseFloat(tokenPercentage) / 100) * parseFloat(fromAmount) : 0
-                      const tokenValue = tokenAmount * getCachedPrice(token.symbol)
+                  {/* Dynamic Token Grid Container */}
+                  <div className="flex flex-col gap-3 overflow-y-auto max-h-[300px] pr-2">
+                    {/* Group tokens into pairs (levels) */}
+                    {Array.from({ length: Math.ceil(toTokens.length / 2) }, (_, levelIndex) => {
+                      const startIndex = levelIndex * 2
+                      const tokensInLevel = toTokens.slice(startIndex, startIndex + 2)
                       
                       return (
-                    <div key={token.symbol} className={`relative p-4 bg-card border rounded-lg ${
-                      isPercentageExceeding ? 'border-red-500/50' : 'border-border/50'
-                    }`}>
-                      {/* Remove Button */}
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeToToken(token.symbol)}
-                        className="absolute top-2 right-2 text-muted-foreground hover:text-foreground p-1 h-6 w-6"
-                      >
-                        <X className="w-3 h-3" />
-                    </Button>
-                      
-                      {/* Token Info */}
-                      <div className="flex items-center space-x-2 mb-3">
-                        <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
-                        <span className="text-foreground font-medium text-sm">{token.symbol}</span>
-                      </div>
-                      
-                      {/* Percentage Input (Manual) */}
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="Enter percentage"
-                        value={toPercentages[token.symbol] || ""}
-                        onChange={(e) => {
-                          const raw = e.target.value
-                          const cleaned = raw.replace(/[^0-9.]/g, '')
-                          updateToTokenPercentage(token.symbol, cleaned)
-                        }}
-                        onBlur={() => {
-                          const raw = toPercentages[token.symbol] || ""
-                          const num = parseFloat(raw)
-                          if (isNaN(num)) {
-                            updateToTokenPercentage(token.symbol, "")
-                          } else {
-                            const clamped = Math.min(100, Math.max(0, num))
-                            updateToTokenPercentage(token.symbol, String(clamped))
-                          }
-                        }}
-                        className="text-base font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground mb-2"
-                      />
-                      {/* Percentage Slider */}
-                      <div className="relative mt-1">
-                        <div className="pointer-events-none absolute inset-0 flex items-center justify-between">
-                          {[...Array(11)].map((_, i) => (
-                            <div key={i} className="w-px h-2 bg-muted-foreground/30"></div>
-                          ))}
+                        <div key={`level-${levelIndex}`} className="grid grid-cols-2 gap-3">
+                          {tokensInLevel.map((token, indexInLevel) => {
+                            const tokenPercentage = toPercentages[token.symbol] || "0"
+                            const percentNumber = Math.min(100, Math.max(0, parseFloat(tokenPercentage) || 0))
+                            const tokenAmount = fromAmount ? (parseFloat(tokenPercentage) / 100) * parseFloat(fromAmount) : 0
+                            const tokenValue = tokenAmount * getCachedPrice(token.symbol)
+                            
+                            // Make full width in these cases:
+                            // 1. First token (levelIndex === 0 and only token in level) - always rectangle
+                            // 2. Any lone token when we're at max capacity (4 tokens) - rectangle since no add button
+                            const isFirstTokenAlone = levelIndex === 0 && tokensInLevel.length === 1
+                            const isMaxCapacityLoneToken = tokensInLevel.length === 1 && toTokens.length >= 4
+                            const isFullWidth = isFirstTokenAlone || isMaxCapacityLoneToken
+                            
+                            return (
+                              <div 
+                                key={token.symbol} 
+                                className={`relative p-3 bg-card border rounded-lg transition-opacity duration-200 ${
+                                  isFullWidth ? 'col-span-2' : ''
+                                } ${isPercentageExceeding ? 'border-red-500/50' : 'border-border/50'} ${
+                                  parseFloat(tokenPercentage) === 0 ? 'opacity-40' : 'opacity-100'
+                                }`}
+                              >
+                                {/* Remove Button */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeToToken(token.symbol)}
+                                  className="absolute top-2 right-2 text-muted-foreground hover:text-foreground p-1 h-6 w-6"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                                
+                                {/* Token Info */}
+                                <div className="flex items-center justify-center mb-3">
+                                  <div className="flex items-center space-x-2">
+                                    <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full" />
+                                    <span className="text-foreground font-medium text-base">{token.symbol}</span>
+                                  </div>
+                                  <span className="text-muted-foreground text-[10px] ml-2">{token.name}</span>
+                                </div>
+                                
+                                {/* Percentage Input (Manual) */}
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="Enter percentage"
+                                  value={toPercentages[token.symbol] || ""}
+                                  onChange={(e) => {
+                                    const raw = e.target.value
+                                    const cleaned = raw.replace(/[^0-9.]/g, '')
+                                    updateToTokenPercentage(token.symbol, cleaned)
+                                  }}
+                                  onBlur={() => {
+                                    const raw = toPercentages[token.symbol] || ""
+                                    const num = parseFloat(raw)
+                                    if (isNaN(num)) {
+                                      updateToTokenPercentage(token.symbol, "")
+                                    } else {
+                                      const clamped = Math.min(100, Math.max(0, num))
+                                      updateToTokenPercentage(token.symbol, String(clamped))
+                                    }
+                                  }}
+                                  className="text-base font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground mb-2"
+                                />
+                                {/* Percentage Slider */}
+                                <div className="relative mt-1">
+                                  <div className="pointer-events-none absolute inset-0 flex items-center justify-between">
+                                    {[...Array(5)].map((_, i) => (
+                                      <div key={i} className="w-px h-2 bg-muted-foreground/30"></div>
+                                    ))}
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    value={percentNumber}
+                                    onChange={(e) => updateToTokenPercentage(token.symbol, e.target.value)}
+                                    className="relative w-full h-0.5 bg-muted rounded-lg appearance-none cursor-pointer slider"
+                                    style={{
+                                      background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${percentNumber}%, hsl(var(--muted)) ${percentNumber}%, hsl(var(--muted)) 100%)`
+                                    }}
+                                  />
+                                </div>
+                                
+                                {/* Token Details */}
+                                <div className="space-y-1 mt-2">
+                                  <div className={`text-xs font-medium ${
+                                    isPercentageExceeding ? 'text-red-500' : 'text-foreground'
+                                  }`}>
+                                    {tokenPercentage ? `${tokenPercentage}%` : "0%"}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                          
+                          {/* Add Token Button - show if this level has space and we haven't reached 4 tokens */}
+                          {tokensInLevel.length === 1 && toTokens.length === 3 && levelIndex === 1 && (
+                            <div
+                              className="p-3 bg-muted/30 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:bg-muted/50 hover:border-border transition-all"
+                              onClick={() => setShowToTokenModal(true)}
+                            >
+                              <div className="flex flex-col items-center justify-center h-full text-center">
+                                <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center mb-2">
+                                  <span className="text-lg font-bold text-muted-foreground">+</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  Add token
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <input
-                          type="range"
-                        min="0"
-                          max="100"
-                          step="1"
-                          value={percentNumber}
-                          onChange={(e) => updateToTokenPercentage(token.symbol, e.target.value)}
-                          className="relative w-full h-0.5 bg-muted rounded-lg appearance-none cursor-pointer slider"
-                          style={{
-                            background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${percentNumber}%, hsl(var(--muted)) ${percentNumber}%, hsl(var(--muted)) 100%)`
-                          }}
-                        />
-                      </div>
-                      
-                                             {/* Token Details */}
-                       <div className="space-y-1">
-                          <div className={`text-xs ${
-                            isPercentageExceeding ? 'text-red-500' : 'text-muted-foreground'
-                          }`}>
-                            {tokenPercentage ? `${tokenPercentage}%` : "0%"}
+                      )
+                    })}
+                    
+                    {/* Add Token Button - only show if fewer than 4 outputs selected */}
+                    {toTokens.length < 4 && toTokens.length <= 2 && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div
+                          className="p-3 bg-muted/30 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:bg-muted/50 hover:border-border transition-all col-span-2"
+                          onClick={() => setShowToTokenModal(true)}
+                        >
+                          <div className="flex flex-col items-center justify-center h-full text-center">
+                            <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center mb-2">
+                              <span className="text-lg font-bold text-muted-foreground">+</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {toTokens.length === 0 ? "Select token" : "Add token"}
+                            </span>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {isLoadingPrices ? 
-                              "Loading..." : 
-                              `≈ ${tokenAmount.toFixed(6)} ${token.symbol}`
-                            }
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {isLoadingPrices ? 
-                              "Loading..." : 
-                              `≈ $${tokenValue.toFixed(2)}`
-                            }
-                          </div>
-                         <div className="text-xs text-muted-foreground">
-                           {getTokenBalance(token)} {token.symbol}
-                         </div>
-                       </div>
-                     </div>
-                   )
-                   })}
-                  
-                  {/* Add Token Button - only show if fewer than 4 outputs selected */}
-                  {toTokens.length < 4 && (
-                    <div
-                      className="p-4 bg-muted/30 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:bg-muted/50 hover:border-border transition-all"
-                      onClick={() => setShowToTokenModal(true)}
-                    >
-                      <div className="flex flex-col items-center justify-center h-full text-center">
-                        <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center mb-2">
-                          <span className="text-lg font-bold text-muted-foreground">+</span>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {toTokens.length === 0 ? "Select token" : "Add token"}
-                        </span>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+
+
 
                 {/* Total Percentage Display */}
                 {toTokens.length > 0 && (
@@ -1228,7 +1334,7 @@ export default function TradingPlatform() {
                     <div className="flex items-center space-x-2">
                       {isPercentageExceeding ? (
                         <span className="text-sm font-medium text-foreground">
-                          Total percentage of <span className="text-red-500">{totalPercentage.toFixed(1)}%</span> exceeds 100%
+                          Total percentage of <span className="text-red-500">{totalPercentage.toFixed(2)}%</span> exceeds 100%
                       </span>
                       ) : (
                         <span className="text-sm font-medium text-foreground">{totalPercentage.toFixed(1)}%</span>
@@ -1241,111 +1347,159 @@ export default function TradingPlatform() {
                   {/* Validation Message */}
                   
 
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border/50 cursor-pointer">
-                  Back
-                </Button>
-                <div className="flex flex-col items-stretch">
-                <Button 
+                  </CardContent>
+                </Card>
+
+                {/* Instant Swap Button - Enabled only when NO condition selected AND swap UI is complete */}
+                <div className="mt-6">
+                  <Button 
                     onClick={() => {
-                      if (totalPercentage !== 100) {
-                        setShowContinueWarning(true)
-                        return
+                      if (!conditionType && isInputValid && isOutputValid && isValidTotalPercentage) {
+                        // TODO: Handle instant swap logic
+                        console.log("Instant swap clicked")
                       }
-                      setShowContinueWarning(false)
-                      setCurrentStep(3)
-                    }} 
-                    disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid || (selectedPlatform === 'hyperevm' && isBalanceInsufficient)}
-                    className={`relative overflow-hidden border shadow-lg cursor-pointer bg-muted hover:bg-muted ${
-                      isPercentageExceeding ? 'border-red-500' : 'border-border/50'
+                    }}
+                    disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient)}
+                    className={`w-full ${
+                      (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient))
+                        ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                        : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
                     }`}
                   >
-                    <div 
-                      className={`absolute inset-y-0 left-0 ${isPercentageExceeding ? 'bg-red-500' : 'bg-primary'} transition-[width] duration-300 ease-in-out`} 
-                      style={{ width: `${Math.min(Math.max(totalPercentage, 0), 100)}%` }}
-                    />
-                    <span className={`relative z-10 flex items-center ${
-                      (totalPercentage === 100 || isPercentageExceeding) ? 'text-primary-foreground' : 'text-foreground'
-                    }`}>
-                  Continue
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                    </span>
-                </Button>
-                  {showContinueWarning && totalPercentage !== 100 && (
-                    <div className="mt-2 text-center">
-                      <span className="text-xs text-white">Output percentage must be 100%</span>
-                    </div>
-                  )}
+                    Instant Swap
+                    <Zap className="w-4 h-4 ml-2" />
+                  </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Step 3: Condition Type */}
-        {currentStep === 3 && selectedPlatform === "hyperevm" && (
-          <Card className="max-w-4xl mx-auto border-border/50 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-foreground">Choose Condition Type</CardTitle>
-              <CardDescription>Select the condition that will trigger your trade</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {conditionTypes.map((condition) => {
-                  const Icon = condition.icon
-                  return (
-                    <div
-                      key={condition.id}
-                      className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                        conditionType === condition.id
-                          ? "border-primary bg-primary/10 shadow-lg"
-                          : "border-border/50 hover:border-primary/30 hover:bg-accent/50"
-                      }`}
-                      onClick={() => setConditionType(condition.id)}
-                    >
-                      <div className="flex flex-col items-center text-center space-y-3">
-                        <div
-                          className={`p-2 rounded-lg transition-colors ${
-                            conditionType === condition.id 
-                              ? "bg-primary text-primary-foreground" 
-                              : "bg-muted text-muted-foreground"
-                          }`}
+              {/* Add Condition Button with preview/selection */}
+              {/* Condition Selection Box - Always visible when unlocked */}
+              {isConditionSelectionUnlocked && (
+                <div className="hidden lg:flex items-center justify-center w-full max-w-md">
+                  <div className="relative h-auto min-h-[400px] w-full border-2 border-dashed border-primary/24 rounded-lg transition-all duration-300 opacity-80 overflow-hidden">
+                    
+                    {/* Unlocked selection state - Always show when unlocked */}
+                    <div className="p-4 h-full">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold text-foreground">Choose Condition Type</h3>
+                        <button
+                          onClick={() => setIsConditionSelectionUnlocked(false)}
+                          className="text-muted-foreground hover:text-foreground p-1"
                         >
-                          <Icon className="w-5 h-5" />
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 h-[calc(100%-120px)]">
+                        {conditionTypes.map((condition) => {
+                          const Icon = condition.icon
+                          return (
+                            <div
+                              key={condition.id}
+                              className={`aspect-square border-2 rounded-lg cursor-pointer transition-all hover:shadow-md flex flex-col items-center justify-center p-3 ${
+                                conditionType === condition.id
+                                  ? "border-primary bg-primary/10 shadow-lg"
+                                  : "border-border/50 hover:border-primary/30 hover:bg-accent/50"
+                              }`}
+                              onClick={() => setConditionType(condition.id)}
+                            >
+                              <div
+                                className={`p-2 rounded-lg transition-colors mb-2 ${
+                                  conditionType === condition.id 
+                                    ? "bg-primary text-primary-foreground" 
+                                    : "bg-muted text-muted-foreground"
+                                }`}
+                              >
+                                <Icon className="w-5 h-5" />
+                              </div>
+                              <div className="text-center">
+                                <h4 className="text-xs font-medium text-foreground leading-tight">{condition.name}</h4>
+                                {condition.popular && (
+                                  <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30 mt-1">
+                                    Popular
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  
+
+                </div>
+              )}
+
+              {/* Add Condition Button - Only show when not unlocked */}
+              {!isConditionSelectionUnlocked && (
+                <div className="hidden lg:flex items-center justify-center w-full max-w-md">
+                  <div 
+                    className="relative h-auto min-h-[400px] w-full border-2 border-dashed border-primary/24 rounded-lg cursor-pointer hover:border-primary/40 hover:bg-primary/4 transition-all duration-300 opacity-80 overflow-hidden"
+                    onClick={() => setIsConditionSelectionUnlocked(true)}
+                  >
+                    {/* Background condition squares with 30% opacity */}
+                    <div className="absolute inset-0 p-4 opacity-30">
+                      <div className="grid grid-cols-2 gap-2 h-full">
+                        {conditionTypes.map((condition) => {
+                          const Icon = condition.icon
+                          return (
+                            <div
+                              key={condition.id}
+                              className="aspect-square border border-border/30 rounded-lg bg-muted/20 flex flex-col items-center justify-center p-2"
+                            >
+                              <div className="p-1 rounded bg-muted/40 mb-1">
+                                <Icon className="w-4 h-4 text-muted-foreground" />
+                              </div>
+                              <h4 className="text-xs font-medium text-foreground text-center leading-tight">{condition.name}</h4>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    
+                    {/* Centered "Add Condition" content */}
+                    <div className="relative z-10 flex items-center justify-center h-full min-h-[400px] p-6">
+                      <div className="text-center space-y-4 bg-background/80 rounded-lg p-6 backdrop-blur-sm">
+                        <div className="w-12 h-12 bg-primary/8 rounded-full flex items-center justify-center mx-auto">
+                          <Target className="w-6 h-6 text-primary opacity-80" />
                         </div>
                         <div>
-                          <div className="flex items-center justify-center space-x-2">
-                            <h3 className="font-medium text-foreground">{condition.name}</h3>
-                            {condition.popular && (
-                              <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
-                                Popular
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">{condition.description}</p>
+                          <h3 className="text-base font-semibold text-foreground opacity-80">Add Condition</h3>
+                          <p className="text-xs text-muted-foreground mt-1 opacity-70">Choose your trading trigger</p>
                         </div>
                       </div>
                     </div>
-                  )
-                })}
-              </div>
+                  </div>
+                </div>
+              )}
 
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(2)} className="border-border/50 cursor-pointer">
-                  Back
-                </Button>
+
+
+
+            </div>
+
+            {/* Navigation Buttons */}
+            <div className="mt-6 flex justify-between">
+              <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border/50 cursor-pointer">
+                Back
+              </Button>
+              
+              {/* Continue Button - Only appears when condition is selected AND swap UI is complete */}
+              {conditionType && (
                 <Button 
                   onClick={() => setCurrentStep(4)} 
-                  disabled={!conditionType}
+                  disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || !isValidTotalPercentage}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
                 >
                   Continue
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
+              )}
+            </div>
+          </div>
         )}
+
+
 
         {/* Token Selection Modal for From Token */}
         {showFromTokenModal && (
@@ -1781,8 +1935,8 @@ export default function TradingPlatform() {
 
             {/* Back Button */}
             <div className="flex justify-start mt-6">
-              <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border/50 cursor-pointer">
-                Back to Platform Selection
+              <Button variant="outline" onClick={() => setCurrentStep(2)} className="border-border/50 cursor-pointer">
+                Back
               </Button>
             </div>
           </div>
@@ -2615,7 +2769,7 @@ export default function TradingPlatform() {
               )}
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(3)} className="border-border/50 cursor-pointer">
+                <Button variant="outline" onClick={() => setCurrentStep(2)} className="border-border/50 cursor-pointer">
                   Back
                 </Button>
                 <div className="flex gap-3">
