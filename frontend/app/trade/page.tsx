@@ -951,23 +951,23 @@ export default function TradingPlatform() {
       <style jsx>{`
         .slider::-webkit-slider-thumb {
           appearance: none;
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: #22c55e;
+          height: 22px;
+          width: 22px;
+          border-radius: 60%;
+          background: #06c9a2;
           cursor: pointer;
-          border: 2px solid white;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          border: 2px solid #c4cbc5;
+          box-shadow: 0 2px 4px #04241c;
         }
 
         .slider::-moz-range-thumb {
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: #22c55e;
+          height: 22px;
+          width: 22px;
+          border-radius: 60%;
+          background: #06c9a2;
           cursor: pointer;
-          border: 2px solid white;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          border: 2px solid #c4cbc5;
+          box-shadow: 0 2px 4px #04241c;
         }
       `}</style>
       {/* Header */}
