@@ -108,7 +108,7 @@ export default function TradingPlatform() {
   const [showToTokenModal, setShowToTokenModal] = useState(false)
   const [fromAmount, setFromAmount] = useState("")
   const [toPercentages, setToPercentages] = useState<Record<string, string>>({})
-  const [triggerToken, setTriggerToken] = useState<string>("");
+  const [triggerToken, setTriggerToken] = useState<string>("HYPE-USDC");
   const [timeframe, setTimeframe] = useState<string>("");
   const [source, setSource] = useState<string>("");
   const [triggerWhen, setTriggerWhen] = useState<string>("above");
@@ -151,6 +151,7 @@ export default function TradingPlatform() {
   const [cooldownActive, setCooldownActive] = useState(false);
   const [cooldownValue, setCooldownValue] = useState<string>("");
   const [chainedConfirmation, setChainedConfirmation] = useState(false);
+  const [chainedConfirmationBars, setChainedConfirmationBars] = useState<string>("1");
   const [invalidationHaltActive, setInvalidationHaltActive] = useState(false);
   const { resolvedTheme } = useTheme();
   const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>({});
@@ -906,6 +907,7 @@ export default function TradingPlatform() {
             },
             chained_confirmation: {
               active: chainedConfirmation,
+              bars: chainedConfirmation ? Number(chainedConfirmationBars) || 1 : null,
             },
             invalidation_halt: {
               active: invalidationHaltActive,
@@ -1987,31 +1989,84 @@ export default function TradingPlatform() {
                         <Label className="text-foreground font-semibold">Pair</Label>
                         <Select value={triggerToken} onValueChange={setTriggerToken}>
                           <SelectTrigger className="w-1/2 border-border/50 focus:ring-primary/20 cursor-pointer">
-                            <SelectValue placeholder="HYPE" />
+                            <SelectValue placeholder="HYPE-USDC" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
                             <SelectLabel>SPOT</SelectLabel>
-                          {tokens
-                            .filter(token => token.symbol == 'USOL' || token.symbol == 'UBTC' || token.symbol == 'UETH' || token.symbol == 'HYPE')
-                            .map((token) => (
+                            {/* Core tokens */}
+                            {tokens
+                              .filter(token => ['HYPE', 'USOL', 'UBTC', 'UETH'].includes(token.symbol))
+                              .map((token) => (
                                 <SelectItem key={`spot-${token.symbol}`} value={`${token.symbol}/USDC`} className="cursor-pointer">
-                                <div className="flex items-center space-x-2">
-                                  <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
+                                  <div className="flex items-center space-x-2">
+                                    <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
                                     <span>{token.symbol}/USDC - {token.name}</span>
-                                </div>
-                            </SelectItem>
-                          ))}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            {/* Additional spot tokens */}
+                            {[
+                              { symbol: 'PUMP', name: 'Pump Fun' , icon: 'https://app.hyperliquid.xyz/coins/PUMP_USDC.svg'},
+                              { symbol: 'PURR', name: 'Purr' , icon: 'https://app.hyperliquid.xyz/coins/PURR_USDC.svg'},
+                              { symbol: 'HFUN', name: 'HFun' , icon: 'https://app.hyperliquid.xyz/coins/HFUN_USDC.svg'},
+                              { symbol: 'UMOG', name: 'Unit Mog' , icon: 'https://app.hyperliquid.xyz/coins/MOG_USDC.svg'},
+                              { symbol: 'UUUSPX', name: 'Unit Spx' , icon: 'https://app.hyperliquid.xyz/coins/SPX_USDC.svg'},
+                              { symbol: 'UFART', name: 'Unit Fartcoin' , icon: 'https://app.hyperliquid.xyz/coins/FARTCOIN_USDC.svg'},
+                              { symbol: 'JEFF', name: 'Jeff' , icon: 'https://app.hyperliquid.xyz/coins/JEFF_USDC.svg'},
+                              { symbol: 'UBONK', name: 'Unit Bonk' , icon: 'https://app.hyperliquid.xyz/coins/BONK_USDC.svg'},
+                              { symbol: 'BUDDY', name: 'Alright Buddy' , icon: 'https://app.hyperliquid.xyz/coins/BUDDY_USDC.svg'}
+                                                          ].map((token) => (
+                                <SelectItem key={`spot-${token.symbol}`} value={`${token.symbol}/USDC`} className="cursor-pointer">
+                                  <div className="flex items-center space-x-2">
+                                    {token.icon ? (
+                                      <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
+                                    ) : (
+                                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                                        {token.symbol.charAt(0)}
+                                      </div>
+                                    )}
+                                    <span>{token.symbol}/USDC - {token.name}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
                           </SelectGroup>
                           <SelectSeparator />
                           <SelectGroup>
                             <SelectLabel>Perps</SelectLabel>
-                            {tokens
-                              .filter(token => token.symbol == 'USOL' || token.symbol == 'UBTC' || token.symbol == 'UETH' || token.symbol == 'HYPE')
-                              .map((token) => (
+                            {/* Core perps with regular naming */}
+                            {[
+                              { symbol: 'HYPE', name: 'Hyperliquid' },
+                              { symbol: 'ETH', name: 'Ethereum' },
+                              { symbol: 'BTC', name: 'Bitcoin' },
+                              { symbol: 'SOL', name: 'Solana' }
+                            ].map((token) => (
+                              <SelectItem key={`perp-${token.symbol}`} value={`${token.symbol}-USDC`} className="cursor-pointer">
+                                <div className="flex items-center space-x-2">
+                                  <img src={tokens.find(t => t.symbol === `U${token.symbol}` || t.symbol === token.symbol)?.icon || '/coins-logos/unknown.jpg'} alt={token.symbol} className="w-5 h-5 rounded-full" />
+                                  <span>{token.symbol}-USDC - {token.name}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                            {/* Additional perps */}
+                            {[
+                              { symbol: 'PUMP', name: 'PumpFun' , icon: 'https://app.hyperliquid.xyz/coins/PUMP_USDC.svg'},
+                              { symbol: 'PURR', name: 'Purr' , icon: 'https://app.hyperliquid.xyz/coins/PURR_USDC.svg'},
+                              { symbol: 'BONK', name: 'Bonk' , icon: 'https://app.hyperliquid.xyz/coins/BONK_USDC.svg'},
+                              { symbol: 'FARTCOIN', name: 'Fartcoin' , icon: 'https://app.hyperliquid.xyz/coins/FARTCOIN_USDC.svg'},
+                              { symbol: 'XRP', name: 'XRP' , icon: 'https://app.hyperliquid.xyz/coins/XRP.svg'},
+
+                              { symbol: 'ENA', name: 'ENA' , icon: 'https://app.hyperliquid.xyz/coins/ENA.svg'}
+                                                          ].map((token) => (
                                 <SelectItem key={`perp-${token.symbol}`} value={`${token.symbol}-USDC`} className="cursor-pointer">
                                   <div className="flex items-center space-x-2">
-                                    <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
+                                    {token.icon ? (
+                                      <img src={token.icon} alt={token.symbol} className="w-5 h-5 rounded-full" />
+                                    ) : (
+                                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                                        {token.symbol.charAt(0)}
+                                      </div>
+                                    )}
                                     <span>{token.symbol}-USDC - {token.name}</span>
                                   </div>
                                 </SelectItem>
@@ -2029,12 +2084,12 @@ export default function TradingPlatform() {
                         <div className="flex gap-2">
                           {[
                             { value: "1m", label: "1m" },
-
+                            { value: "5m", label: "5m" },
                             { value: "15m", label: "15m" },
-                            { value: "1h", label: "1H" },
-                            { value: "4h", label: "4H" },
-                            { value: "1d", label: "1D" },
-                            { value: "1w", label: "1W" }
+                            { value: "1h", label: "1h" },
+                            { value: "4h", label: "4h" },
+                            { value: "1d", label: "1d" },
+                            { value: "1w", label: "1w" }
                           ].map((tf) => (
                             <button
                               key={tf.value}
@@ -2656,7 +2711,7 @@ export default function TradingPlatform() {
                           </Tooltip>
                         </div>
                         <Input
-                          placeholder="Enter cooldown period"
+                          placeholder="Enter value"
                           className={`w-32 border-border/50 focus:ring-primary/20 transition-all ${
                             cooldownActive 
                               ? 'bg-background text-foreground' 
@@ -2691,10 +2746,23 @@ export default function TradingPlatform() {
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>If set, execute swap only if condition was true AND previous bar condition was also true.</p>
+                              <p>If set, execute swap only if condition was true AND the previous {chainedConfirmationBars || 'n'} bar{chainedConfirmationBars !== "1" ? 's' : ''} condition was also true.</p>
                             </TooltipContent>
                           </Tooltip>
                         </div>
+                        <Input
+                          placeholder="Enter value"
+                          className={`w-32 border-border/50 focus:ring-primary/20 transition-all ${
+                            chainedConfirmation 
+                              ? 'bg-background text-foreground' 
+                              : 'bg-muted/50 text-muted-foreground cursor-not-allowed'
+                          }`}
+                          value={chainedConfirmationBars}
+                          onChange={(e) => setChainedConfirmationBars(e.target.value)}
+                          disabled={!chainedConfirmation}
+                          type="number"
+                          min="1"
+                        />
                       </div>
                     </div>
 
@@ -2736,7 +2804,7 @@ export default function TradingPlatform() {
                     <Alert className="border-yellow-600/40 bg-yellow-500/5 text-yellow-500">
                       <AlertTitle className="font-medium">TradingView limitation:</AlertTitle>
                       <AlertDescription>
-                        Although Bybit data is used to display the chart, all triggers are based on data fetched from HyperCore.
+                        Although Bybit data is used to display the chart, all triggers are based on candlestick data fetched from HyperCore.
                       </AlertDescription>
                     </Alert>
                   </div>
@@ -2946,16 +3014,15 @@ export default function TradingPlatform() {
             <Card className="max-w-md mx-auto border-border/50 shadow-2xl">
               <CardContent className="p-8 text-center space-y-6">
                 {/* Success Icon */}
-                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto">
-                  <svg 
-                    className="w-8 h-8 text-green-600 dark:text-green-400" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                <div className="w-24 h-24 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto">
+                  <img 
+                    src="/purr_success.gif" 
+
+                    alt="Success" 
+                    className="w-20"
+                  />
       </div>
+      
                 
                 {/* Success Message */}
                 <div className="space-y-2">
