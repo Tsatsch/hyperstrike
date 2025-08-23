@@ -92,9 +92,10 @@ export async function getTokenPrice(symbol: string): Promise<number | null> {
   return null;
 }
 
-// Convert Hyperliquid token names to our internal symbols
+// Convert Hyperliquid Core/Info symbols to our internal symbols for pricing
 const HYPERLIQUID_TO_INTERNAL_SYMBOL: Record<string, string> = {
   'USDT': 'USDT',
+  'USDC': 'USDC',
   'ETH': 'UETH',
   'BTC': 'UBTC', 
   'SOL': 'USOL',

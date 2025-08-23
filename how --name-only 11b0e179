@@ -1,0 +1,10 @@
+[33m11b0e179[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m updated trigger hitting logic, defined logic for post-trigger, updated db calls, added backend_jwt for internal system calls
+[33m79b00987[m fixed loading issue
+[33mf0cf643d[m updated candle watcher
+[33m1401f7a8[m Update: UI trade-EVM, Invitation friends
+[33ma4221885[m WIP local edits
+[33mbfae4a08[m local changes
+[33m6d0bc6a0[m added ui for hypercore
+[33mc3a3b617[m changed namings
+[33mc5c9c0c3[m changed namings
+[33md1243c0d[m changed namings
