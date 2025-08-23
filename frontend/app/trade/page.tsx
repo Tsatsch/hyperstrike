@@ -684,7 +684,7 @@ export default function TradingPlatform() {
 
   // Load TradingView widget when OHLCV configuration step is reached or HyperCore platform is selected
   useEffect(() => {
-    if (currentStep === 4 && conditionType === "ohlcvn") {
+    if (currentStep === 4 && conditionType === "ohlcv_trigger") {
       loadTradingViewScript("ohlcv_tradingview_chart", "BYBIT:HYPEUSDT");
     }
     
@@ -1799,7 +1799,7 @@ export default function TradingPlatform() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {conditionType === "ohlcvn" && (
+              {conditionType === "ohlcv_trigger" && (
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                   {/* Left Column: Configuration Settings (2/5 = 40%) */}
                   <div className="space-y-4 lg:col-span-2">
