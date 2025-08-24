@@ -130,7 +130,7 @@ export default function LandingPage() {
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
               <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
-                <a href="/dashboard" className="flex items-center">
+                <a href="/trade" className="flex items-center">
                   <Play className="w-4 h-4 mr-2" />
                   Start Trading
                 </a>
