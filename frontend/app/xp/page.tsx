@@ -248,15 +248,39 @@ export default function XpPage() {
                 <div className="space-y-2">
                   {leaders.map((u, idx) => {
                     const key = u.wallet_address.toLowerCase()
-                    const displayName = hlNames[key] || shortenAddress(u.wallet_address)
-                    const hasHlName = !!hlNames[key]
                     const profile = hlProfiles[key]
+                    const hlName = hlNames[key]
+                    const hasHlName = !!hlName
                     const avatarUrl = profile?.avatarUrl || ''
                     const isExpanded = !!expanded[key]
-                    // pick up to two non-avatar records from texts
+                    
+                    // Determine display name with priority: Name value > .hl name > shortened address
+                    let displayName: string
+                    let hasNameRecord = false
+                    if (profile?.texts?.Name) {
+                      // Priority 1: Show Name value prominently, then .hl name if available
+                      hasNameRecord = true
+                      if (hlName) {
+                        // Render with styled components for visual distinction
+                        displayName = `${profile.texts.Name} (${hlName})`
+                      } else {
+                        displayName = profile.texts.Name
+                      }
+                    } else if (hlName) {
+                      // Priority 2: .hl name only
+                      displayName = hlName
+                    } else {
+                      // Priority 3: Shortened address
+                      displayName = shortenAddress(u.wallet_address)
+                    }
+                    
+                    // Filter out Name key and avatar-related entries from expandable texts
                     const entries = profile ? Object.entries(profile.texts) : []
-                    const nonAvatarEntries = entries.filter(([k]) => !k.toLowerCase().includes('avatar'))
+                    const nonAvatarEntries = entries.filter(([k]) => 
+                      !k.toLowerCase().includes('avatar') && k !== 'Name'
+                    )
                     const firstTwo = nonAvatarEntries.slice(0, 2)
+                    
                     return (
                       <div key={u.user_id} className="border border-border/50 rounded-lg px-3 py-2">
                         <div className="flex items-center justify-between">
@@ -266,17 +290,28 @@ export default function XpPage() {
                               <AvatarImage src={(avatarUrl && avatarUrl.startsWith('https://')) ? avatarUrl : '/placeholder-user.jpg'} alt={displayName} />
                               <AvatarFallback>{(displayName || 'U')[0]?.toUpperCase()}</AvatarFallback>
                             </Avatar>
-                            <span className="text-foreground text-sm font-medium">{displayName}</span>
+                            <span className="text-foreground text-sm font-medium">
+                              {hasNameRecord && hlName ? (
+                                <>
+                                  <span>{profile!.texts.Name}</span>
+                                  <span className="text-xs text-muted-foreground ml-1">({hlName})</span>
+                                </>
+                              ) : (
+                                displayName
+                              )}
+                            </span>
                             {hasHlName && (
                               <>
                                 <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-md">.hl</span>
-                                <button
-                                  aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                                  className="text-muted-foreground hover:text-foreground transition-colors"
-                                  onClick={() => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))}
-                                >
-                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                </button>
+                                {firstTwo.length > 0 && (
+                                  <button
+                                    aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    onClick={() => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))}
+                                  >
+                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>

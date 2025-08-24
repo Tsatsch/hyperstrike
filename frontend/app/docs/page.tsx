@@ -24,12 +24,20 @@ import {
   ChevronRight,
   BookOpen,
   Coins,
-  Settings
+  Settings,
+  ChevronDown,
+  ChevronRight as ChevronRightIcon
 } from "lucide-react"
 
 export default function DocsPage() {
   const [priceCache, setPriceCache] = useState<Record<string, { price: number; change24h: number }>>(DEFAULT_TOKEN_PRICES)
   const [activeSection, setActiveSection] = useState("core")
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    core: true,
+    evm: true,
+    "tradable-assets": true,
+    features: true
+  })
 
   useEffect(() => {
     const fetchPrices = async () => {
@@ -53,23 +61,52 @@ export default function DocsPage() {
       id: "core",
       label: "Core",
       icon: BookOpen,
+      subsections: [
+        { id: "conditional-orders", label: "How Conditional Orders Work" }
+      ]
     },
     {
       id: "evm",
       label: "EVM",
       icon: BarChart3,
+      subsections: [
+        { id: "conditional-orders-evm", label: "How Conditional Orders Work" },
+        { id: "ohlcv-triggers", label: "OHLCV Triggers" },
+        { id: "wallet-activity", label: "Wallet Activity Triggers" }
+      ]
     },
     {
       id: "tradable-assets",
       label: "Tradable Assets",
       icon: Coins,
+      subsections: [
+        { id: "supported-tokens", label: "Supported Tokens" }
+      ]
     },
     {
       id: "features",
       label: "Features",
       icon: Settings,
+      subsections: [
+        { id: "xp-system", label: "XP System" },
+        { id: "hyperliquid-names", label: "Hyperliquid Names (.hl)" }
+      ]
     }
   ]
+
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }))
+  }
 
   const renderContent = () => {
     switch (activeSection) {
@@ -84,7 +121,7 @@ export default function DocsPage() {
               </p>
             </div>
 
-            <Card className="border-border/50">
+            <Card id="conditional-orders" className="border-border/50">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Target className="w-5 h-5" />
@@ -131,7 +168,7 @@ export default function DocsPage() {
             </div>
 
             {/* EVM Overview */}
-            <Card className="border-border/50">
+            <Card id="conditional-orders-evm" className="border-border/50">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Target className="w-5 h-5" />
@@ -173,7 +210,7 @@ export default function DocsPage() {
             </Card>
 
             {/* OHLCV Triggers Section */}
-            <Card className="border-border/50">
+            <Card id="ohlcv-triggers" className="border-border/50">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <TrendingUp className="w-5 h-5" />
@@ -265,7 +302,7 @@ export default function DocsPage() {
             </Card>
 
             {/* Wallet Activity Section */}
-            <Card className="border-border/50">
+            <Card id="wallet-activity" className="border-border/50">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Wallet className="w-5 h-5" />
@@ -297,7 +334,7 @@ export default function DocsPage() {
               </p>
         </div>
 
-        <Card className="border-border/50">
+        <Card id="supported-tokens" className="border-border/50">
           <CardHeader>
                 <CardTitle className="text-foreground">Supported Tokens</CardTitle>
                 <CardDescription>Current prices and 24h changes</CardDescription>
@@ -343,7 +380,7 @@ export default function DocsPage() {
               </p>
             </div>
 
-            <Card className="border-border/50">
+            <Card id="xp-system" className="border-border/50">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Star className="w-5 h-5" />
@@ -374,7 +411,7 @@ export default function DocsPage() {
             </Card>
 
             {/* Hyperliquid Names Section */}
-            <Card className="border-border/50">
+            <Card id="hyperliquid-names" className="border-border/50">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Zap className="w-5 h-5" />
@@ -432,29 +469,71 @@ export default function DocsPage() {
       </header>
 
       <div className="flex-1 flex">
-        {/* Left Navigation - Now acts as a jump table between main categories */}
-        <div className="w-64 border-r bg-card/50 p-4">
+        {/* Left Navigation - Fixed position, stays visible while scrolling */}
+        <div className="w-80 border-r bg-card/50 p-4 overflow-y-auto sticky top-0 h-screen">
           <div className="space-y-2">
             {navigationItems.map((section) => (
-              <button
-                key={section.id}
-                onClick={() => setActiveSection(section.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  activeSection === section.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                <section.icon className="w-4 h-4" />
-                <span className="font-medium">{section.label}</span>
-              </button>
+              <div key={section.id} className="space-y-1">
+                <button
+                  onClick={() => {
+                    setActiveSection(section.id)
+                    if (!expandedSections[section.id]) {
+                      setExpandedSections(prev => ({ ...prev, [section.id]: true }))
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors ${
+                    activeSection === section.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <section.icon className="w-4 h-4" />
+                    <span className="font-medium">{section.label}</span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleSection(section.id)
+                    }}
+                    className="p-1 hover:bg-white/10 rounded"
+                  >
+                    {expandedSections[section.id] ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRightIcon className="w-4 h-4" />
+                    )}
+                  </button>
+                </button>
+                
+                {/* Subcategories */}
+                {expandedSections[section.id] && (
+                  <div className="ml-6 space-y-1">
+                    {section.subsections.map((subsection) => (
+                      <button
+                        key={subsection.id}
+                        onClick={() => {
+                          setActiveSection(section.id)
+                          scrollToSection(subsection.id)
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                      >
+                        <ChevronRight className="w-3 h-3" />
+                        {subsection.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-8">
-          {renderContent()}
+        {/* Main Content - Independently scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-8">
+            {renderContent()}
+          </div>
         </div>
       </div>
 
