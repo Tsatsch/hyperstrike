@@ -14,11 +14,18 @@ export interface TokenConfig {
 export const HYPERLIQUID_TOKENS: TokenConfig[] = [
   {
     symbol: "HYPE",
-    name: "Hyperliquid",
+    name: "HYPE",
     address: "0x2222222222222222222222222222222222222222", // Special address for native token
     decimals: 18,
     icon: "https://app.hyperliquid.xyz/coins/HYPE_USDC.svg",
     isNative: true
+  },
+  {
+    symbol: "WHYPE",
+    name: "Wrapped HYPE",
+    address: "0x5555555555555555555555555555555555555555",
+    decimals: 18,
+    icon: "https://app.hyperliquid.xyz/coins/HYPE_USDC.svg"
   },
   {
     symbol: "USDT",
@@ -84,6 +91,7 @@ export const HYPERLIQUID_TOKENS: TokenConfig[] = [
     decimals: 18,
     icon: "https://app.hyperliquid.xyz/coins/PURR_USDC.svg"
   }
+
 ]
 
 // Helper functions
