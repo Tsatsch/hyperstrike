@@ -31,6 +31,7 @@ contract Main is Ownable, ReentrancyGuard, Pausable {
     uint256 public constant MAX_FEE = 500;
     
     address public withdrawalWallet = 0x9E02783Ad42C5A94a0De60394f2996E44458B782;
+    string public name = "Hypertick";
     
     modifier onlyOwnerOrAuthorized() {
         require(msg.sender == owner() || msg.sender == address(this), "Not authorized");

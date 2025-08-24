@@ -1,0 +1,33 @@
+{
+  "name": "hyperstrike-smart-contracts",
+  "version": "1.0.0",
+  "description": "Smart contracts for Hyperstrike protocol on HyperEVM",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:testnet": "hardhat run scripts/deploy.js --network hyperevmTestnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network hyperevmMainnet",
+    "deploy:local": "hardhat run scripts/deploy.js --network hardhat",
+    "verify:testnet": "hardhat verify --network hyperevmTestnet",
+    "verify:mainnet": "hardhat verify --network hyperevmMainnet",
+    "gas:testnet": "hardhat run scripts/get-gas-info.js --network hyperevmTestnet",
+    "gas:mainnet": "hardhat run scripts/get-gas-info.js --network hyperevmMainnet"
+  },
+  "keywords": [
+    "hyperevm",
+    "defi",
+    "smart-contracts",
+    "ethereum",
+    "trading"
+  ],
+  "author": "Hyperstrike Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts": "^5.0.0",
+    "hardhat": "^2.19.0",
+    "dotenv": "^16.3.1"
+  },
+  "dependencies": {}
+} 
