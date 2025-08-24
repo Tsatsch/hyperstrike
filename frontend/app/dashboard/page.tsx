@@ -14,6 +14,7 @@ import {
   HypercorePerpPosition,
   HypercoreSpotBalance
 } from '@/lib/hypercore'
+import { resolveHlName, resolveHlProfile, type HlProfile } from '@/lib/hlnames'
 
 import { Button } from "@/components/ui/button"
  
@@ -166,6 +167,8 @@ export default function DashboardPage() {
   const [showAllCorePerps, setShowAllCorePerps] = useState(false)
   const [cancellingIds, setCancellingIds] = useState<Set<number>>(new Set())
   const [confirmCancelIds, setConfirmCancelIds] = useState<Set<number>>(new Set())
+  const [hlName, setHlName] = useState<string | null>(null)
+  const [hlProfile, setHlProfile] = useState<HlProfile | null>(null)
 
   // Done state (ephemeral) to briefly show newly closed orders
   const { doneIds, clearDone } = useEphemeralDoneState(orders)
@@ -198,6 +201,42 @@ export default function DashboardPage() {
     if (!ready) return
     setShowConnectPrompt(!authenticated)
   }, [ready, authenticated])
+
+  // Fetch HL name when user is authenticated
+  useEffect(() => {
+    const run = async () => {
+      if (!authenticated || !user?.wallet?.address) {
+        setHlName(null)
+        return
+      }
+      try {
+        const name = await resolveHlName(user.wallet.address)
+        setHlName(name)
+      } catch (error) {
+        console.warn('Error fetching HL name:', error)
+        setHlName(null)
+      }
+    }
+    run()
+  }, [authenticated, user?.wallet?.address])
+
+  // Fetch full HL profile when user is authenticated
+  useEffect(() => {
+    const run = async () => {
+      if (!authenticated || !user?.wallet?.address) {
+        setHlProfile(null)
+        return
+      }
+      try {
+        const profile = await resolveHlProfile(user.wallet.address)
+        setHlProfile(profile)
+      } catch (error) {
+        console.warn('Error fetching HL profile:', error)
+        setHlProfile(null)
+      }
+    }
+    run()
+  }, [authenticated, user?.wallet?.address])
 
   // Live ticker for countdowns
   useEffect(() => {
@@ -527,7 +566,20 @@ export default function DashboardPage() {
 
       <div className="flex-1 container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            {(() => {
+              // Priority 1: "Name" key from profile texts (highest priority)
+              if (hlProfile?.texts?.Name) {
+                return `${hlProfile.texts.Name}'s Dashboard`
+              }
+              // Priority 2: .hl domain name
+              if (hlName) {
+                return `${hlName}'s Dashboard`
+              }
+              // Priority 3: Default fallback
+              return 'Dashboard'
+            })()}
+          </h1>
           <p className="text-muted-foreground">Your balances on Hyperliquid and your pending/closed orders</p>
         </div>
 
