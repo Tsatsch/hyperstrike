@@ -29,7 +29,7 @@ export function Logo({ className = '', width = 24, height = 24 }: LogoProps) {
   }
 
   const currentTheme = resolvedTheme || theme || 'light'
-  const logoSrc = currentTheme === 'dark' ? '/logo-light.svg' : '/logo-dark.svg'
+  const logoSrc = currentTheme === 'dark' ? '/logo.svg' : '/logo.svg'
 
   return (
     <Image
