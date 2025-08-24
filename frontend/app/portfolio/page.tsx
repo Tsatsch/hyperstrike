@@ -410,7 +410,7 @@ export default function DashboardAliasPage() {
           <div className="flex items-center space-x-4">
             <a href="/" className="flex items-center space-x-1 hover:opacity-80 transition-opacity">
               <Logo width={24} height={24} />
-              <span className="text-xl font-bold">Hyperstrike</span>
+              <span className="text-xl font-bold">Hypertick</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/dashboard" className="font-medium text-primary">Dashboard</a>

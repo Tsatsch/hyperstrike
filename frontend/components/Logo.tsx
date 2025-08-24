@@ -34,7 +34,7 @@ export function Logo({ className = '', width = 24, height = 24 }: LogoProps) {
   return (
     <Image
       src={logoSrc}
-      alt="Hyperstrike Logo"
+      alt="Hypertick Logo"
       width={width}
       height={height}
       className={className}

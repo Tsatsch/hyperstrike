@@ -93,7 +93,7 @@ export default function LandingPage() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-1">
               <Logo width={24} height={24} />
-              <span className="text-xl font-bold">Hyperstrike</span>
+              <span className="text-xl font-bold">Hypertick</span>
             </div>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               {/* Hide XP on landing header per request */}

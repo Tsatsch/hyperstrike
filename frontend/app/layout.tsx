@@ -6,7 +6,7 @@ import { Providers } from './providers'
 import { ReferralCapture } from '@/components/ReferralCapture'
 
 export const metadata: Metadata = {
-  title: 'Hyperstrike - Conditional Trading Platform',
+  title: 'Hypertick - Conditional Trading Platform',
   description: 'Revolutionary crypto trading platform offering conditional token swapping based on external signals, wallet activities, and market events.',
   icons: {
     icon: [

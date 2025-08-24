@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "Hyperstrike"
+name = "Hypertick"
 version = "0.1.0"
 description = ""
 authors = ["Tsatsch <sshsmnv2000@gmail.com>"]

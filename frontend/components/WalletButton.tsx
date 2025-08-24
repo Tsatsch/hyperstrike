@@ -71,7 +71,7 @@ export function WalletButton() {
             if (ref) {
               referralParam = `&referral=${encodeURIComponent(ref)}`;
             } else {
-              const stored = localStorage.getItem('Hyperstrike_referral_code');
+              const stored = localStorage.getItem('Hypertick_referral_code');
               if (stored) referralParam = `&referral=${encodeURIComponent(stored)}`;
             }
           } catch {}

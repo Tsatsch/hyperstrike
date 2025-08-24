@@ -9,7 +9,7 @@ export function Footer() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-1">
               <Logo width={20} height={20} />
-              <span className="text-lg font-semibold">Hyperstrike</span>
+              <span className="text-lg font-semibold">Hypertick</span>
             </div>
             <span className="text-sm text-muted-foreground">Conditional Trading Platform</span>
           </div>

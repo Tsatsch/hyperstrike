@@ -24,7 +24,7 @@ export async function exchangePrivyForBackendJwt(
     const data = await response.json();
     const token: string | undefined = data?.token;
     if (typeof window !== 'undefined' && token) {
-      localStorage.setItem('Hyperstrike_backend_jwt', token);
+      localStorage.setItem('Hypertick_backend_jwt', token);
     }
     return token ?? null;
   } catch (error) {
@@ -34,7 +34,7 @@ export async function exchangePrivyForBackendJwt(
 
 export function getBackendJwt(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('Hyperstrike_backend_jwt');
+  return localStorage.getItem('Hypertick_backend_jwt');
 }
 
 export async function listOrders(): Promise<unknown> {
@@ -102,7 +102,7 @@ export async function getOrCreateUser(getAccessToken?: () => Promise<string | nu
       if (ref) {
         referralParam = `&referral=${encodeURIComponent(ref)}`;
       } else {
-        const stored = localStorage.getItem('Hyperstrike_referral_code');
+        const stored = localStorage.getItem('Hypertick_referral_code');
         if (stored) referralParam = `&referral=${encodeURIComponent(stored)}`;
       }
     } catch {}

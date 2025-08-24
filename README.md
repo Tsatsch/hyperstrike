@@ -1,4 +1,4 @@
-# Hyperstrike
+# Hypertick
 Innovative crypto trading platform offers conditional token swapping based on external signals, wallet activities, and market events - going far beyond simple token swaps.
 
 ## Development

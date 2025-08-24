@@ -8,7 +8,7 @@ export function ReferralCapture() {
       const url = new URL(window.location.href)
       const ref = url.searchParams.get('ref')
       if (ref) {
-        localStorage.setItem('Hyperstrike_referral_code', ref)
+        localStorage.setItem('Hypertick_referral_code', ref)
       }
     } catch {}
   }, [])
