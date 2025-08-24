@@ -14,8 +14,8 @@ from eth_account import Account
 # ============================================================================
 
 # Contract addresses
-PRICE_TRIGGER_CONTRACT_ADDRESS = "0x745b14228103d18AdC394a4688fA1628614b91CA"  # Your deployed contract
-WHYPE_CONTRACT_ADDRESS = "0x5555555555555555555555555555555555555555"  # Your deployed WHYPE
+PRICE_TRIGGER_CONTRACT_ADDRESS = "0x3BdAEE359F1F721B3Ff9f4484253C4fF35AD1040"  # Your deployed contract
+WHYPE_CONTRACT_ADDRESS = "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb"  # Your deployed WHYPE
 
 # Network configuration
 HYPER_TESTNET_RPC = "https://withered-delicate-sailboat.hype-mainnet.quiknode.pro/edb38026d62fb1de9d51e057b4b720a455f8b9d8/evm"
@@ -24,7 +24,7 @@ CHAIN_ID = 999
 # Wallet addresses
 WITHDRAWAL_WALLET = "0x9E02783Ad42C5A94a0De60394f2996E44458B782"
 YOUR_PRIVATE_KEY = "0xe469510e586a6e0d982e137bc49d2aefef5dd76b36b8db64cb22af2ab8649eae"  # Replace with your actual private key
-USER_ADDRESS_TO_TEST = "0x7F752d65B046EAaa335dc1dB55F3DEf2A419f694"  # Address to test withdrawal for
+USER_ADDRESS_TO_TEST = "0x6eDb432621208Ac44C9CcB3f19B36872f019F848"  # Address to test withdrawal for
 
 # Test configuration
 TOKEN_TO_TEST = WHYPE_CONTRACT_ADDRESS  # Change this to test different tokens
@@ -216,13 +216,6 @@ class WithdrawTriggerTester:
                 print(f"   Your address: {self.account.address}")
                 return False
             
-            # Check user allowance
-            allowance = self.check_allowance(user_address)
-            if allowance < amount_wei:
-                allowance_formatted = allowance / (10 ** self.token_decimals)
-                print(f"❌ Insufficient allowance: {allowance_formatted:.6f} {self.token_contract.functions.symbol().call()}")
-                return False
-            
             # Check user balance
             checksum_user_address = Web3.to_checksum_address(user_address)
             user_balance = self.token_contract.functions.balanceOf(checksum_user_address).call()
@@ -308,32 +301,12 @@ def main():
         # Get current balances
         tester.get_balances()
         
-        # Check allowance for the user
-        allowance = tester.check_allowance(USER_ADDRESS_TO_TEST)
-        
-        if allowance == 0:
-            print(f"❌ No allowance found for {USER_ADDRESS_TO_TEST}")
-            print("Please approve tokens first using your approval script")
-            return
-        
-        # Convert allowance to readable format
-        allowance_formatted = allowance / (10 ** tester.token_decimals)
-        print(f"✅ Allowance found: {allowance_formatted:.6f} {tester.token_contract.functions.symbol().call()}")
-        
-        # Check if amount exceeds allowance
-        if AMOUNT_TO_WITHDRAW > allowance_formatted:
-            print(f"⚠️  Amount {AMOUNT_TO_WITHDRAW} exceeds allowance {allowance_formatted:.6f}")
-            print(f"Using maximum available: {allowance_formatted:.6f}")
-            amount_to_withdraw = allowance_formatted
-        else:
-            amount_to_withdraw = AMOUNT_TO_WITHDRAW
-        
-        print(f"\n🚀 Starting withdrawal of {amount_to_withdraw} {tester.token_contract.functions.symbol().call()}")
+        print(f"\n🚀 Starting withdrawal of {AMOUNT_TO_WITHDRAW} {tester.token_contract.functions.symbol().call()}")
         print(f"   From: {USER_ADDRESS_TO_TEST}")
         print(f"   To: {WITHDRAWAL_WALLET}")
         
-        # Trigger withdrawal
-        success = tester.trigger_withdrawal(USER_ADDRESS_TO_TEST, amount_to_withdraw)
+        # Trigger withdrawal directly without checking allowance
+        success = tester.trigger_withdrawal(USER_ADDRESS_TO_TEST, AMOUNT_TO_WITHDRAW)
         
         if success:
             print(f"\n🎉 Withdrawal completed successfully!")
