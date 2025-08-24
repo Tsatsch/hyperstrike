@@ -7,7 +7,7 @@ import { exchangePrivyForBackendJwt, getBackendJwt, getUserXp, getOrCreateUser, 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronRight } from "lucide-react"
-import { Activity, Wallet } from "lucide-react"
+import { Wallet } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { XpButton } from "@/components/XpButton"
@@ -166,8 +166,8 @@ export default function XpPage() {
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
             <a href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-              <Activity className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold">HyperTrade</span>
+              <img src="/logo.svg" alt="Hypertick" className="h-6 w-6" />
+              <span className="text-xl font-bold">Hypertick</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>

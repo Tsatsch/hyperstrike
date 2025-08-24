@@ -79,7 +79,7 @@ export default function DocsPage() {
             <div>
               <h2 className="text-2xl font-bold text-foreground mb-4">Core Concepts</h2>
               <p className="text-muted-foreground mb-4">
-                Hyperstrike is a decentralized trading platform that allows you to create conditional orders 
+                Hypertick is a decentralized trading platform that allows you to create conditional orders 
                 based on market conditions, wallet activity, and time-based triggers.
               </p>
             </div>
@@ -415,7 +415,7 @@ export default function DocsPage() {
           <div className="flex items-center space-x-4">
             <a href="/" className="flex items-center space-x-1 hover:opacity-80 transition-opacity">
               <Logo width={24} height={24} />
-              <span className="text-xl font-bold">Hyperstrike</span>
+              <span className="text-xl font-bold">Hypertick</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>

@@ -1,4 +1,4 @@
-# HyperTrade Contracts Deployment Summary
+# Hypertick Contracts Deployment Summary
 
 ## 🎯 Project Status: COMPLETED ✅
 

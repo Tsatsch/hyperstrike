@@ -1346,7 +1346,7 @@ export default function TradingPlatform() {
           <div className="flex items-center space-x-4">
             <a href="/" className="flex items-center space-x-1 hover:opacity-80 transition-opacity">
               <Logo width={24} height={24} />
-              <span className="text-xl font-bold">Hyperstrike</span>
+              <span className="text-xl font-bold">Hypertick</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
@@ -3637,7 +3637,7 @@ export default function TradingPlatform() {
               <div className="space-y-2">
                 <h3 className="text-2xl font-bold text-foreground">Connect Your Wallet</h3>
                 <p className="text-muted-foreground">
-                  Please connect your wallet to start trading on Hyperstrike
+                  Please connect your wallet to start trading on Hypertick
                 </p>
               </div>
               
