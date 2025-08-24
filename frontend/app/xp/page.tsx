@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { exchangePrivyForBackendJwt, getBackendJwt, getUserXp, getOrCreateUser, getUserMe, getLeaderboard, claimDailyXp, getDailyEligibility, UserMe } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight, Users } from "lucide-react"
 import { Wallet } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -232,7 +232,13 @@ export default function XpPage() {
 
           <Card className="border-border/50 md:col-span-2">
             <CardHeader>
-              <CardTitle className="text-foreground">Leaderboard</CardTitle>
+              <CardTitle className="text-foreground flex items-center justify-between">
+                <span>Leaderboard</span>
+                <div className="flex items-center text-xs text-muted-foreground bg-muted/30 px-2 py-1 rounded-md">
+                  <Users className="w-3 h-3 mr-1" />
+                  <span>with .hl names</span>
+                </div>
+              </CardTitle>
               <CardDescription>Top users by XP</CardDescription>
             </CardHeader>
             <CardContent>
@@ -262,13 +268,16 @@ export default function XpPage() {
                             </Avatar>
                             <span className="text-foreground text-sm font-medium">{displayName}</span>
                             {hasHlName && (
-                              <button
-                                aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                                className="text-muted-foreground hover:text-foreground transition-colors"
-                                onClick={() => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))}
-                              >
-                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                              </button>
+                              <>
+                                <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-md">.hl</span>
+                                <button
+                                  aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                                  className="text-muted-foreground hover:text-foreground transition-colors"
+                                  onClick={() => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))}
+                                >
+                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </button>
+                              </>
                             )}
                           </div>
                           <div className="text-foreground text-sm font-semibold">{u.xp}</div>

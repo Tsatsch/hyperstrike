@@ -39,7 +39,7 @@ const features = [
   {
     icon: Shield,
     title: "Fully On-Chain",
-    description: "All trades are verifiable on the blockchain for complete transparency."
+    description: "All trades are verifiable on the blockchain. We are suppport as well Hypercore as HyperEVM."
   },
   {
     icon: Target,
@@ -51,7 +51,7 @@ const features = [
 const conditionTypes = [
   {
     icon: TrendingUp,
-    title: "Price Triggers"
+    title: "OHLCV Triggers"
   },
   {
     icon: Wallet,
@@ -59,7 +59,7 @@ const conditionTypes = [
   },
   {
     icon: BarChart3,
-    title: "Funding Rates"
+    title: "DCA"
   },
   {
     icon: Clock,
@@ -77,9 +77,9 @@ const conditionTypes = [
 
 const stats = [
   { label: "Execution Speed", value: "Sub-second", icon: Zap },
-  { label: "Supported Tokens", value: "100+", icon: Wallet },
-  { label: "Condition Types", value: "6+", icon: Target },
-  { label: "Real-time Monitoring", value: "24/7", icon: Activity }
+  { label: "Supported Tokens", value: "10+", icon: Wallet },
+  { label: "Condition Types", value: "5+", icon: Target },
+  { label: "Real-time Dashboard", value: "24/7", icon: Activity }
 ]
 
 export default function LandingPage() {
@@ -117,7 +117,7 @@ export default function LandingPage() {
           <div className="text-center max-w-4xl mx-auto">
             <Badge variant="secondary" className="mb-4 bg-primary/20 text-primary border-primary/30">
               <Sparkles className="w-3 h-3 mr-1" />
-              Limit Trading Platform
+              Hyper Trading Platform
             </Badge>
             
             <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
@@ -233,6 +233,50 @@ export default function LandingPage() {
                 </Card>
               )
             })}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-12 bg-muted/20">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-8">
+            <h3 className="text-lg font-semibold text-muted-foreground mb-6">Powered by Industry Leaders</h3>
+            <div className="flex flex-col md:flex-row items-center justify-center gap-8 max-w-4xl mx-auto">
+              
+              {/* GlueX */}
+              <div className="flex items-center space-x-3 bg-card/50 backdrop-blur-sm border border-border/30 rounded-lg px-4 py-3 hover:bg-card/80 transition-all">
+                <div className="w-8 h-8 bg-blue-500/10 rounded-full flex items-center justify-center">
+                  <ArrowUpDown className="w-4 h-4 text-blue-500" />
+                </div>
+                <div className="text-left">
+                  <div className="font-medium text-sm">GlueX Router</div>
+                  <div className="text-xs text-muted-foreground">Optimal swap routing</div>
+                </div>
+              </div>
+
+              {/* Alchemy */}
+              <div className="flex items-center space-x-3 bg-card/50 backdrop-blur-sm border border-border/30 rounded-lg px-4 py-3 hover:bg-card/80 transition-all">
+                <div className="w-8 h-8 bg-purple-500/10 rounded-full flex items-center justify-center">
+                  <Globe className="w-4 h-4 text-purple-500" />
+                </div>
+                <div className="text-left">
+                  <div className="font-medium text-sm">Alchemy RPC</div>
+                  <div className="text-xs text-muted-foreground">Reliable blockchain data</div>
+                </div>
+              </div>
+
+              {/* Hyperliquid Names */}
+              <div className="flex items-center space-x-3 bg-card/50 backdrop-blur-sm border border-border/30 rounded-lg px-4 py-3 hover:bg-card/80 transition-all">
+                <div className="w-8 h-8 bg-green-500/10 rounded-full flex items-center justify-center">
+                  <Users className="w-4 h-4 text-green-500" />
+                </div>
+                <div className="text-left">
+                  <div className="font-medium text-sm">Hyperliquid Names</div>
+                  <div className="text-xs text-muted-foreground">Enhanced user identity</div>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       </section>

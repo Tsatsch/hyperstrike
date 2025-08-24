@@ -1476,7 +1476,13 @@ export default function TradingPlatform() {
               <div className="w-full max-w-md mx-auto lg:mx-0">
                 <Card className="border-border/50 shadow-lg">
                   <CardHeader>
-                    <CardTitle className="text-foreground">Swap Pair</CardTitle>
+                    <CardTitle className="text-foreground flex items-center justify-between">
+                      <span>Swap Pair</span>
+                      <div className="flex items-center text-xs text-muted-foreground bg-muted/30 px-2 py-1 rounded-md">
+                        <ArrowUpDown className="w-3 h-3 mr-1" />
+                        <span>via GlueX</span>
+                      </div>
+                    </CardTitle>
                     <CardDescription>Choose the tokens you want to trade and configure amounts</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
@@ -3031,19 +3037,22 @@ export default function TradingPlatform() {
                           {/* Value Button - Transforms to input field */}
                           <div className={`space-y-2 ${["volume", "rsi"].includes(source) ? "col-span-1" : ""}`}>
                             {!showValueInput ? (
-                              <button
-                                className={`flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium transition-colors ${
+                              <div
+                                className={`flex items-center justify-between gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium transition-colors cursor-text ${
                                   secondSourceType === "value"
-                                    ? "bg-primary text-primary-foreground border-primary/50"
-                                    : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary border-border/50"
+                                    ? "bg-background text-foreground border-primary/50 ring-1 ring-primary/20"
+                                    : "bg-background text-muted-foreground hover:border-primary/30 border-border/50"
                                 }`}
                                 onClick={() => {
                                   setShowValueInput(true);
                                   setSecondSourceType("value");
                                 }}
                               >
-                                <span>{secondSourceValue ? secondSourceValue : "Value"}</span>
-                              </button>
+                                <span className={secondSourceValue ? "text-foreground" : "text-muted-foreground"}>
+                                  {secondSourceValue || "Enter value..."}
+                                </span>
+                                <span className="text-xs text-muted-foreground">📝</span>
+                              </div>
                             ) : (
                               <div className="flex items-center justify-center gap-2 rounded-xl border h-16 w-full px-3 text-sm font-medium bg-background border-primary/50">
                                 <Input
@@ -3470,7 +3479,7 @@ export default function TradingPlatform() {
                 <Button 
                   onClick={handleCreateSwap}
                   disabled={isCreating}
-                  className="bg-green-600 hover:bg-green-700 text-white shadow-lg cursor-pointer"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
                 >
                   {isCreating ? "Creating..." : "Create Conditional Swap"}
                 </Button>
