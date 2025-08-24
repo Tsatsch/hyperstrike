@@ -563,7 +563,7 @@ class CandleMonitor:
 
                 if trig.chained_confirmation.active:
                     required = trig.chained_confirmation.value
-                    if rt.consecutive_hits < required:
+                    if required is not None and rt.consecutive_hits < required:
                         continue  # not enough consecutive bars
 
                 #3. Cooldown

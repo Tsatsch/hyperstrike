@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import './slider-styles.css'
 import { usePrivy } from '@privy-io/react-auth'
 import { getBackendJwt, exchangePrivyForBackendJwt } from '@/lib/api'
 import { getUserIdFromWallet } from '@/lib/wallet-utils'
@@ -29,6 +30,10 @@ import { XpButton } from "@/components/XpButton"
 import { Footer } from "@/components/footer"
 import { Logo } from "@/components/Logo"
 import { config } from "@/lib/config"
+import { checkAllowance, approveToken, getTokenDecimals } from "@/lib/token-allowance"
+import { wrapHype, WHYPE_CONTRACT_ADDRESS } from "@/lib/wrap"
+import { TransactionMonitor } from "@/components/TransactionMonitor"
+import { useTransactionMonitor } from "@/hooks/use-transaction-monitor"
 
 interface Token {
   symbol: string
@@ -168,6 +173,69 @@ export default function TradingPlatform() {
   const [gainType, setGainType] = useState<"%" | "$">("%");
   const [lossType, setLossType] = useState<"%" | "$">("%");
   const [showContinueWarning, setShowContinueWarning] = useState(false);
+  const [isHypeWrapped, setIsHypeWrapped] = useState(false);
+  const [tokenAllowance, setTokenAllowance] = useState<string>("0");
+  const [isTokenApproved, setIsTokenApproved] = useState(false);
+  const [whypeAllowance, setWhypeAllowance] = useState<string>("0");
+  const [isWhypeApproved, setIsWhypeApproved] = useState(false);
+  const [showTransactionRejectedModal, setShowTransactionRejectedModal] = useState(false);
+  const [rejectedTransactionData, setRejectedTransactionData] = useState<{
+    tokenAddress: string;
+    tokenSymbol: string;
+  } | null>(null);
+  const [isRetryingTransaction, setIsRetryingTransaction] = useState(false);
+  const [showSwapFlowModal, setShowSwapFlowModal] = useState(false);
+  
+  // Transaction monitoring
+  const { transactions, addTransaction, removeTransaction } = useTransactionMonitor();
+  
+  // Transaction confirmation states
+  const [pendingTransactions, setPendingTransactions] = useState<Set<string>>(new Set());
+  
+  // Monitor transaction status changes to update UI state
+  useEffect(() => {
+    transactions.forEach(tx => {
+      if (tx.status === 'success') {
+        // Handle successful transactions
+        if (tx.type === 'wrap' && tx.tokenSymbol === 'HYPE') {
+          // HYPE wrapping succeeded
+          setIsHypeWrapped(true)
+          const whypeToken = tokens.find(t => t.symbol === 'WHYPE')
+          if (whypeToken) {
+            setFromToken(whypeToken)
+          }
+        } else if (tx.type === 'approval') {
+          // Token approval succeeded
+          if (tx.tokenSymbol === 'WHYPE' && isHypeWrapped) {
+            setIsWhypeApproved(true)
+          } else {
+            setIsTokenApproved(true)
+          }
+        }
+        
+        // Remove from pending transactions
+        setPendingTransactions(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(tx.hash)
+          return newSet
+        })
+        
+        // Reset retry states
+        setIsRetryingTransaction(false)
+        setShowTransactionRejectedModal(false)
+        setRejectedTransactionData(null)
+      } else if (tx.status === 'failed') {
+        // Handle failed transactions
+        setPendingTransactions(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(tx.hash)
+          return newSet
+        })
+        
+        setIsRetryingTransaction(false)
+      }
+    })
+  }, [transactions, isHypeWrapped, tokens])
 
   // Generate mapping from contract address to tokens using centralized config
   const contractAddressToToken: { [key: string]: Token | undefined } = {}
@@ -208,6 +276,98 @@ export default function TradingPlatform() {
     run()
   }, [authenticated, user?.wallet?.address, selectedPlatform])
 
+  // Check token allowance when fromToken or fromAmount changes
+  useEffect(() => {
+    const checkTokenAllowance = async () => {
+      // Reset approval state first
+      setIsTokenApproved(false)
+      setTokenAllowance("0")
+
+      if (!authenticated || !user?.wallet?.address || !fromToken?.address) {
+        return
+      }
+
+      // Skip allowance check for HYPE token (native token) only
+      if (fromToken.symbol === 'HYPE') {
+        setTokenAllowance(fromAmount || "0")
+        setIsTokenApproved(true)
+        return
+      }
+
+      // Only check allowance if there's an input amount
+      if (!fromAmount || parseFloat(fromAmount) <= 0) {
+        return
+      }
+
+      try {
+        const allowance = await checkAllowance(fromToken.address, user.wallet.address)
+        setTokenAllowance(allowance?.toString() || "0")
+        
+        // Get token decimals and convert allowance to human-readable format
+        const decimals = await getTokenDecimals(fromToken.address)
+        const { formatUnits } = await import('ethers')
+        const allowanceFormatted = allowance ? parseFloat(formatUnits(allowance, decimals)) : 0
+        
+        // Check if allowance is sufficient for the input amount
+        const inputAmountBig = parseFloat(fromAmount)
+        setIsTokenApproved(allowanceFormatted >= inputAmountBig)
+        
+        console.log(`Allowance check: ${allowance} (${allowanceFormatted} ${fromToken.symbol}) vs required: ${fromAmount}, approved: ${allowanceFormatted >= inputAmountBig}`)
+      } catch (error) {
+        console.error('Error checking allowance:', error)
+        setTokenAllowance("0")
+        setIsTokenApproved(false)
+      }
+    }
+
+    checkTokenAllowance()
+  }, [authenticated, user?.wallet?.address, fromToken?.address, fromToken?.symbol, fromAmount])
+
+  // Check WHYPE allowance when HYPE is wrapped and token becomes WHYPE
+  useEffect(() => {
+    const checkWhypeAllowance = async () => {
+      // Reset WHYPE approval state first
+      setWhypeAllowance("0")
+      setIsWhypeApproved(false)
+
+      if (!authenticated || !user?.wallet?.address || !fromToken || fromToken.symbol !== 'WHYPE' || !isHypeWrapped) {
+        return
+      }
+
+      // Only check allowance if there's an input amount
+      if (!fromAmount || parseFloat(fromAmount) <= 0) {
+        return
+      }
+
+      try {
+        // Use the current fromToken since it's now WHYPE
+        if (!fromToken.address) {
+          return
+        }
+
+        const allowance = await checkAllowance(fromToken.address, user.wallet.address)
+        setWhypeAllowance(allowance?.toString() || "0")
+        
+        // Get token decimals and convert allowance to human-readable format
+        const decimals = await getTokenDecimals(fromToken.address)
+        const { formatUnits } = await import('ethers')
+        const allowanceFormatted = allowance ? parseFloat(formatUnits(allowance, decimals)) : 0
+        
+        // Check if allowance is sufficient for the input amount
+        const inputAmountBig = parseFloat(fromAmount)
+        setIsWhypeApproved(allowanceFormatted >= inputAmountBig)
+        
+        console.log(`WHYPE allowance check: ${allowance} (${allowanceFormatted} WHYPE) vs required: ${fromAmount}, approved: ${allowanceFormatted >= inputAmountBig}`)
+      } catch (error) {
+        console.error('Error checking WHYPE allowance:', error)
+        setWhypeAllowance("0")
+        setIsWhypeApproved(false)
+      }
+    }
+
+    checkWhypeAllowance()
+  }, [authenticated, user?.wallet?.address, fromToken?.symbol, fromToken?.address, isHypeWrapped, fromAmount])
+
   const filteredTokens = tokens.filter(
     (token) =>
       token.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -242,9 +402,20 @@ export default function TradingPlatform() {
   })()
 
   // Filter out the sell token from the buy token list
-  const availableBuyTokens = filteredTokenSearch.filter(token => 
-    !fromToken || token.symbol !== fromToken.symbol
-  )
+  const availableBuyTokens = filteredTokenSearch.filter(token => {
+    if (!fromToken) return true
+    
+    // Exclude the same token
+    if (token.symbol === fromToken.symbol) return false
+    
+    // If HYPE is selected as input, exclude WHYPE from output
+    if (fromToken.symbol === 'HYPE' && token.symbol === 'WHYPE') return false
+    
+    // If WHYPE is selected as input, exclude HYPE from output
+    if (fromToken.symbol === 'WHYPE' && token.symbol === 'HYPE') return false
+    
+    return true
+  })
 
   const handleSwapTokens = () => {
     const temp = fromToken
@@ -253,6 +424,43 @@ export default function TradingPlatform() {
     setToTokens(fromToken ? [fromToken] : [])
     setFromAmount(toPercentages[toTokens[0]?.symbol || ''] || '')
     setToPercentages(fromToken ? { [fromToken.symbol]: tempAmount } : {})
+  }
+
+  const handleSwapWithToken = (targetToken: Token) => {
+    if (!fromToken) return
+    
+    // Store current input token and amount
+    const currentFromToken = fromToken
+    const currentFromAmount = fromAmount
+    
+    // Move target token to input position
+    setFromToken(targetToken)
+    setFromAmount(toPercentages[targetToken.symbol] || '')
+    
+    // Remove target token from output tokens
+    const newToTokens = toTokens.filter(t => t.symbol !== targetToken.symbol)
+    
+    // Add current input token to output tokens
+    const newToTokensWithCurrent = [...newToTokens, currentFromToken]
+    
+    // Update output tokens
+    setToTokens(newToTokensWithCurrent)
+    
+    // Update percentages
+    const newToPercentages = { ...toPercentages }
+    delete newToPercentages[targetToken.symbol]
+    newToPercentages[currentFromToken.symbol] = currentFromAmount
+    
+    setToPercentages(newToPercentages)
+    
+    // Reset HYPE wrapped state when changing from token
+    setIsHypeWrapped(false)
+    // Reset token approval state when changing from token
+    setIsTokenApproved(false)
+    setTokenAllowance("0")
+    // Reset WHYPE approval state when changing from token
+    setIsWhypeApproved(false)
+    setWhypeAllowance("0")
   }
 
   // Function to fetch balance for a specific token
@@ -293,6 +501,14 @@ export default function TradingPlatform() {
     if (isFrom) {
       setFromToken(token)
       setShowFromTokenModal(false)
+      // Reset HYPE wrapped state when changing from token
+      setIsHypeWrapped(false)
+      // Reset token approval state when changing from token
+      setIsTokenApproved(false)
+      setTokenAllowance("0")
+      // Reset WHYPE approval state when changing from token
+      setIsWhypeApproved(false)
+      setWhypeAllowance("0")
       // Clear toTokens if they contain the same token as the new fromToken
       setToTokens(prev => prev.filter(t => t.symbol !== token.symbol))
       const newToPercentages = { ...toPercentages }
@@ -370,6 +586,8 @@ export default function TradingPlatform() {
   const getCachedPriceChange = (tokenSymbol: string): number => {
     return priceCache[tokenSymbol]?.change24h || 0
   }
+
+
 
   // Calculate fiat values with loading state handling
   const fromFiatValue = fromToken && fromAmount ? 
@@ -948,6 +1166,143 @@ export default function TradingPlatform() {
 
 
 
+  const handleInstantSwap = async () => {
+    // Show the swap flow visualization modal
+    setShowSwapFlowModal(true)
+    
+    // first check for token allowance 
+    const allowance = await checkAllowance(fromToken?.address || '0x0000000000000000000000000000000000000000', user?.wallet?.address || '0x0000000000000000000000000000000000000000')
+    console.log("allowance: ", allowance)
+    
+    // TODO: Implement actual swap logic here
+    // For now, just show the modal
+  }
+
+  const handleWrapHype = async () => {
+    if (!user?.wallet?.address || !fromAmount) {
+      console.error("No wallet connected or amount specified")
+      return
+    }
+
+    try {
+      // Get signer from Privy - using the wallet's provider
+      const { BrowserProvider } = await import('ethers')
+      
+      // For Privy, we can use the wallet's ethereum provider
+      if (!(window as any).ethereum) {
+        throw new Error("No ethereum provider found")
+      }
+      
+      const ethersProvider = new BrowserProvider((window as any).ethereum)
+      const signer = await ethersProvider.getSigner()
+
+      // Call wrap function with popup transaction
+      const tx = await wrapHype(fromAmount, signer)
+      
+      console.log(`Wrap HYPE transaction initiated:`, tx.hash)
+      
+      // Add transaction to monitoring system
+      addTransaction(tx.hash, 'wrap', 'HYPE')
+      
+      // Add to pending transactions
+      setPendingTransactions(prev => new Set(prev).add(tx.hash))
+      
+      console.log("HYPE wrap transaction submitted for monitoring")
+    } catch (error: any) {
+      console.error(`Error wrapping HYPE:`, error)
+      
+      // Reset retry state on any error
+      setIsRetryingTransaction(false)
+      
+      // Check if user rejected the transaction
+      if (error?.code === 'ACTION_REJECTED' || error?.code === 4001 || 
+          error?.message?.includes('rejected') || error?.message?.includes('denied') ||
+          error?.message?.includes('cancelled') || error?.message?.includes('User rejected')) {
+        // Show retry modal for user rejection
+        setRejectedTransactionData({
+          tokenAddress: WHYPE_CONTRACT_ADDRESS,
+          tokenSymbol: 'HYPE'
+        })
+        setShowTransactionRejectedModal(true)
+      } else {
+        // Other errors (network, etc.) - just log for now
+        console.error(`Network or other error for HYPE wrapping:`, error)
+      }
+    }
+  }
+
+  const handleApproveToken = async (tokenAddress: string, tokenSymbol: string) => {
+    if (!user?.wallet?.address || !fromAmount) {
+      console.error("No wallet connected or amount specified")
+      return
+    }
+
+    try {
+      // Get signer from Privy - using the wallet's provider
+      const { BrowserProvider } = await import('ethers')
+      
+      // For Privy, we can use the wallet's ethereum provider
+      if (!(window as any).ethereum) {
+        throw new Error("No ethereum provider found")
+      }
+      
+      const ethersProvider = new BrowserProvider((window as any).ethereum)
+      const signer = await ethersProvider.getSigner()
+
+      // Call approve function with popup transaction
+      const tx = await approveToken(tokenAddress, fromAmount, signer)
+      
+      console.log(`Approve ${tokenSymbol} transaction initiated:`, tx.hash)
+      
+      // Add transaction to monitoring system
+      addTransaction(tx.hash, 'approval', tokenSymbol)
+      
+      // Add to pending transactions
+      setPendingTransactions(prev => new Set(prev).add(tx.hash))
+      
+      console.log(`${tokenSymbol} approval transaction submitted for monitoring`)
+    } catch (error: any) {
+      console.error(`Error approving ${tokenSymbol}:`, error)
+      
+      // Reset retry state on any error
+      setIsRetryingTransaction(false)
+      
+      // Check if user rejected the transaction
+      if (error?.code === 'ACTION_REJECTED' || error?.code === 4001 || 
+          error?.message?.includes('rejected') || error?.message?.includes('denied') ||
+          error?.message?.includes('cancelled') || error?.message?.includes('User rejected')) {
+        // Show retry modal for user rejection
+        setRejectedTransactionData({
+          tokenAddress,
+          tokenSymbol
+        })
+        setShowTransactionRejectedModal(true)
+      } else {
+        // Other errors (network, etc.) - just log for now
+        console.error(`Network or other error for ${tokenSymbol}:`, error)
+      }
+    }
+  }
+
+  const handleRetryApproval = () => {
+    if (rejectedTransactionData) {
+      setIsRetryingTransaction(true)
+      // Check if this is a HYPE wrapping retry
+      if (rejectedTransactionData.tokenSymbol === 'HYPE' && rejectedTransactionData.tokenAddress === WHYPE_CONTRACT_ADDRESS) {
+        // Retry HYPE wrapping
+        handleWrapHype()
+      } else {
+        // Retry token approval with the stored data
+        handleApproveToken(rejectedTransactionData.tokenAddress, rejectedTransactionData.tokenSymbol)
+      }
+    }
+  }
+
+  const handleCancelRetry = () => {
+    setShowTransactionRejectedModal(false)
+    setRejectedTransactionData(null)
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <style jsx>{`
@@ -971,6 +1326,19 @@ export default function TradingPlatform() {
           border: 2px solid #c4cbc5;
           box-shadow: 0 2px 4px #04241c;
         }
+
+        @keyframes pulse-border {
+          0%, 100% {
+            border-width: 2px;
+          }
+          50% {
+            border-width: 6px;
+          }
+        }
+
+        .spinning-border {
+          animation: spin 1s linear infinite, pulse-border 2s ease-in-out infinite;
+        }
       `}</style>
       {/* Header */}
       <header className="border-b bg-card">
@@ -978,7 +1346,7 @@ export default function TradingPlatform() {
           <div className="flex items-center space-x-4">
             <a href="/" className="flex items-center space-x-1 hover:opacity-80 transition-opacity">
               <Logo width={24} height={24} />
-              <span className="text-xl font-bold">Hypertick</span>
+              <span className="text-xl font-bold">Hyperstrike</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
@@ -1116,52 +1484,52 @@ export default function TradingPlatform() {
                   {/* From Token (Sell) */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium text-foreground">Sell</Label>
-                    <div className="flex items-center space-x-3 p-4 bg-card border border-border/50 rounded-lg">
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={fromAmount}
-                      onChange={(e) => setFromAmount(e.target.value)}
-                      className="text-2xl font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground pl-2"
-                    />
-                    <div className="flex items-center justify-between mt-1">
-                      <div className="text-sm text-muted-foreground">${fromFiatValue}</div>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setFromAmount((parseFloat(getTokenBalance(fromToken)) * 0.5).toString())}
-                          className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
-                        >
-                          50%
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setFromAmount((parseFloat(getTokenBalance(fromToken)) * 1.0).toString())}
-                          className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
-                        >
-                          100%
-                        </Button>
+                    <div className="flex items-start space-x-3 p-4 bg-card border border-border/50 rounded-lg">
+                      <div className="flex-1 pt-1">
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={fromAmount}
+                          onChange={(e) => setFromAmount(e.target.value)}
+                          className="text-2xl font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground pl-2 w-[90%] h-[2.5rem] flex items-center"
+                        />
+                        <div className="flex items-center justify-between mt-1">
+                          <div className="text-sm text-muted-foreground">${fromFiatValue}</div>
+                          <div className="flex space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setFromAmount((parseFloat(getTokenBalance(fromToken)) * 0.5).toString())}
+                              className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
+                            >
+                              50%
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setFromAmount((parseFloat(getTokenBalance(fromToken)) * 0.999999999999999).toString())}
+                              className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
+                            >
+                              100%
+                            </Button>
+                          </div>
+                        </div>
+                        {selectedPlatform === 'hyperevm' && isBalanceInsufficient && (
+                          <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500">
+                            Insufficient balance. You have {fromTokenBalance.toFixed(6)} {fromToken?.symbol}.
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    {selectedPlatform === 'hyperevm' && isBalanceInsufficient && (
-                      <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500">
-                        Insufficient balance. You have {fromTokenBalance.toFixed(6)} {fromToken?.symbol}.
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end">
+                  <div className="flex flex-col items-end justify-start">
                     <Button
                       variant="outline"
-                      className="flex items-center space-x-2 bg-card border-border/50 hover:bg-accent/50 px-3 py-2"
+                      className="flex items-center space-x-2 bg-card border-border/50 hover:bg-accent/50 px-3 py-2 h-[2.5rem]"
                       onClick={() => setShowFromTokenModal(true)}
                     >
                       {fromToken ? (
                         <>
                           <img src={fromToken.icon} alt={fromToken.symbol} className="w-6 h-6 rounded-full" />
-                          <span className="text-foreground font-medium text-base">{fromToken.symbol}</span>
+                          <span className="text-foreground font-medium text-sm">{fromToken.symbol}</span>
                         </>
                       ) : (
                         <span className="text-foreground">Select token</span>
@@ -1174,10 +1542,10 @@ export default function TradingPlatform() {
                       </span>
                     )}
                   </div>
-                  </div>
+                </div>
                 </div>
 
-                {/* Switch Button */}
+                {/* Switch Buttons - Show individual buttons for each output token when multiple tokens */}
                 <div className="flex justify-center">
                   <Button
                     variant="outline"
@@ -1288,20 +1656,28 @@ export default function TradingPlatform() {
                                     step="1"
                                     value={percentNumber}
                                     onChange={(e) => updateToTokenPercentage(token.symbol, e.target.value)}
-                                    className="relative w-full h-0.5 bg-muted rounded-lg appearance-none cursor-pointer slider"
+                                    className="relative w-full appearance-none cursor-pointer slider"
                                     style={{
-                                      background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${percentNumber}%, hsl(var(--muted)) ${percentNumber}%, hsl(var(--muted)) 100%)`
-                                    }}
+                                      '--slider-value': `${percentNumber}%`
+                                    } as React.CSSProperties}
                                   />
                                 </div>
                                 
                                 {/* Token Details */}
                                 <div className="space-y-1 mt-2">
-                                  <div className={`text-xs font-medium ${
-                                    isPercentageExceeding ? 'text-red-500' : 'text-foreground'
-                                  }`}>
-                                    {tokenPercentage ? `${tokenPercentage}%` : "0%"}
-                                  </div>
+                                  {/* Token Amount Display - Replaces percentage */}
+                                  {fromAmount && tokenPercentage ? (
+                                    <div className="flex items-center space-x-1 text-xs font-medium text-foreground">
+                                      <img src={fromToken?.icon} alt={fromToken?.symbol} className="w-3 h-3 rounded-full" />
+                                      <span>
+                                        {((parseFloat(tokenPercentage) / 100) * parseFloat(fromAmount)).toFixed(6)} {fromToken?.symbol}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs font-medium text-muted-foreground">
+                                      0 {fromToken?.symbol || 'tokens'}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )
@@ -1347,9 +1723,7 @@ export default function TradingPlatform() {
                     )}
                   </div>
 
-
-
-                {/* Total Percentage Display */}
+                  {/* Total Percentage Display */}
                 {toTokens.length > 0 && (
                   <div className={`flex items-center justify-center p-3 rounded-lg ${
                     isPercentageExceeding ? 'bg-red-500/10 border border-red-500/20' : 'bg-muted/50'
@@ -1373,25 +1747,122 @@ export default function TradingPlatform() {
                   </CardContent>
                 </Card>
 
-                {/* Instant Swap Button - Enabled only when NO condition selected AND swap UI is complete */}
+                {/* Instant Swap Button(s) - Enabled only when NO condition selected AND swap UI is complete */}
                 <div className="mt-6">
-                  <Button 
-                    onClick={() => {
-                      if (!conditionType && isInputValid && isOutputValid && isValidTotalPercentage) {
-                        // TODO: Handle instant swap logic
-                        console.log("Instant swap clicked")
-                      }
-                    }}
-                    disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient)}
-                    className={`w-full ${
-                      (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient))
-                        ? 'bg-muted text-muted-foreground cursor-not-allowed' 
-                        : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
-                    }`}
-                  >
-                    Instant Swap
-                    <Zap className="w-4 h-4 ml-2" />
-                  </Button>
+                  {(fromToken?.symbol === 'HYPE' || (fromToken?.symbol === 'WHYPE' && isHypeWrapped)) ? (
+                    /* HYPE/WHYPE token flow: Wrap → Approve WHYPE → Instant Swap */
+                    <div className="flex gap-2">
+                      {!isHypeWrapped ? (
+                        /* Phase 1: Wrap HYPE */
+                        <>
+                          <Button 
+                            onClick={() => {
+                              if (!conditionType && isInputValid && isOutputValid && isValidTotalPercentage) {
+                                handleWrapHype()
+                              }
+                            }}
+                            disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
+                            className={`flex-1 ${
+                              (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
+                                ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                                : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
+                            }`}
+                          >
+                            {pendingTransactions.size > 0 ? 'Wrapping...' : 'Wrap HYPE'}
+                          </Button>
+                          <Button 
+                            disabled={true}
+                            className="flex-1 bg-muted text-muted-foreground cursor-not-allowed"
+                          >
+                            Instant Swap
+                            <Zap className="w-4 h-4 ml-2" />
+                          </Button>
+                        </>
+                      ) : !isWhypeApproved ? (
+                        /* Phase 2: Approve WHYPE */
+                        <>
+                          <Button 
+                            onClick={() => {
+                              if (!conditionType && isInputValid && isOutputValid && isValidTotalPercentage && fromToken?.address) {
+                                // For WHYPE approval after wrapping, we use WHYPE token approval
+                                handleApproveToken(fromToken.address, fromToken.symbol)
+                              }
+                            }}
+                            disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
+                            className={`flex-1 ${
+                              (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
+                                ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                                : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
+                            }`}
+                          >
+                            {pendingTransactions.size > 0 ? 'Approving...' : `Approve ${fromToken?.symbol || 'WHYPE'}`}
+                          </Button>
+                          <Button 
+                            disabled={true}
+                            className="flex-1 bg-muted text-muted-foreground cursor-not-allowed"
+                          >
+                            Instant Swap
+                            <Zap className="w-4 h-4 ml-2" />
+                          </Button>
+                        </>
+                      ) : (
+                        /* Phase 3: Full-width Instant Swap */
+                        <Button 
+                          onClick={() => {
+                            if (!conditionType && isInputValid && isOutputValid && isValidTotalPercentage) {
+                              handleInstantSwap()
+                            }
+                          }}
+                          disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient)}
+                          className={`w-full ${
+                            (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient))
+                              ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                              : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
+                          }`}
+                        >
+                          Instant Swap
+                          <Zap className="w-4 h-4 ml-2" />
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    /* Buttons for other tokens - with conditional approve button */
+                    <div className="flex gap-2">
+                      {!isTokenApproved && fromToken && fromAmount && parseFloat(fromAmount) > 0 && (
+                        <Button 
+                          onClick={() => {
+                            if (fromToken?.address) {
+                              handleApproveToken(fromToken.address, fromToken.symbol)
+                            }
+                          }}
+                          disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
+                          className={`flex-1 ${
+                            (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
+                              ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                              : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
+                          }`}
+                        >
+                          {pendingTransactions.size > 0 ? 'Approving...' : `Approve ${fromToken.symbol}`}
+                        </Button>
+                      )}
+                      <Button 
+                        onClick={() => {
+                          if (!conditionType && isInputValid && isOutputValid && isValidTotalPercentage && isTokenApproved) {
+                            handleInstantSwap()
+                          }
+                        }}
+                        disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || !isTokenApproved}
+                        className={`${!isTokenApproved && fromToken && fromAmount && parseFloat(fromAmount) > 0 ? 'flex-1' : 'w-full'} ${
+                          (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || !isTokenApproved)
+                            ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                            : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
+                        }`}
+                      >
+                        Instant Swap
+                        <Zap className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -3108,10 +3579,10 @@ export default function TradingPlatform() {
                     max="20"
                     value={leverage}
                     onChange={(e) => setLeverage(parseInt(e.target.value))}
-                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer slider"
+                    className="w-full appearance-none cursor-pointer slider"
                     style={{
-                      background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${((leverage - 1) / 19) * 100}%, hsl(var(--muted)) ${((leverage - 1) / 19) * 100}%, hsl(var(--muted)) 100%)`
-                    }}
+                      '--slider-value': `${((leverage - 1) / 19) * 100}%`
+                    } as React.CSSProperties}
                   />
                   <div className="flex justify-between text-xs text-muted-foreground mt-2">
                     <span>1x</span>
@@ -3166,7 +3637,7 @@ export default function TradingPlatform() {
               <div className="space-y-2">
                 <h3 className="text-2xl font-bold text-foreground">Connect Your Wallet</h3>
                 <p className="text-muted-foreground">
-                  Please connect your wallet to start trading on Hypertick
+                  Please connect your wallet to start trading on Hyperstrike
                 </p>
               </div>
               
@@ -3195,7 +3666,216 @@ export default function TradingPlatform() {
         </div>
       )}
 
+      {/* Transaction Rejected Modal */}
+      {showTransactionRejectedModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card border border-border/50 rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-300">
+            <div className="text-center space-y-6">
+              {/* Icon with conditional display */}
+              {isRetryingTransaction ? (
+                /* Loading state with spinning circle */
+                <div className="mx-auto relative" style={{ width: '88px', height: '88px' }}>
+                  {/* Spinning border with thickness animation - 10% further from image */}
+                  <div className="absolute inset-0 rounded-full border-transparent spinning-border"
+                       style={{
+                         borderWidth: '3px',
+                         borderTopColor: resolvedTheme === 'dark' ? '#01cba4' : '#017c67',
+                         borderRightColor: 'transparent',
+                         borderBottomColor: 'transparent', 
+                         borderLeftColor: 'transparent'
+                       }}></div>
+                  {/* Inner content - centered image with padding for spacing */}
+                  <div className="w-full h-full flex items-center justify-center p-2">
+                    <img 
+                      src="/purr_distinguished.gif" 
+                      alt="Processing Transaction" 
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Error state - 20% bigger total (15% + 5% additional) */
+                <div className="mx-auto flex items-center justify-center" style={{ width: '97px', height: '97px' }}>
+                  <img 
+                    src="/purr_invalid.png" 
+                    alt="Transaction Rejected" 
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+              
+              {/* Title */}
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-foreground">
+                  {isRetryingTransaction ? 'Processing Transaction' : 'Transaction Rejected'}
+                </h3>
+                <p className="text-muted-foreground">
+                  {isRetryingTransaction 
+                    ? 'Please confirm the transaction in your wallet...'
+                    : `You rejected the ${rejectedTransactionData?.tokenSymbol || 'token'} approval transaction. Would you like to try again?`
+                  }
+                </p>
+              </div>
+              
+              {/* Buttons - only show when not retrying */}
+              {!isRetryingTransaction && (
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleCancelRetry}
+                    className="flex-1 border-border/50 cursor-pointer"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleRetryApproval}
+                    className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Swap Flow Modal */}
+      {showSwapFlowModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card border border-border/50 rounded-xl p-8 max-w-2xl w-full mx-4 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-300">
+            <div className="text-center space-y-6">
+              {/* Swap Flow Visualization */}
+              <div className="relative">
+                {/* Input Token at Top */}
+                <div className="flex items-center justify-center mb-8">
+                  <div className="flex items-center space-x-3 p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <img 
+                      src={fromToken?.icon} 
+                      alt={fromToken?.symbol} 
+                      className="w-8 h-8 rounded-full"
+                    />
+                    <span className="text-lg font-semibold text-foreground">
+                      {fromToken?.symbol}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {fromAmount}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Green Lines (Water Pipes) */}
+                <div className="relative mb-8">
+                  {toTokens.map((token, index) => (
+                    <div key={token.symbol} className="relative">
+                      {/* Vertical Line */}
+                      <div 
+                        className="absolute left-1/2 transform -translate-x-1/2 w-1 bg-gradient-to-b from-green-400 to-green-600"
+                        style={{
+                          height: '80px',
+                          top: '0px',
+                          zIndex: 1
+                        }}
+                      />
+                      
+                      {/* Horizontal Line to Token */}
+                      <div 
+                        className="absolute top-20 w-24 h-1 bg-gradient-to-r from-green-400 to-green-600"
+                        style={{
+                          left: index === 0 ? 'calc(50% - 48px)' : 
+                                index === 1 ? 'calc(50% + 48px)' :
+                                index === 2 ? 'calc(50% - 96px)' :
+                                index === 3 ? 'calc(50% + 96px)' : '50%',
+                          zIndex: 1
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Output Tokens in Grid */}
+                <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
+                  {toTokens.map((token, index) => (
+                    <div 
+                      key={token.symbol}
+                      className="flex items-center space-x-2 p-3 bg-muted/30 rounded-lg border border-border/50"
+                      style={{
+                        gridColumn: index === 0 ? '1' : 
+                                   index === 1 ? '2' : 
+                                   index === 2 ? '1' : 
+                                   index === 3 ? '2' : '1',
+                        gridRow: index < 2 ? '1' : '2'
+                      }}
+                    >
+                      <img 
+                        src={token.icon} 
+                        alt={token.symbol} 
+                        className="w-6 h-6 rounded-full"
+                      />
+                      <div className="text-left">
+                        <div className="font-medium text-foreground">
+                          {token.symbol}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {((parseFloat(toPercentages[token.symbol] || '0') / 100) * parseFloat(fromAmount || '0')).toFixed(6)} {fromToken?.symbol}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Animated PURR Logo */}
+                <div className="mt-8 mx-auto relative" style={{ width: '88px', height: '88px' }}>
+                  {/* Spinning border with thickness animation */}
+                  <div className="absolute inset-0 rounded-full border-transparent spinning-border"
+                       style={{
+                         borderWidth: '3px',
+                         borderTopColor: resolvedTheme === 'dark' ? '#01cba4' : '#017c67',
+                         borderRightColor: 'transparent',
+                         borderBottomColor: 'transparent', 
+                         borderLeftColor: 'transparent'
+                       }}></div>
+                  {/* Inner content */}
+                  <div className="w-full h-full flex items-center justify-center p-2">
+                    <img 
+                      src="/purr_distinguished.gif" 
+                      alt="Processing Swap" 
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Title */}
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-foreground">
+                  Processing Swap
+                </h3>
+                <p className="text-muted-foreground">
+                  Your swap is being processed. Please wait...
+                </p>
+              </div>
+
+              {/* Close Button */}
+              <Button 
+                variant="outline" 
+                onClick={() => setShowSwapFlowModal(false)}
+                className="border-border/50 cursor-pointer"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
+      
+      {/* Transaction Monitor */}
+      <TransactionMonitor 
+        transactions={transactions}
+        onRemoveTransaction={removeTransaction}
+      />
     </div>
   )
 } 
