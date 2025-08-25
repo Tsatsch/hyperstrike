@@ -77,10 +77,10 @@ This architecture ensures that users maintain control of their funds until the e
 - WebSocket integration for live market data
 
 ### Integrations
-- **GlueX**: Token swapping on HyperEVM
-- **Alchemy**: Blockchain data and RPC services
-- **Privy**: Web3 wallet authentication
-- **Hyperliquid**: Market data and trading execution
+- **GlueX**: Token swapping on HyperEVM (https://gluex.xyz/)
+- **Alchemy**: Blockchain data and RPC services (https://www.alchemy.com/)
+- **Privy**: Web3 wallet authentication (https://www.privy.io/)
+- **Hyperliquid**: Market data and trading execution (https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api)
 
 ## Development
 
@@ -107,3 +107,4 @@ Start the production environment:
 ---
 
 *Built on Hyperliquid infrastructure with GlueX, Alchemy, and Privy integrations*
+
