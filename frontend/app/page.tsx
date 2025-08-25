@@ -29,6 +29,10 @@ import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Footer } from "@/components/footer"
 import { Logo } from "@/components/Logo"
+import { GlueXIcon } from "@/components/GlueXIcon"
+import { HyperliquidIcon } from "@/components/HyperliquidIcon"
+import { AlchemyIcon } from "@/components/AlchemyIcon"
+import { PrivyIcon } from "@/components/PrivyIcon"
 
 const features = [
   {
@@ -42,9 +46,9 @@ const features = [
     description: "All trades are verifiable on the blockchain. We are suppport as well Hypercore as HyperEVM."
   },
   {
-    icon: Target,
-    title: "Advanced Strategies",
-    description: "Create sophisticated strategies with multiple conditions."
+    icon: Activity,
+    title: "Advanced Dashboard",
+    description: "Manage all your open orders and track performance in one place."
   }
 ]
 
@@ -113,6 +117,16 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
+        
+        {/* Cute floating cat */}
+        <div className="absolute top-20 left-8 md:left-20 z-10 hidden md:block">
+          <img 
+            src="/purr_success.png" 
+            alt="Success cat" 
+            className="w-16 h-16 md:w-20 md:h-20 opacity-80 hover:opacity-100 transition-opacity"
+          />
+        </div>
+        
         <div className="relative container mx-auto px-6 py-20">
           <div className="text-center max-w-4xl mx-auto">
             <Badge variant="secondary" className="mb-4 bg-primary/20 text-primary border-primary/30">
@@ -152,6 +166,101 @@ export default function LandingPage() {
                   </div>
                 )
               })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Trusted By / Sponsor Lane */}
+      <section className="py-8 bg-muted/5 border-y border-border/30">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-6">
+            <h3 className="text-sm font-medium text-muted-foreground mb-4">Powered by</h3>
+          </div>
+          
+          {/* Animated Sponsor Carousel */}
+          <div className="relative overflow-hidden">
+            <div className="flex animate-scroll gap-8 md:gap-12">
+              {/* First set of sponsors */}
+              <div className="flex items-center gap-8 md:gap-12 min-w-max">
+                {/* GlueX */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <GlueXIcon width={28} height={7} className="text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">GlueX</span>
+                </div>
+                
+                {/* Alchemy */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <AlchemyIcon width={20} height={17} showText={false} />
+                  <span className="text-sm font-medium text-muted-foreground">Alchemy</span>
+                </div>
+                
+                {/* Hyperliquid */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <HyperliquidIcon width={16} height={16} />
+                  <span className="text-sm font-medium text-muted-foreground">Hyperliquid Names</span>
+                </div>
+                
+                {/* Privy */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <PrivyIcon width={16} height={20} />
+                  <span className="text-sm font-medium text-muted-foreground">Privy</span>
+                </div>
+              </div>
+              
+              {/* Duplicate set for seamless loop */}
+              <div className="flex items-center gap-8 md:gap-12 min-w-max">
+                {/* GlueX */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <GlueXIcon width={28} height={7} className="text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">GlueX</span>
+                </div>
+                
+                {/* Alchemy */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <AlchemyIcon width={20} height={17} showText={false} />
+                  <span className="text-sm font-medium text-muted-foreground">Alchemy</span>
+                </div>
+                
+                {/* Hyperliquid */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <HyperliquidIcon width={16} height={16} />
+                  <span className="text-sm font-medium text-muted-foreground">Hyperliquid Names</span>
+                </div>
+                
+                {/* Privy */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <PrivyIcon width={16} height={20} />
+                  <span className="text-sm font-medium text-muted-foreground">Privy</span>
+                </div>
+              </div>
+              
+              {/* Third set for extra smoothness */}
+              <div className="flex items-center gap-8 md:gap-12 min-w-max">
+                {/* GlueX */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <GlueXIcon width={28} height={7} className="text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">GlueX</span>
+                </div>
+                
+                {/* Alchemy */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <AlchemyIcon width={20} height={17} showText={false} />
+                  <span className="text-sm font-medium text-muted-foreground">Alchemy</span>
+                </div>
+                
+                {/* Hyperliquid */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <HyperliquidIcon width={16} height={16} />
+                  <span className="text-sm font-medium text-muted-foreground">Hyperliquid Names</span>
+                </div>
+                
+                {/* Privy */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-background/50 rounded-lg border border-border/30">
+                  <PrivyIcon width={16} height={20} />
+                  <span className="text-sm font-medium text-muted-foreground">Privy</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -237,49 +346,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="py-12 bg-muted/20">
-        <div className="container mx-auto px-6">
-          <div className="text-center mb-8">
-            <h3 className="text-lg font-semibold text-muted-foreground mb-6">Powered by Industry Leaders</h3>
-            <div className="flex flex-col md:flex-row items-center justify-center gap-8 max-w-4xl mx-auto">
-              
-              {/* GlueX */}
-              <div className="flex items-center space-x-3 bg-card/50 backdrop-blur-sm border border-border/30 rounded-lg px-4 py-3 hover:bg-card/80 transition-all">
-                <div className="w-8 h-8 bg-blue-500/10 rounded-full flex items-center justify-center">
-                  <ArrowUpDown className="w-4 h-4 text-blue-500" />
-                </div>
-                <div className="text-left">
-                  <div className="font-medium text-sm">GlueX Router</div>
-                  <div className="text-xs text-muted-foreground">Optimal swap routing</div>
-                </div>
-              </div>
 
-              {/* Alchemy */}
-              <div className="flex items-center space-x-3 bg-card/50 backdrop-blur-sm border border-border/30 rounded-lg px-4 py-3 hover:bg-card/80 transition-all">
-                <div className="w-8 h-8 bg-purple-500/10 rounded-full flex items-center justify-center">
-                  <Globe className="w-4 h-4 text-purple-500" />
-                </div>
-                <div className="text-left">
-                  <div className="font-medium text-sm">Alchemy RPC</div>
-                  <div className="text-xs text-muted-foreground">Reliable blockchain data</div>
-                </div>
-              </div>
-
-              {/* Hyperliquid Names */}
-              <div className="flex items-center space-x-3 bg-card/50 backdrop-blur-sm border border-border/30 rounded-lg px-4 py-3 hover:bg-card/80 transition-all">
-                <div className="w-8 h-8 bg-green-500/10 rounded-full flex items-center justify-center">
-                  <Users className="w-4 h-4 text-green-500" />
-                </div>
-                <div className="text-left">
-                  <div className="font-medium text-sm">Hyperliquid Names</div>
-                  <div className="text-xs text-muted-foreground">Enhanced user identity</div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Final CTA */}
       <section className="py-16 bg-primary/5">
@@ -287,7 +354,7 @@ export default function LandingPage() {
           <div className="text-center">
             <h3 className="text-2xl font-bold mb-4">Ready to Start Trading?</h3>
             <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
-              Execute sophisticated trading strategies with conditional logic.
+              Set up conditional orders and manage your portfolio with ease.
             </p>
             <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
               <a href="/dashboard" className="flex items-center">

@@ -1,5 +1,9 @@
 import { Heart } from 'lucide-react'
 import { Logo } from './Logo'
+import { GlueXIcon } from './GlueXIcon'
+import { HyperliquidIcon } from './HyperliquidIcon'
+import { AlchemyIcon } from './AlchemyIcon'
+import { PrivyIcon } from './PrivyIcon'
 
 export function Footer() {
   return (
@@ -29,19 +33,24 @@ export function Footer() {
           {/* Technical stack */}
           <div className="pt-4 border-t border-border/30">
             <div className="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-6 text-xs text-muted-foreground">
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center space-x-2">
                 <span>Swaps via</span>
-                <span className="font-medium text-foreground">GlueX Router</span>
+                <GlueXIcon width={40} height={10} className="text-foreground" />
               </div>
               <div className="hidden sm:block w-1 h-1 bg-muted-foreground rounded-full"></div>
-              <div className="flex items-center space-x-1">
-                <span>Powered by</span>
-                <span className="font-medium text-foreground">Alchemy RPC</span>
+              <div className="flex items-center space-x-2">
+                <span>RPC by</span>
+                <AlchemyIcon width={60} height={13} />
               </div>
               <div className="hidden sm:block w-1 h-1 bg-muted-foreground rounded-full"></div>
-              <div className="flex items-center space-x-1">
-                <span>Identity via</span>
-                <span className="font-medium text-foreground">Hyperliquid Names</span>
+              <div className="flex items-center space-x-2">
+                <span>Names by</span>
+                <HyperliquidIcon width={16} height={16} />
+              </div>
+              <div className="hidden sm:block w-1 h-1 bg-muted-foreground rounded-full"></div>
+              <div className="flex items-center space-x-2">
+                <span>Wallet by</span>
+                <PrivyIcon width={40} height={10} showText={true} />
               </div>
             </div>
           </div>

@@ -24,6 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ArrowRight, Search, TrendingUp, Users, Clock, Target, Wallet, BarChart3, ArrowUpDown, Activity, Copy, ExternalLink, X, Zap } from "lucide-react"
+import { GlueXIcon } from "@/components/GlueXIcon"
 import { cn } from "@/lib/utils"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -1651,8 +1652,8 @@ export default function TradingPlatform() {
                     <CardTitle className="text-foreground flex items-center justify-between">
                       <span>Swap Pair</span>
                       <div className="flex items-center text-xs text-muted-foreground bg-muted/30 px-2 py-1 rounded-md">
-                        <ArrowUpDown className="w-3 h-3 mr-1" />
-                        <span>via GlueX</span>
+                        <span className="mr-1">via</span>
+                        <span className="font-medium">GlueX</span>
                       </div>
                     </CardTitle>
                     <CardDescription>Choose the tokens you want to trade and configure amounts</CardDescription>
@@ -3644,7 +3645,10 @@ export default function TradingPlatform() {
                       <div className="text-sm text-muted-foreground">{fromToken?.name}</div>
                       <div className="text-sm text-muted-foreground">{fromAmount} {fromToken?.symbol}</div>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                    <div className="flex flex-col items-center space-y-1">
+                      <GlueXIcon width={48} height={12} className="text-blue-500" />
+                      <span className="text-xs text-muted-foreground font-medium">via GlueX</span>
+                    </div>
                     <div className="text-center">
                       <div className="space-y-2">
                         {toTokens.map((token) => (
