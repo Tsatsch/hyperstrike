@@ -567,50 +567,153 @@ export default function DashboardPage() {
     const inSym = addressToSymbol(o.swap_data?.input_token)
     const inAmt = o.swap_data?.input_amount
 
+    // For completed orders, prioritize actual outputs if available
+    const actualOutputs = (o as any).actual_outputs
+    let outText = ''
+    
+    // Get planned outputs for fallback
     const outputs = (o.swap_data?.outputs || []) as { token: string; percentage: number }[]
     const hasSplits = Array.isArray(outputs) && outputs.length > 0
     const outSym = addressToSymbol(o.swap_data?.output_token)
     const outAmt = o.swap_data?.output_amount
-    const legacyOutText = `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
-    const splitsText = hasSplits
-      ? outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
-      : legacyOutText
+    
+    if (actualOutputs && Array.isArray(actualOutputs) && actualOutputs.length > 0) {
+      // Show actual executed outputs
+      outText = actualOutputs.map((output: any) => 
+        `${formatAmount(output.amount)} ${addressToSymbol(output.token)}`
+      ).join(' + ')
+    } else {
+      // Fallback to planned outputs
+      if (hasSplits) {
+        outText = outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
+      } else {
+        outText = `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
+      }
+    }
 
     const od = o.order_data || {} as any
     const trig = od.ohlcv_trigger || {}
     const tf = trig.timeframe || ''
-    const source = (trig.first_source?.source || 'close') as string
-    const dir = trig.trigger_when || ''
-    const trigVal = trig.second_source?.value || 0
     const pair = trig.pair || ''
-    const metricLabel = (() => {
-      const s = (source || '').toLowerCase()
-      if (s === 'close') return 'price'
-      if (s === 'open') return 'open price'
-      if (s === 'high') return 'high price'
-      if (s === 'low') return 'low price'
-      if (s === 'volume') return 'volume'
-      if (s === 'trades') return 'trades'
-      return s
-    })()
-    const usesDollar = ['price', 'open price', 'high price', 'low price', 'volume'].includes(metricLabel)
-    const valueText = usesDollar ? `$${formatAmount(trigVal)}` : `${formatAmount(trigVal)}`
-    const ruleText = (dir && trigVal && pair)
-      ? `${pair} ${metricLabel} ${dir} ${valueText}`
-      : ''
+    
+    // Build comprehensive trigger description
+    const buildTriggerDescription = () => {
+      if (!trig.first_source || !trig.trigger_when || !trig.second_source) return ''
+      
+      const firstSource = trig.first_source
+      const secondSource = trig.second_source
+      const triggerWhen = trig.trigger_when
+      
+      // First source description
+      let firstSourceDesc = ''
+      if (firstSource.type === 'OHLCV' && firstSource.source) {
+        const sourceMap: Record<string, string> = {
+          'close': 'close price',
+          'open': 'open price', 
+          'high': 'high price',
+          'low': 'low price',
+          'volume': 'volume',
+          'trades': 'trades'
+        }
+        firstSourceDesc = sourceMap[firstSource.source.toLowerCase()] || firstSource.source
+      } else if (firstSource.type === 'indicators' && firstSource.indicator) {
+        firstSourceDesc = firstSource.indicator
+        if (firstSource.parameters) {
+          const params = firstSource.parameters
+          if (params.length) {
+            firstSourceDesc += `(${params.length}`
+            if (params.OHLC_source && params.OHLC_source !== 'close') {
+              firstSourceDesc += `, ${params.OHLC_source}`
+            }
+            if (params.std_dev) {
+              firstSourceDesc += `, σ${params.std_dev}`
+            }
+            firstSourceDesc += ')'
+          }
+        }
+      }
+      
+      // Second source description
+      let secondSourceDesc = ''
+      if (secondSource.type === 'value' && secondSource.value !== undefined) {
+        const isPrice = ['close', 'open', 'high', 'low'].includes(firstSource.source?.toLowerCase() || '')
+        secondSourceDesc = isPrice ? `$${formatAmount(secondSource.value)}` : formatAmount(secondSource.value)
+      } else if (secondSource.type === 'indicators' && secondSource.indicator) {
+        secondSourceDesc = secondSource.indicator
+        if (secondSource.parameters) {
+          const params = secondSource.parameters
+          if (params.length) {
+            secondSourceDesc += `(${params.length}`
+            if (params.OHLC_source && params.OHLC_source !== 'close') {
+              secondSourceDesc += `, ${params.OHLC_source}`
+            }
+            if (params.std_dev) {
+              secondSourceDesc += `, σ${params.std_dev}`
+            }
+            secondSourceDesc += ')'
+          }
+        }
+      }
+      
+      // Build the complete description
+      let description = `${pair} ${firstSourceDesc} ${triggerWhen} ${secondSourceDesc}`
+      
+      // Add additional trigger features
+      const features: string[] = []
+      
+      if (trig.cooldown?.active && trig.cooldown.value) {
+        features.push(`${trig.cooldown.value}min cooldown`)
+      }
+      
+      if (trig.chained_confirmation?.active && trig.chained_confirmation.bars) {
+        features.push(`${trig.chained_confirmation.bars} bar confirmation`)
+      }
+      
+      if (trig.invalidation_halt?.active) {
+        features.push('invalidation halt')
+      }
+      
+      if (features.length > 0) {
+        description += ` • ${features.join(', ')}`
+      }
+      
+      return description
+    }
+    
+    const ruleText = buildTriggerDescription()
 
     const inVal = (priceCache[inSym]?.price || 0) * (Number(inAmt) || 0)
-    const outVal = hasSplits
-      ? outputs.reduce((sum, s) => {
+    
+    // Calculate outVal based on actual outputs or planned outputs
+    let outVal = 0
+    if (actualOutputs && Array.isArray(actualOutputs) && actualOutputs.length > 0) {
+      // Use actual outputs for value calculation
+      outVal = actualOutputs.reduce((sum: number, s: any) => {
+        const sym = addressToSymbol(s.token)
+        const val = (priceCache[sym]?.price || 0) * (Number(s.amount) || 0)
+        return sum + val
+      }, 0)
+    } else {
+      // Fallback to planned outputs
+      const outputs = (o.swap_data?.outputs || []) as { token: string; percentage: number }[]
+      const hasSplits = Array.isArray(outputs) && outputs.length > 0
+      const outSym = addressToSymbol(o.swap_data?.output_token)
+      const outAmt = o.swap_data?.output_amount
+      
+      if (hasSplits) {
+        outVal = outputs.reduce((sum: number, s: any) => {
           const sym = addressToSymbol(s.token)
           const pct = Number(s.percentage) || 0
           const val = (priceCache[sym]?.price || 0) * (Number(inAmt) || 0) * (pct / 100)
           return sum + val
         }, 0)
-      : (priceCache[outSym]?.price || 0) * (Number(outAmt) || 0)
+      } else {
+        outVal = (priceCache[outSym]?.price || 0) * (Number(outAmt) || 0)
+      }
+    }
 
     return {
-      inSym, inAmt, outText: splitsText, tf, source, dir, trigVal, pair, inVal, outVal,
+      inSym, inAmt, outText, tf, pair, inVal, outVal,
       ruleText,
       tfLabel: tfHuman(tf),
       whenText: formatDate(normalizeTimestamp(o.time)),
@@ -989,90 +1092,71 @@ export default function DashboardPage() {
                   {categorized.open.map(o => {
                     const s = formatOrderSummary(o)
                     const isHyperCore = 'trigger_data' in o
-                    const platformBadge = isHyperCore ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                        HyperCore
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
-                        HyperEVM
-                      </span>
-                    )
                     
                     return (
                       <div key={o.id} className={`relative group border rounded-lg p-3 ${isHyperCore ? 'bg-green-500/10 border-green-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
                         <div className={`pointer-events-none absolute inset-0 rounded-lg ring-2 ${isHyperCore ? 'ring-green-500/30' : 'ring-blue-500/30'} opacity-0 transition-opacity duration-150 group-hover:opacity-100`} />
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="text-foreground font-medium">
-                              {formatAmount(s.inAmt)} {s.inSym} → {s.outText}
-                            </div>
-                            {platformBadge}
+                        <div className="grid grid-cols-3 gap-4 items-center">
+                          {/* Column 1: Order details */}
+                          <div className="text-foreground font-medium">
+                            {formatAmount(s.inAmt)} {s.inSym} → {s.outText}
                           </div>
-                          {(s.ruleText || s.tfLabel) && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {s.ruleText}
-                              {s.tfLabel ? (s.ruleText ? ' • ' : '') + `TF ${s.tfLabel}` : null}
-                            </div>
-                          )}
-                          {!isHyperCore ? (
-                            <Button
-                              variant={confirmCancelIds.has(o.id) ? "destructive" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                if (confirmCancelIds.has(o.id)) {
-                                  handleCancelOpenOrder(o as OrderOut)
-                                } else {
-                                  setConfirmCancelIds(prev => new Set(prev).add(o.id))
-                                }
-                              }}
-                              disabled={cancellingIds.has(o.id)}
-                              className="cursor-pointer"
-                            >
-                              {cancellingIds.has(o.id) ? 'Canceling…' : (confirmCancelIds.has(o.id) ? 'Confirm cancel' : 'Cancel')}
-                            </Button>
-                          ) : (
-                            <Button
-                              variant={confirmCancelIds.has(o.id) ? "destructive" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                if (confirmCancelIds.has(o.id)) {
-                                  handleDeleteHyperCoreOrder(o as HyperCoreOrder)
-                                } else {
-                                  setConfirmCancelIds(prev => new Set(prev).add(o.id))
-                                }
-                              }}
-                              disabled={cancellingIds.has(o.id)}
-                              className="cursor-pointer"
-                            >
-                              {cancellingIds.has(o.id) ? 'Deleting…' : (confirmCancelIds.has(o.id) ? 'Confirm delete' : 'Delete')}
-                            </Button>
-                          )}
+                          
+                          {/* Column 2: Condition text (always centered) */}
+                          <div className="text-center">
+                            {(s.ruleText || s.tfLabel) && (
+                              <div className="text-xs text-muted-foreground">
+                                {s.ruleText}
+                                {s.tfLabel ? (s.ruleText ? ' • ' : '') + `TF ${s.tfLabel}` : null}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Column 3: Action buttons */}
+                          <div className="flex justify-end">
+                            {!isHyperCore ? (
+                              <Button
+                                variant={confirmCancelIds.has(o.id) ? "destructive" : "outline"}
+                                size="sm"
+                                onClick={() => {
+                                  if (confirmCancelIds.has(o.id)) {
+                                    handleCancelOpenOrder(o as OrderOut)
+                                  } else {
+                                    setConfirmCancelIds(prev => new Set(prev).add(o.id))
+                                  }
+                                }}
+                                disabled={cancellingIds.has(o.id)}
+                                className="cursor-pointer"
+                              >
+                                {cancellingIds.has(o.id) ? 'Canceling…' : (confirmCancelIds.has(o.id) ? 'Confirm cancel' : 'Cancel')}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant={confirmCancelIds.has(o.id) ? "destructive" : "outline"}
+                                size="sm"
+                                onClick={() => {
+                                  if (confirmCancelIds.has(o.id)) {
+                                    handleDeleteHyperCoreOrder(o as HyperCoreOrder)
+                                  } else {
+                                    setConfirmCancelIds(prev => new Set(prev).add(o.id))
+                                  }
+                                }}
+                                disabled={cancellingIds.has(o.id)}
+                                className="cursor-pointer"
+                              >
+                                {cancellingIds.has(o.id) ? 'Deleting…' : (confirmCancelIds.has(o.id) ? 'Confirm delete' : 'Delete')}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <div className="text-[11px] text-muted-foreground mt-1">
                           {(() => {
                             if (isHyperCore) {
                               const hc = o as HyperCoreOrder
-                              return `#${o.id} • ${hc.position_data.leverage}x • ${hc.position_data.order_type} • Created ${formatDate(new Date(hc.created_at).getTime())}`
+                              return `${hc.position_data.leverage}x • ${hc.position_data.order_type} • Created ${formatDate(new Date(hc.created_at).getTime())}`
                             }
                             
-                            const lifetimeMs = timeframeToMs(s.lifetime)
-                            if (!lifetimeMs) return `#${o.id} • ${s.whenText}`
-                            const created = normalizeTimestamp(o.time)
-                            const expiresAt = created + lifetimeMs
-                            const remMs = Math.max(0, expiresAt - now)
-                            const oneDayMs = 24 * 60 * 60 * 1000
-                            if (remMs > oneDayMs) {
-                              return `#${o.id} • expires on ${formatDate(expiresAt)}`
-                            }
-                            const totalSeconds = Math.floor(remMs / 1000)
-                            const hours = Math.floor(totalSeconds / 3600)
-                            const minutes = Math.floor((totalSeconds % 3600) / 60)
-                            const seconds = totalSeconds % 60
-                            const cd = hours > 0
-                              ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-                              : `${minutes}:${String(seconds).padStart(2, '0')}`
-                            return `#${o.id} • ${s.whenText}: expires in ${cd}`
+                            return `${s.whenText}`
                           })()}
                         </div>
                       </div>
@@ -1121,51 +1205,40 @@ export default function DashboardPage() {
                       <div
                         className={`pointer-events-none absolute inset-0 rounded-lg ${o.state === 'done_failed' ? 'ring-2 ring-red-500/35' : 'ring-2 ring-green-500/35'} opacity-0 transition-opacity duration-150 group-hover:opacity-100`}
                       />
-                      <div className="flex items-center justify-between">
+                      <div className="grid grid-cols-3 gap-4 items-center">
+                        {/* Column 1: Order details */}
                         <div className="text-foreground font-medium">
-                          {formatAmount(o.swap_data?.input_amount)} {addressToSymbol(o.swap_data?.input_token)} → {(() => {
-                            const outputs = (o.swap_data?.outputs || []) as { token: string; percentage: number }[]
-                            if (Array.isArray(outputs) && outputs.length > 0) {
-                              return outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
+                          {(() => {
+                            if ('trigger_data' in o) {
+                              // HyperCore order
+                              const hc = o as HyperCoreOrder
+                              return `${formatAmount(hc.position_data.size)} USDC → ${hc.position_data.side.toUpperCase()} ${hc.trigger_data.pair}`
+                            } else {
+                              // HyperEVM order - use formatOrderSummary for consistency
+                              const s = formatOrderSummary(o)
+                              return `${formatAmount(s.inAmt)} ${s.inSym} → ${s.outText}`
                             }
-                            const outSym = addressToSymbol(o.swap_data?.output_token)
-                            const outAmt = o.swap_data?.output_amount
-                            return `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
                           })()}
                         </div>
-                        {(() => {
-                          const od = o.order_data || {} as any
-                          const trig = od.ohlcv_trigger || {}
-                          const tf = trig.timeframe || ''
-                          const source = (trig.first_source?.source || 'close') as string
-                          const dir = trig.trigger_when || ''
-                          const trigVal = trig.second_source?.value || 0
-                          const pair = trig.pair || ''
-                          const metricLabel = (() => {
-                            const s = (source || '').toLowerCase()
-                            if (s === 'close') return 'price'
-                            if (s === 'open') return 'open price'
-                            if (s === 'high') return 'high price'
-                            if (s === 'low') return 'low price'
-                            if (s === 'volume') return 'volume'
-                            if (s === 'trades') return 'trades'
-                            return s
-                          })()
-                          const usesDollar = ['price', 'open price', 'high price', 'low price', 'volume'].includes(metricLabel)
-                          const valueText = usesDollar ? `$${formatAmount(trigVal)}` : `${formatAmount(trigVal)}`
-                          const ruleText = (dir && trigVal && pair)
-                            ? `${pair} ${metricLabel} ${dir} ${valueText}`
-                            : ''
-                          const tfLabel = tfHuman(tf)
-                          const hasInfo = !!ruleText || !!tfLabel
-                          return hasInfo ? (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {ruleText}
-                              {tfLabel ? (ruleText ? ' • ' : '') + `TF ${tfLabel}` : null}
-                            </div>
-                          ) : null
-                        })()}
-                        <div className="flex items-center gap-2">
+                        
+                        {/* Column 2: Condition text (always centered) */}
+                        <div className="text-center">
+                          {(() => {
+                            // Only show trigger info for HyperEVM orders (not HyperCore)
+                            if ('trigger_data' in o) return null
+                            
+                            const s = formatOrderSummary(o)
+                            return (s.ruleText || s.tfLabel) ? (
+                              <div className="text-xs text-muted-foreground">
+                                {s.ruleText}
+                                {s.tfLabel ? (s.ruleText ? ' • ' : '') + `TF ${s.tfLabel}` : null}
+                              </div>
+                            ) : null
+                          })()}
+                        </div>
+                        
+                        {/* Column 3: Action buttons */}
+                        <div className="flex justify-end">
                           <Button
                             variant="outline"
                             size="sm"
@@ -1177,7 +1250,7 @@ export default function DashboardPage() {
                           </Button>
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}{o.termination_message ? ` • ${o.termination_message}` : ''}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{new Date('trigger_data' in o ? new Date(o.created_at).getTime() : o.time).toLocaleString()}{('termination_message' in o && o.termination_message) ? ` • ${o.termination_message}` : ''}</div>
                     </div>
                   ))}
                 </div>
@@ -1206,56 +1279,45 @@ export default function DashboardPage() {
                   <div className="text-muted-foreground text-sm">No closed orders</div>
                 ) : (
                   <div className="space-y-2">
-                    {(hideCanceledClosed ? categorized.closed.filter(o => o.state === 'successful') : categorized.closed).map(o => (
-                      <div key={o.id} className={`relative group border rounded-lg p-3 ${o.state === 'failed' ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
-                        <div className={`pointer-events-none absolute inset-0 rounded-lg ${o.state === 'failed' ? 'ring-2 ring-red-500/30' : 'ring-2 ring-green-500/30'} opacity-0 transition-opacity duration-150 group-hover:opacity-100`} />
-                        <div className="flex items-center justify-between">
+                    {(hideCanceledClosed ? categorized.closed.filter(o => 'state' in o && o.state === 'successful') : categorized.closed).map(o => (
+                      <div key={o.id} className={`relative group border rounded-lg p-3 ${('state' in o && o.state === 'failed') ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
+                        <div className={`pointer-events-none absolute inset-0 rounded-lg ${('state' in o && o.state === 'failed') ? 'ring-2 ring-red-500/30' : 'ring-2 ring-green-500/30'} opacity-0 transition-opacity duration-150 group-hover:opacity-100`} />
+                        <div className="grid grid-cols-3 gap-4 items-center">
+                          {/* Column 1: Order details */}
                           <div className="text-foreground font-medium">
-                            {formatAmount(o.swap_data?.input_amount)} {addressToSymbol(o.swap_data?.input_token)} → {(() => {
-                              const outputs = (o.swap_data?.outputs || []) as { token: string; percentage: number }[]
-                              if (Array.isArray(outputs) && outputs.length > 0) {
-                                return outputs.map(s => `${formatAmount(s.percentage)}% ${addressToSymbol(s.token)}`).join(' + ')
+                            {(() => {
+                              if ('trigger_data' in o) {
+                                // HyperCore order
+                                const hc = o as HyperCoreOrder
+                                return `${formatAmount(hc.position_data.size)} USDC → ${hc.position_data.side.toUpperCase()} ${hc.trigger_data.pair}`
+                              } else {
+                                // HyperEVM order - use formatOrderSummary for consistency
+                                const s = formatOrderSummary(o)
+                                return `${formatAmount(s.inAmt)} ${s.inSym} → ${s.outText}`
                               }
-                              const outSym = addressToSymbol(o.swap_data?.output_token)
-                              const outAmt = o.swap_data?.output_amount
-                              return `${typeof outAmt !== 'undefined' ? formatAmount(outAmt) + ' ' : ''}${outSym}`
                             })()}
                           </div>
-                          {(() => {
-                            const od = o.order_data || {} as any
-                            const trig = od.ohlcv_trigger || {}
-                            const tf = trig.timeframe || ''
-                            const source = (trig.first_source?.source || 'close') as string
-                            const dir = trig.trigger_when || ''
-                            const trigVal = trig.second_source?.value || 0
-                            const pair = trig.pair || ''
-                            const metricLabel = (() => {
-                              const s = (source || '').toLowerCase()
-                              if (s === 'close') return 'price'
-                              if (s === 'open') return 'open price'
-                              if (s === 'high') return 'high price'
-                              if (s === 'low') return 'low price'
-                              if (s === 'volume') return 'volume'
-                              if (s === 'trades') return 'trades'
-                              return ''
-                            })()
-                            const usesDollar = ['price', 'open price', 'high price', 'low price', 'volume'].includes(metricLabel)
-                            const valueText = usesDollar ? `$${formatAmount(trigVal)}` : `${formatAmount(trigVal)}`
-                            const ruleText = (dir && trigVal && pair)
-                              ? `${pair} ${metricLabel} ${dir} ${valueText}`
-                              : ''
-                            const tfLabel = tfHuman(tf)
-                            const hasInfo = !!ruleText || !!tfLabel
-                            return hasInfo ? (
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {ruleText}
-                                {tfLabel ? (ruleText ? ' • ' : '') + `TF ${tfLabel}` : null}
-                              </div>
-                            ) : null
-                          })()}
                           
+                          {/* Column 2: Condition text (always centered) */}
+                          <div className="text-center">
+                            {(() => {
+                              // Only show trigger info for HyperEVM orders (not HyperCore)
+                              if ('trigger_data' in o) return null
+                              
+                              const s = formatOrderSummary(o)
+                              return (s.ruleText || s.tfLabel) ? (
+                                <div className="text-xs text-muted-foreground">
+                                  {s.ruleText}
+                                  {s.tfLabel ? (s.ruleText ? ' • ' : '') + `TF ${s.tfLabel}` : null}
+                                </div>
+                              ) : null
+                            })()}
+                          </div>
+                          
+                          {/* Column 3: Empty for closed orders (no buttons) */}
+                          <div></div>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">#{o.id} • {new Date(o.time).toLocaleString()}{o.termination_message ? ` • ${o.termination_message}` : ''}</div>
+                        <div className="text-xs text-muted-foreground mt-1">{new Date('trigger_data' in o ? new Date(o.created_at).getTime() : o.time).toLocaleString()}{('termination_message' in o && o.termination_message) ? ` • ${o.termination_message}` : ''}</div>
                       </div>
                     ))}
                   </div>

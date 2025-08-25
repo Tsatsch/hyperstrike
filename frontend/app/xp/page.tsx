@@ -286,7 +286,7 @@ export default function XpPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <div className="w-6 text-muted-foreground">{idx + 1}</div>
-                            <Avatar className="h-6 w-6">
+                            <Avatar className="h-8 w-8">
                               <AvatarImage src={(avatarUrl && avatarUrl.startsWith('https://')) ? avatarUrl : '/placeholder-user.jpg'} alt={displayName} />
                               <AvatarFallback>{(displayName || 'U')[0]?.toUpperCase()}</AvatarFallback>
                             </Avatar>
