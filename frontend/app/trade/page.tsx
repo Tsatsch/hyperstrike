@@ -206,6 +206,112 @@ export default function TradingPlatform() {
   // Transaction confirmation states
   const [pendingTransactions, setPendingTransactions] = useState<Set<string>>(new Set());
   
+    // Debounced refresh function to prevent rapid successive calls
+  // Note: Removed debounced refresh to prevent chaotic balance updates
+  
+  // Function to refresh all token balances
+  const refreshAllBalances = async () => {
+    if (!authenticated || !user?.wallet?.address) return;
+    
+    // Direct execution without debouncing
+      try {
+        const walletAddress = user?.wallet?.address;
+        if (!walletAddress) return;
+        
+        // Get all token addresses from the tokens array
+        const tokenAddresses = tokens
+          .filter(token => token.address) // Include all tokens with addresses
+          .map(token => token.address!);
+
+        // Fetch ERC20 token balances (including WHYPE) and HYPE balance
+        // exclude HYPE from the fetchTokenBalances function
+        const tokenAddressesWithoutHYPE = tokenAddresses.filter(address => address !== "0x2222222222222222222222222222222222222222")
+        
+        console.log('refreshAllBalances: Fetching balances for wallet:', walletAddress);
+        console.log('refreshAllBalances: Token addresses without HYPE:', tokenAddressesWithoutHYPE);
+        console.log('refreshAllBalances: WHYPE address should be included:', tokenAddressesWithoutHYPE.includes("0x5555555555555555555555555555555555555555"));
+        
+        const [erc20Balances, ethBalance] = await Promise.all([
+          fetchTokenBalances(walletAddress, tokenAddressesWithoutHYPE),
+          fetchHYPEBalance(walletAddress)
+        ]);
+        
+        console.log('refreshAllBalances: ERC20 balances fetched:', erc20Balances);
+        console.log('refreshAllBalances: HYPE balance fetched:', ethBalance);
+        console.log('refreshAllBalances: WHYPE balance specifically:', erc20Balances["0x5555555555555555555555555555555555555555"]);
+        
+        // Combine all balances - use the token addresses as keys
+        const allBalances = {
+          ...erc20Balances,
+          "0x2222222222222222222222222222222222222222": ethBalance, // Special case for native HYPE token
+        }
+        
+        // Update the tokenBalances state (used by the UI)
+        setTokenBalances(allBalances);
+        
+        console.log('refreshAllBalances: Updated tokenBalances:', allBalances);
+        
+        // Update tokens with new balances
+        setTokens(prevTokens => 
+          prevTokens.map(token => {
+            if (token.symbol === 'HYPE') {
+              return { ...token, balance: parseFloat(ethBalance) || 0 };
+            }
+            
+            const balance = parseFloat(erc20Balances[token.address || ''] || '0') || 0;
+            console.log(`refreshAllBalances: Updating ${token.symbol} balance to:`, balance);
+            return { ...token, balance };
+          })
+        );
+        
+        console.log('refreshAllBalances: Updated tokens with new balances');
+        
+        // Update available USDC for HyperCore
+        if (selectedPlatform === 'hypercore') {
+          const usdcToken = tokens.find(t => t.symbol === 'USDC');
+          if (usdcToken) {
+            // Update the USDC balance in the tokens array
+            setTokens(prevTokens => 
+              prevTokens.map(token => 
+                token.symbol === 'USDC' 
+                  ? { ...token, balance: parseFloat(erc20Balances[token.address || ''] || '0') || 0 }
+                  : token
+              )
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Error refreshing balances:', error);
+      }
+    };
+  
+  // Function to validate wallet address matches authenticated user
+  const validateWalletAddress = async (signer: any): Promise<boolean> => {
+    try {
+      const connectedAddress = await signer.getAddress()
+      
+      // Validate that the connected wallet matches the authenticated user's wallet
+      if (connectedAddress.toLowerCase() !== user?.wallet?.address?.toLowerCase()) {
+        toast({
+          title: "Wallet Mismatch",
+          description: "The connected wallet doesn't match your authenticated wallet. Please reconnect your wallet.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error validating wallet address:', error);
+      toast({
+        title: "Wallet Error",
+        description: "Failed to validate wallet address. Please reconnect your wallet.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  }
+
   // Function to check if user is on HyperEVM network
   const checkHyperEVMNetwork = async (provider: any) => {
     try {
@@ -308,6 +414,63 @@ export default function TradingPlatform() {
   // Toast notifications
   const { toast } = useToast();
   
+  // Auto-refresh balances every 5 seconds and after transactions
+  useEffect(() => {
+    if (!authenticated || !user?.wallet?.address) return;
+    
+    const refreshBalances = async () => {
+      try {
+        const walletAddress = user?.wallet?.address;
+        if (!walletAddress) return;
+        
+        // Fetch HYPE balance (native token)
+        const hypeBalance = await fetchHYPEBalance(walletAddress);
+        
+        // Fetch token balances for all tokens
+        const tokenAddresses = tokens.filter(token => token.address).map(token => token.address!);
+        const tokenBalances = await fetchTokenBalances(walletAddress, tokenAddresses);
+        
+        // Update tokens with new balances
+        setTokens(prevTokens => 
+          prevTokens.map(token => {
+            if (token.symbol === 'HYPE') {
+              return { ...token, balance: parseFloat(hypeBalance) || 0 };
+            }
+            
+            const balance = parseFloat(tokenBalances[token.address || ''] || '0') || 0;
+            return { ...token, balance };
+          })
+        );
+        
+        // Update available USDC for HyperCore
+        if (selectedPlatform === 'hypercore') {
+          const usdcToken = tokens.find(t => t.symbol === 'USDC');
+          if (usdcToken) {
+            // Update the USDC balance in the tokens array
+            setTokens(prevTokens => 
+              prevTokens.map(token => 
+                token.symbol === 'USDC' 
+                  ? { ...token, balance: parseFloat(tokenBalances[token.address || ''] || '0') || 0 }
+                  : token
+              )
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Error refreshing balances:', error);
+      }
+    };
+    
+    // Only fetch balances once when wallet connects
+    refreshBalances();
+    
+    return () => {
+      // No cleanup needed - balances only fetched when needed
+    };
+  }, [authenticated, user?.wallet?.address, selectedPlatform]);
+  
+  // Note: Balances are now only fetched when needed, not automatically
+  
   // Monitor transaction status changes to update UI state
   useEffect(() => {
     transactions.forEach(tx => {
@@ -322,6 +485,8 @@ export default function TradingPlatform() {
             // Reset WHYPE approval state since we're now using WHYPE
             setIsWhypeApproved(false)
             setWhypeAllowance("0")
+            
+            // Note: WHYPE balance will be refreshed by refreshAllBalances() below
           }
         } else if (tx.type === 'approval') {
           // Token approval succeeded
@@ -338,6 +503,8 @@ export default function TradingPlatform() {
           newSet.delete(tx.hash)
           return newSet
         })
+        
+        // Note: Balances are now only fetched when needed, not automatically
         
         // Reset retry states
         setIsRetryingTransaction(false)
@@ -640,6 +807,8 @@ export default function TradingPlatform() {
     setToTokens(fromToken ? [fromToken] : [])
     setFromAmount(toPercentages[toTokens[0]?.symbol || ''] || '')
     setToPercentages(fromToken ? { [fromToken.symbol]: tempAmount } : {})
+    
+    // Note: Balances will be refreshed by the main interval to avoid rate limiting
   }
 
   const handleSwapWithToken = (targetToken: Token) => {
@@ -677,6 +846,8 @@ export default function TradingPlatform() {
     // Reset WHYPE approval state when changing from token
     setIsWhypeApproved(false)
     setWhypeAllowance("0")
+    
+    // Note: Balances will be refreshed by the main interval to avoid rate limiting
   }
 
   // Function to fetch balance for a specific token
@@ -749,6 +920,8 @@ export default function TradingPlatform() {
       fetchTokenBalance(token)
     }
 
+    // Note: Balances will be refreshed by the main interval to avoid rate limiting
+
     setTokenSearchTerm("")
     setShowCustomTokenInput(false)
   }
@@ -788,6 +961,8 @@ export default function TradingPlatform() {
     if (token.address && !tokenBalances[token.address]) {
       fetchTokenBalance(tokenWithIcon)
     }
+
+    // Note: Balances will be refreshed by the main interval to avoid rate limiting
 
     setCustomTokenAddress("")
     setShowCustomTokenInput(false)
@@ -857,6 +1032,8 @@ export default function TradingPlatform() {
     const newToPercentages = { ...toPercentages }
     delete newToPercentages[tokenSymbol]
     setToPercentages(newToPercentages)
+    
+    // Note: Balances will be refreshed by the main interval to avoid rate limiting
   }
 
   // Helper function to update percentage for a specific token with auto-adjustment
@@ -914,6 +1091,8 @@ export default function TradingPlatform() {
       
       return newPercentages
     })
+    
+    // Note: Balances will be refreshed by the main interval to avoid rate limiting
   }
 
   // Auto-distribute percentages when toTokens changes
@@ -944,6 +1123,7 @@ export default function TradingPlatform() {
       
       if (tokensChanged) {
         setToPercentages(newPercentages)
+        // Note: Balances will be refreshed by the main interval to avoid rate limiting
       }
     } else {
       // Clear all percentages if no tokens selected
@@ -956,10 +1136,11 @@ export default function TradingPlatform() {
     if (!token) return "99999999999"
     if (authenticated && token.address && tokenBalances[token.address]) {
       const balance = parseFloat(tokenBalances[token.address])
-
+      console.log(`getTokenBalance: ${token.symbol} from tokenBalances:`, balance);
       return balance.toFixed(6)
     }
 
+    console.log(`getTokenBalance: ${token.symbol} fallback to token.balance:`, token.balance);
     return token.balance.toString()
   }
 
@@ -1133,6 +1314,15 @@ export default function TradingPlatform() {
         if (realTimePrices && Object.keys(realTimePrices).length > 0) {
           // Use real-time prices, fallback to default for missing tokens
           const finalPriceCache = { ...DEFAULT_TOKEN_PRICES, ...realTimePrices }
+          
+          // Ensure WHYPE always has the same price as HYPE
+          if (finalPriceCache['HYPE']) {
+            finalPriceCache['WHYPE'] = {
+              price: finalPriceCache['HYPE'].price,
+              change24h: finalPriceCache['HYPE'].change24h
+            };
+          }
+          
           setPriceCache(finalPriceCache)
         } else {
           // Fallback to default prices if API fails
@@ -1157,6 +1347,15 @@ export default function TradingPlatform() {
         
         if (realTimePrices && Object.keys(realTimePrices).length > 0) {
           const finalPriceCache = { ...DEFAULT_TOKEN_PRICES, ...realTimePrices }
+          
+          // Ensure WHYPE always has the same price as HYPE
+          if (finalPriceCache['HYPE']) {
+            finalPriceCache['WHYPE'] = {
+              price: finalPriceCache['HYPE'].price,
+              change24h: finalPriceCache['HYPE'].change24h
+            };
+          }
+          
           setPriceCache(finalPriceCache)
         }
       } catch (error) {
@@ -1185,10 +1384,16 @@ export default function TradingPlatform() {
           // exclude HYPE from the fetchTokenBalances function
           const tokenAddressesWithoutHYPE = tokenAddresses.filter(address => address !== "0x2222222222222222222222222222222222222222")
           
+          console.log('Existing useEffect: Fetching balances for wallet:', user.wallet.address);
+          console.log('Existing useEffect: Token addresses without HYPE:', tokenAddressesWithoutHYPE);
+          
           const [erc20Balances, ethBalance] = await Promise.all([
             fetchTokenBalances(user.wallet.address, tokenAddressesWithoutHYPE),
             fetchHYPEBalance(user.wallet.address)
           ])
+          
+          console.log('Existing useEffect: ERC20 balances fetched:', erc20Balances);
+          console.log('Existing useEffect: HYPE balance fetched:', ethBalance);
 
 
 
@@ -1197,10 +1402,25 @@ export default function TradingPlatform() {
             ...erc20Balances,
             "0x2222222222222222222222222222222222222222": ethBalance, // Special case for native HYPE token
           }
-           
-
-
+          
+          // Update the tokenBalances state (used by getTokenBalance function)
           setTokenBalances(allBalances)
+          
+          console.log('Existing useEffect: Updated tokenBalances:', allBalances);
+          
+          // Also update the tokens array with new balances for UI display
+          setTokens(prevTokens => 
+            prevTokens.map(token => {
+              if (token.symbol === 'HYPE') {
+                return { ...token, balance: parseFloat(ethBalance) || 0 };
+              }
+              
+              const balance = parseFloat(erc20Balances[token.address || ''] || '0') || 0;
+              return { ...token, balance };
+            })
+          )
+          
+          console.log('Existing useEffect: Updated tokens with new balances');
         } catch (error) {
           console.error('Error fetching token balances:', error)
         }
@@ -1605,6 +1825,27 @@ export default function TradingPlatform() {
       }
       
       const signer = await ethersProvider.getSigner()
+      
+      // Validate that the connected wallet matches the authenticated user's wallet
+      if (!(await validateWalletAddress(signer))) {
+        return;
+      }
+      
+      // Check if user has sufficient HYPE balance
+      const hypeBalance = parseFloat(getTokenBalance(fromToken))
+      const amountToWrap = parseFloat(fromAmount)
+      
+      if (hypeBalance < amountToWrap) {
+        toast({
+          title: "Insufficient Balance",
+          description: `You only have ${hypeBalance.toFixed(6)} HYPE. You need ${amountToWrap.toFixed(6)} HYPE to wrap.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Set retry state
+      setIsRetryingTransaction(true)
 
       // Call wrap function with popup transaction
       const tx = await wrapHype(fromAmount, signer)
@@ -1616,6 +1857,9 @@ export default function TradingPlatform() {
       
       // Add to pending transactions
       setPendingTransactions(prev => new Set(prev).add(tx.hash))
+      
+      // Note: Balance will be refreshed by the transaction monitoring system
+      // No need to call refreshAllBalances here to avoid rate limiting
       
       //console.log("HYPE wrap transaction submitted for monitoring")
     } catch (error: any) {
@@ -1664,6 +1908,11 @@ export default function TradingPlatform() {
       }
       
       const signer = await ethersProvider.getSigner()
+      
+      // Validate that the connected wallet matches the authenticated user's wallet
+      if (!(await validateWalletAddress(signer))) {
+        return;
+      }
 
       // Call approve function with popup transaction
       const tx = await approveToken(tokenAddress, fromAmount, signer)
@@ -1675,6 +1924,9 @@ export default function TradingPlatform() {
       
       // Add to pending transactions
       setPendingTransactions(prev => new Set(prev).add(tx.hash))
+      
+      // Note: Balance will be refreshed by the transaction monitoring system
+      // No need to call refreshAllBalances here to avoid rate limiting
       
      // console.log(`${tokenSymbol} approval transaction submitted for monitoring`)
     } catch (error: any) {
@@ -1797,7 +2049,9 @@ export default function TradingPlatform() {
                       ? "border-primary bg-primary/10 shadow-lg"
                       : "border-border/50 hover:border-primary/30 hover:bg-accent/50"
                   }`}
-                  onClick={() => setSelectedPlatform("hyperevm")}
+                  onClick={() => {
+                  setSelectedPlatform("hyperevm");
+                }}
                 >
                   <div className="flex items-center space-x-4">
                     <div
@@ -1812,15 +2066,13 @@ export default function TradingPlatform() {
                     <div className="flex-1">
                       <h3 className="text-xl font-semibold text-foreground mb-2">HyperEVM</h3>
                       <p className="text-sm text-muted-foreground">
-                        Advanced EVM-based trading with Uniswap-like interface and comprehensive token support
+                        Trade on HyperEVM using our advanced multi-output instant swap interface, or using different order types.
                       </p>
                       <div className="mt-3 flex items-center space-x-2">
                         <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
                           Available
                         </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          EVM Compatible
-                        </Badge>
+                        
                             </div>
                           </div>
                   </div>
@@ -1833,7 +2085,9 @@ export default function TradingPlatform() {
                       ? "border-primary bg-primary/10 shadow-lg"
                       : "border-border/50 hover:border-primary/30 hover:bg-accent/50"
                   }`}
-                  onClick={() => setSelectedPlatform("hypercore")}
+                  onClick={() => {
+                  setSelectedPlatform("hypercore");
+                }}
                 >
                   <div className="flex items-center space-x-4">
                     <div
@@ -1848,15 +2102,13 @@ export default function TradingPlatform() {
                     <div className="flex-1">
                       <h3 className="text-xl font-semibold text-foreground mb-2">HyperCore</h3>
                       <p className="text-sm text-muted-foreground">
-                        Core trading platform with advanced features and enhanced security
+                        Extend your trading experience on Hypercore with our sub-second conditional trading engine
                       </p>
                       <div className="mt-3 flex items-center space-x-2">
                         <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
                           Available
                         </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          Core Platform
-                        </Badge>
+                   
                             </div>
                           </div>
                         </div>
@@ -1912,7 +2164,29 @@ export default function TradingPlatform() {
                           type="number"
                           placeholder="0"
                           value={fromAmount}
-                          onChange={(e) => setFromAmount(e.target.value)}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Round to maximum 7 decimal places
+                            if (value.includes('.')) {
+                              const parts = value.split('.');
+                              if (parts[1] && parts[1].length > 7) {
+                                const rounded = parseFloat(value).toFixed(7);
+                                setFromAmount(rounded);
+                              } else {
+                                setFromAmount(value);
+                              }
+                            } else {
+                              setFromAmount(value);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            // Ensure proper rounding on blur
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value)) {
+                              const rounded = value.toFixed(7).replace(/\.?0+$/, '');
+                              setFromAmount(rounded);
+                            }
+                          }}
                           className="text-2xl font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground pl-2 w-[90%] h-[2.5rem] flex items-center"
                         />
                         <div className="flex items-center justify-between mt-1">
@@ -1921,7 +2195,13 @@ export default function TradingPlatform() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setFromAmount((parseFloat(getTokenBalance(fromToken)) * 0.5).toString())}
+                              onClick={() => {
+                                const balance = parseFloat(getTokenBalance(fromToken));
+                                const amount = balance * 0.5;
+                                // Round to maximum 7 decimal places and ensure it doesn't exceed balance
+                                const roundedAmount = Math.min(amount, balance).toFixed(7).replace(/\.?0+$/, '');
+                                setFromAmount(roundedAmount);
+                              }}
                               className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
                             >
                               50%
@@ -1929,7 +2209,14 @@ export default function TradingPlatform() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setFromAmount((parseFloat(getTokenBalance(fromToken)) * 0.999999999999999).toString())}
+                              onClick={() => {
+                                const balance = parseFloat(getTokenBalance(fromToken));
+                                // Set to 99% of balance to ensure it's ALWAYS less than current balance
+                                const amount = balance * 0.99;
+                                // Round to maximum 7 decimal places and ensure it doesn't exceed balance
+                                const roundedAmount = Math.min(amount, balance).toFixed(7).replace(/\.?0+$/, '');
+                                setFromAmount(roundedAmount);
+                              }}
                               className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
                             >
                               100%
@@ -2042,28 +2329,46 @@ export default function TradingPlatform() {
                                 </div>
                                 
                                 {/* Percentage Input (Manual) */}
-                                <Input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="Enter percentage"
-                                  value={toPercentages[token.symbol] || ""}
-                                  onChange={(e) => {
-                                    const raw = e.target.value
-                                    const cleaned = raw.replace(/[^0-9.]/g, '')
-                                    updateToTokenPercentage(token.symbol, cleaned)
-                                  }}
-                                  onBlur={() => {
-                                    const raw = toPercentages[token.symbol] || ""
-                                    const num = parseFloat(raw)
-                                    if (isNaN(num)) {
-                                      updateToTokenPercentage(token.symbol, "")
-                                    } else {
-                                      const clamped = Math.min(100, Math.max(0, num))
-                                      updateToTokenPercentage(token.symbol, String(clamped))
-                                    }
-                                  }}
-                                  className="text-base font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground mb-2"
-                                />
+                                <div className="relative">
+                                  <span className="absolute left-0 top-0 bottom-0 flex items-center text-muted-foreground text-sm font-medium">
+                                    %
+                                  </span>
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="Enter percentage"
+                                    value={toPercentages[token.symbol] || ""}
+                                    onChange={(e) => {
+                                      const raw = e.target.value
+                                      const cleaned = raw.replace(/[^0-9.]/g, '')
+                                      // Round to maximum 7 decimal places
+                                      if (cleaned.includes('.')) {
+                                        const parts = cleaned.split('.');
+                                        if (parts[1] && parts[1].length > 7) {
+                                          const rounded = parseFloat(cleaned).toFixed(7);
+                                          updateToTokenPercentage(token.symbol, rounded);
+                                        } else {
+                                          updateToTokenPercentage(token.symbol, cleaned);
+                                        }
+                                      } else {
+                                        updateToTokenPercentage(token.symbol, cleaned);
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      const raw = toPercentages[token.symbol] || ""
+                                      const num = parseFloat(raw)
+                                      if (isNaN(num)) {
+                                        updateToTokenPercentage(token.symbol, "")
+                                      } else {
+                                        const clamped = Math.min(100, Math.max(0, num))
+                                        // Round to maximum 7 decimal places and remove trailing zeros
+                                        const rounded = clamped.toFixed(7).replace(/\.?0+$/, '');
+                                        updateToTokenPercentage(token.symbol, rounded)
+                                      }
+                                    }}
+                                    className="text-base font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground mb-2 pl-4"
+                                  />
+                                </div>
                                 {/* Percentage Slider */}
                                 <div className="relative mt-1">
                                   <div className="pointer-events-none absolute inset-0 flex items-center justify-between">
@@ -2315,34 +2620,60 @@ export default function TradingPlatform() {
                       <div className="grid grid-cols-2 gap-3 h-[calc(100%-120px)]">
                         {conditionTypes.map((condition) => {
                           const Icon = condition.icon
+                          const isOHLCV = condition.id === "ohlcv_trigger"
+                          const isDisabled = !isOHLCV
+                          
                           return (
-                            <div
-                              key={condition.id}
-                              className={`aspect-square border-2 rounded-lg cursor-pointer transition-all hover:shadow-md flex flex-col items-center justify-center p-3 ${
-                                conditionType === condition.id
-                                  ? "border-primary bg-primary/10 shadow-lg"
-                                  : "border-border/50 hover:border-primary/30 hover:bg-accent/50"
-                              }`}
-                              onClick={() => setConditionType(condition.id)}
-                            >
-                              <div
-                                className={`p-2 rounded-lg transition-colors mb-2 ${
-                                  conditionType === condition.id 
-                                    ? "bg-primary text-primary-foreground" 
-                                    : "bg-muted text-muted-foreground"
-                                }`}
-                              >
-                                <Icon className="w-5 h-5" />
-                              </div>
-                              <div className="text-center">
-                                <h4 className="text-xs font-medium text-foreground leading-tight">{condition.name}</h4>
-                                {condition.popular && (
-                                  <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30 mt-1">
-                                    Popular
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
+                            <Tooltip key={condition.id}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className={`aspect-square border-2 rounded-lg transition-all hover:shadow-md flex flex-col items-center justify-center p-3 ${
+                                    conditionType === condition.id
+                                      ? "border-primary bg-primary/10 shadow-lg"
+                                      : isDisabled
+                                        ? "border-border/30 bg-muted/30 cursor-not-allowed opacity-50"
+                                        : "border-border/50 hover:border-primary/30 hover:bg-accent/50 cursor-pointer"
+                                  }`}
+                                  onClick={() => {
+                                    if (!isDisabled) {
+                                      setConditionType(condition.id)
+                                    }
+                                  }}
+                                >
+                                  <div
+                                    className={`p-2 rounded-lg transition-colors mb-2 ${
+                                      conditionType === condition.id 
+                                        ? "bg-primary text-primary-foreground" 
+                                        : isDisabled
+                                          ? "bg-muted/50 text-muted-foreground/50"
+                                          : "bg-muted text-muted-foreground"
+                                    }`}
+                                  >
+                                    <Icon className="w-5 h-5" />
+                                  </div>
+                                  <div className="text-center">
+                                    <h4 className={`text-xs font-medium leading-tight ${
+                                      isDisabled ? "text-muted-foreground/50" : "text-foreground"
+                                    }`}>
+                                      {condition.name}
+                                    </h4>
+                                    {condition.popular && isOHLCV && (
+                                      <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30 mt-1">
+                                        Popular
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="text-sm">
+                                  {isOHLCV 
+                                    ? condition.description
+                                    : "Not Tested"
+                                  }
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
                           )
                         })}
                       </div>
@@ -2365,15 +2696,36 @@ export default function TradingPlatform() {
                       <div className="grid grid-cols-2 gap-2 h-full">
                         {conditionTypes.map((condition) => {
                           const Icon = condition.icon
+                          const isOHLCV = condition.id === "ohlcv_trigger"
+                          const isDisabled = !isOHLCV
+                          
                           return (
                             <div
                               key={condition.id}
-                              className="aspect-square border border-border/30 rounded-lg bg-muted/20 flex flex-col items-center justify-center p-2"
+                              className={`aspect-square border rounded-lg flex flex-col items-center justify-center p-2 ${
+                                isOHLCV
+                                  ? "border-border/30 bg-muted/20"
+                                  : "border-border/20 bg-muted/10 opacity-30"
+                              }`}
                             >
-                              <div className="p-1 rounded bg-muted/40 mb-1">
-                                <Icon className="w-4 h-4 text-muted-foreground" />
+                              <div className={`p-1 rounded mb-1 ${
+                                isOHLCV
+                                  ? "bg-muted/40"
+                                  : "bg-muted/20"
+                              }`}>
+                                <Icon className={`w-4 h-4 ${
+                                  isOHLCV
+                                    ? "text-muted-foreground"
+                                    : "text-muted-foreground/30"
+                                }`} />
                               </div>
-                              <h4 className="text-xs font-medium text-foreground text-center leading-tight">{condition.name}</h4>
+                              <h4 className={`text-xs font-medium text-center leading-tight ${
+                                isOHLCV
+                                  ? "text-foreground"
+                                  : "text-foreground/30"
+                              }`}>
+                                {condition.name}
+                              </h4>
                             </div>
                           )
                         })}
@@ -3836,7 +4188,7 @@ export default function TradingPlatform() {
                         <div className="inline-block">
                           <Button 
                             disabled={true}
-                            className="bg-blue-400 hover:bg-blue-500 text-white shadow-lg cursor-not-allowed relative"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-not-allowed relative"
                           >
                             Backtest
                           </Button>
@@ -3848,9 +4200,6 @@ export default function TradingPlatform() {
                         </p>
                       </TooltipContent>
                     </Tooltip>
-                    <div className="absolute -top-1 -right-1 bg-blue-400 text-white text-[10px] px-1.5 py-0.5 rounded-full transform rotate-12 font-medium shadow-sm">
-                      Coming Soon
-                    </div>
                   </div>
                   <Button 
                     onClick={() => setCurrentStep(5)}
@@ -4390,32 +4739,67 @@ export default function TradingPlatform() {
             <div className="space-y-2">
               {conditionTypes.map((condition) => {
                 const IconComponent = condition.icon
+                const isOHLCV = condition.id === "ohlcv_trigger"
+                const isDisabled = !isOHLCV
+                
                 return (
-                  <button
-                    key={condition.id}
-                    onClick={() => {
-                      setConditionType(condition.id)
-                      setShowConditionModal(false)
-                    }}
-                    className="w-full p-3 border border-border rounded-lg hover:border-primary/50 hover:bg-accent/50 transition-all text-left group"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 rounded bg-muted group-hover:bg-primary/10 transition-colors">
-                        <IconComponent className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-medium text-foreground">{condition.name}</span>
-                          {condition.popular && (
-                            <Badge variant="secondary" className="text-xs">Popular</Badge>
-                          )}
+                  <Tooltip key={condition.id}>
+                    <TooltipTrigger asChild>
+                      <button
+                        disabled={isDisabled}
+                        onClick={() => {
+                          if (!isDisabled) {
+                            setConditionType(condition.id)
+                            setShowConditionModal(false)
+                          }
+                        }}
+                        className={`w-full p-3 border rounded-lg transition-all text-left group ${
+                          isDisabled
+                            ? "border-border/30 bg-muted/20 cursor-not-allowed opacity-50"
+                            : "border-border hover:border-primary/50 hover:bg-accent/50 cursor-pointer"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className={`p-2 rounded transition-colors ${
+                            isDisabled
+                              ? "bg-muted/40"
+                              : "bg-muted group-hover:bg-primary/10"
+                          }`}>
+                            <IconComponent className={`w-4 h-4 transition-colors ${
+                              isDisabled
+                                ? "text-muted-foreground/50"
+                                : "text-muted-foreground group-hover:text-primary"
+                            }`} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span className={`font-medium ${
+                                isDisabled ? "text-muted-foreground/50" : "text-foreground"
+                              }`}>
+                                {condition.name}
+                              </span>
+                              {condition.popular && isOHLCV && (
+                                <Badge variant="secondary" className="text-xs">Popular</Badge>
+                              )}
+                            </div>
+                            <div className={`text-xs mt-1 ${
+                              isDisabled ? "text-muted-foreground/30" : "text-muted-foreground"
+                            }`}>
+                              {isOHLCV ? condition.description : "Coming Soon"}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {condition.description}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-sm">
+                        {isOHLCV 
+                          ? condition.description
+                          : "Coming Soon"
+                        }
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 )
               })}
             </div>

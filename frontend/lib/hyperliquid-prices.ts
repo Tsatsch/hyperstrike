@@ -144,6 +144,22 @@ export async function updateAllTokenPrices(): Promise<Record<string, { price: nu
       // Add to return object
       updatedPrices[internalSymbol] = { price, change24h };
     }
+    
+    // Ensure WHYPE always has the same price as HYPE
+    if (updatedPrices['HYPE']) {
+      const hypeData = updatedPrices['HYPE'];
+      updatedPrices['WHYPE'] = {
+        price: hypeData.price,
+        change24h: hypeData.change24h
+      };
+      
+      // Also update the cache for WHYPE
+      priceCache.set('WHYPE', {
+        price: hypeData.price,
+        change24h: hypeData.change24h,
+        lastUpdated: now
+      });
+    }
 
     console.log(`Updated ${Object.keys(updatedPrices).length} token prices from Hyperliquid`);
     return updatedPrices;

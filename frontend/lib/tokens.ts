@@ -124,6 +124,7 @@ HYPERLIQUID_TOKENS.forEach(token => {
 // Default fallback prices (in USD)
 export const DEFAULT_TOKEN_PRICES: Record<string, { price: number; change24h: number }> = {
   "HYPE": { price: 39.0, change24h: 3.2 },
+  "WHYPE": { price: 39.0, change24h: 3.2 }, // Same price as HYPE
   "USDT": { price: 1.0, change24h: 0.0 },
   "UETH": { price: 3500.0, change24h: 2.4 },
   "UBTC": { price: 118000.0, change24h: -1.2 },
