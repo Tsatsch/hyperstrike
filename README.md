@@ -16,6 +16,29 @@ We recognized a gap in the level of control traders have while executing their s
 
 We operate everything in a permissionless manner to maximize security and minimize exploitation risks. Unlike traditional platforms, we never ask users to deposit their funds into smart contracts. Users maintain complete freedom to use their funds until the moment their order is triggered, ensuring maximum capital efficiency and security.
 
+## Smart Contract Architecture
+
+### Contract Details
+- **Contract Address**: `0x07389a7f85b8f5d9a509ef4f607efd41fec8b129`
+- **Network**: HyperEVM
+- **Explorer**: [HyperEVM Scan](https://hyperevmscan.io/address/0x07389a7f85b8f5d9a509ef4f607efd41fec8b129)
+- **Protocol Fee**: 0.5%
+
+### Key Addresses
+- **Contract Owner**: `0x215adf3fb222206abcb35bfd105a10666741cb84`
+- **Swapping Wallet**: `0xBf879877e05430aC14fcEF6fE102DF29e264b114`
+
+### Execution Flow
+When a trigger condition is met, the following automated process occurs:
+
+1. **Trigger Detection**: Owner wallet (`0x215adf3fb222206abcb35bfd105a10666741cb84`) initiates the execution
+2. **Fund Transfer**: Contract (`0x07389a7f85b8f5d9a509ef4f607efd41fec8b129`) uses `transferFrom` to move funds from user's wallet
+3. **Swapping**: Funds are sent to swapping wallet (`0xBf879877e05430aC14fcEF6fE102DF29e264b114`)
+4. **Token Swap**: GlueX API is used to execute the swap with the user as the recipient
+5. **Fee Collection**: 0.5% protocol fee is automatically deducted during execution
+
+This architecture ensures that users maintain control of their funds until the exact moment their conditions are met, while providing automated execution through our trusted smart contract.
+
 
 ## Features & Triggers
 
