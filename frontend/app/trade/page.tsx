@@ -34,6 +34,7 @@ import { checkAllowance, approveToken, getTokenDecimals } from "@/lib/token-allo
 import { wrapHype, WHYPE_CONTRACT_ADDRESS } from "@/lib/wrap"
 import { TransactionMonitor } from "@/components/TransactionMonitor"
 import { useTransactionMonitor } from "@/hooks/use-transaction-monitor"
+import { useGlueXPrices } from "@/hooks/use-gluex-prices"
 
 interface Token {
   symbol: string
@@ -185,12 +186,23 @@ export default function TradingPlatform() {
   } | null>(null);
   const [isRetryingTransaction, setIsRetryingTransaction] = useState(false);
   const [showSwapFlowModal, setShowSwapFlowModal] = useState(false);
+  const [swapResults, setSwapResults] = useState<any[]>([]);
+  const [isSwapProcessing, setIsSwapProcessing] = useState(true);
   
   // Transaction monitoring
   const { transactions, addTransaction, removeTransaction } = useTransactionMonitor();
   
   // Transaction confirmation states
   const [pendingTransactions, setPendingTransactions] = useState<Set<string>>(new Set());
+  
+  // GlueX price monitoring (background only - no UI display)
+  useGlueXPrices({
+    fromToken,
+    toTokens,
+    fromAmount,
+    userAddress: user?.wallet?.address,
+    isEnabled: authenticated && currentStep === 2 && selectedPlatform === 'hyperevm' && !!fromToken && toTokens.length > 0
+  });
   
   // Monitor transaction status changes to update UI state
   useEffect(() => {
@@ -312,7 +324,7 @@ export default function TradingPlatform() {
         const inputAmountBig = parseFloat(fromAmount)
         setIsTokenApproved(allowanceFormatted >= inputAmountBig)
         
-        console.log(`Allowance check: ${allowance} (${allowanceFormatted} ${fromToken.symbol}) vs required: ${fromAmount}, approved: ${allowanceFormatted >= inputAmountBig}`)
+       //console.log(`Allowance check: ${allowance} (${allowanceFormatted} ${fromToken.symbol}) vs required: ${fromAmount}, approved: ${allowanceFormatted >= inputAmountBig}`)
       } catch (error) {
         console.error('Error checking allowance:', error)
         setTokenAllowance("0")
@@ -357,7 +369,7 @@ export default function TradingPlatform() {
         const inputAmountBig = parseFloat(fromAmount)
         setIsWhypeApproved(allowanceFormatted >= inputAmountBig)
         
-        console.log(`WHYPE allowance check: ${allowance} (${allowanceFormatted} WHYPE) vs required: ${fromAmount}, approved: ${allowanceFormatted >= inputAmountBig}`)
+       // console.log(`WHYPE allowance check: ${allowance} (${allowanceFormatted} WHYPE) vs required: ${fromAmount}, approved: ${allowanceFormatted >= inputAmountBig}`)
       } catch (error) {
         console.error('Error checking WHYPE allowance:', error)
         setWhypeAllowance("0")
@@ -1167,15 +1179,135 @@ export default function TradingPlatform() {
 
 
   const handleInstantSwap = async () => {
-    // Show the swap flow visualization modal
-    setShowSwapFlowModal(true)
+    // Reset state and show the swap flow visualization modal
+    setIsSwapProcessing(true);
+    setSwapResults([]);
+    setShowSwapFlowModal(true);
     
-    // first check for token allowance 
-    const allowance = await checkAllowance(fromToken?.address || '0x0000000000000000000000000000000000000000', user?.wallet?.address || '0x0000000000000000000000000000000000000000')
-    console.log("allowance: ", allowance)
-    
-    // TODO: Implement actual swap logic here
-    // For now, just show the modal
+    // Check if wallet is connected
+    if (!authenticated || !user?.wallet?.address) {
+      console.error('Wallet not connected');
+      setShowSwapFlowModal(false);
+      return;
+    }
+
+    try {
+      // Ensure we have a backend JWT for authorized requests
+      let backendJwt = getBackendJwt();
+      if (!backendJwt && authenticated && user?.wallet?.address) {
+        backendJwt = await exchangePrivyForBackendJwt(getAccessToken, user.wallet.address) || null;
+      }
+      if (!backendJwt) {
+        console.error('Missing backend JWT. Please reconnect wallet.');
+        setShowSwapFlowModal(false);
+        return;
+      }
+
+      // Build instant swap order payload
+      const inputAmountNum = Number(fromAmount);
+      
+      // Prepare outputs array (percentage-based) limited to 4
+      const selectedOutputs = toTokens.slice(0, 4).map(token => ({
+        token: token.address || '0x0000000000000000000000000000000000000000',
+        percentage: Number(toPercentages[token.symbol] || '0'),
+      }));
+
+      const orderPayload = {
+        platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
+        wallet: user.wallet.address,
+        swap_data: {
+          input_token: fromToken?.address || '0x0000000000000000000000000000000000000000',
+          input_amount: isFinite(inputAmountNum) ? inputAmountNum : 0,
+          // New percentage-based outputs for up to 4 tokens
+          outputs: selectedOutputs,
+        },
+        order_data: {
+          type: 'instant_swap',
+        },
+        signature: null,
+        time: Date.now(),
+      };
+
+    // console.log('Sending instant swap order:', orderPayload);
+
+      const response = await fetch(`${config.apiUrl}/api/order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${backendJwt}`,
+        },
+        body: JSON.stringify(orderPayload),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        // console.log('Instant swap result:', result);
+        // console.log('Result type:', typeof result);
+        // console.log('Is array:', Array.isArray(result));
+        
+        // Handle successful response
+        if (Array.isArray(result)) {
+        //  console.log('Received swap results array:', result);
+          setSwapResults(result);
+          setIsSwapProcessing(false); // Switch to success state
+        } else if (result && typeof result === 'object') {
+         // console.log('Result keys:', Object.keys(result));
+          
+          // Check if it's an order object with actual_outputs (completed swap)
+          if (result.actual_outputs && Array.isArray(result.actual_outputs) && result.actual_outputs.length > 0) {
+          //  console.log('Found swap results in actual_outputs:', result.actual_outputs);
+            setSwapResults(result.actual_outputs);
+            setIsSwapProcessing(false);
+          } 
+          // Check if the result itself is a non-empty array (direct swap results)
+          else if (result.length !== undefined && result.length > 0) {
+            //console.log('Response appears to be a non-empty array-like object:', result);
+            setSwapResults(Array.isArray(result) ? result : [result]);
+            setIsSwapProcessing(false);
+          }
+          // Check if it's an order that's been created but not executed yet
+          else if (result.id && result.state === 'open' && (result.actual_outputs === null || (Array.isArray(result.actual_outputs) && result.actual_outputs.length === 0))) {
+          //  console.log('Order created but not executed yet. Order ID:', result.id);
+          //  console.log('Order state:', result.state);
+            
+            // For now, let's show that the order was created
+            setSwapResults([]);
+            setIsSwapProcessing(false);
+            
+          ///  console.log('Instant swap order created successfully with ID:', result.id);
+          }
+          // Check common nested array patterns
+          else if (result.data && Array.isArray(result.data)) {
+           // console.log('Found array in result.data:', result.data);
+            setSwapResults(result.data);
+            setIsSwapProcessing(false);
+          } else if (result.results && Array.isArray(result.results)) {
+           // console.log('Found array in result.results:', result.results);
+            setSwapResults(result.results);
+            setIsSwapProcessing(false);
+          } else if (result.swaps && Array.isArray(result.swaps)) {
+          //  console.log('Found array in result.swaps:', result.swaps);
+            setSwapResults(result.swaps);
+            setIsSwapProcessing(false);
+          } else {
+           // console.log('Unexpected response format - object without recognizable structure:', result);
+          //  console.log('Available properties:', Object.keys(result));
+            setShowSwapFlowModal(false);
+          }
+        } else {
+        //  console.log('Unexpected response format - not array or object:', result);
+        //  console.log('Response type:', typeof result);
+          setShowSwapFlowModal(false);
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to execute instant swap:', response.status, errorText);
+        setShowSwapFlowModal(false);
+      }
+    } catch (error) {
+      console.error('Error executing instant swap:', error);
+      setShowSwapFlowModal(false);
+    }
   }
 
   const handleWrapHype = async () => {
@@ -1199,7 +1331,7 @@ export default function TradingPlatform() {
       // Call wrap function with popup transaction
       const tx = await wrapHype(fromAmount, signer)
       
-      console.log(`Wrap HYPE transaction initiated:`, tx.hash)
+     // console.log(`Wrap HYPE transaction initiated:`, tx.hash)
       
       // Add transaction to monitoring system
       addTransaction(tx.hash, 'wrap', 'HYPE')
@@ -1207,7 +1339,7 @@ export default function TradingPlatform() {
       // Add to pending transactions
       setPendingTransactions(prev => new Set(prev).add(tx.hash))
       
-      console.log("HYPE wrap transaction submitted for monitoring")
+      //console.log("HYPE wrap transaction submitted for monitoring")
     } catch (error: any) {
       console.error(`Error wrapping HYPE:`, error)
       
@@ -1252,7 +1384,7 @@ export default function TradingPlatform() {
       // Call approve function with popup transaction
       const tx = await approveToken(tokenAddress, fromAmount, signer)
       
-      console.log(`Approve ${tokenSymbol} transaction initiated:`, tx.hash)
+     // console.log(`Approve ${tokenSymbol} transaction initiated:`, tx.hash)
       
       // Add transaction to monitoring system
       addTransaction(tx.hash, 'approval', tokenSymbol)
@@ -1260,7 +1392,7 @@ export default function TradingPlatform() {
       // Add to pending transactions
       setPendingTransactions(prev => new Set(prev).add(tx.hash))
       
-      console.log(`${tokenSymbol} approval transaction submitted for monitoring`)
+     // console.log(`${tokenSymbol} approval transaction submitted for monitoring`)
     } catch (error: any) {
       console.error(`Error approving ${tokenSymbol}:`, error)
       
@@ -1678,6 +1810,8 @@ export default function TradingPlatform() {
                                       0 {fromToken?.symbol || 'tokens'}
                                     </div>
                                   )}
+                                  
+
                                 </div>
                               </div>
                             )
@@ -1738,7 +1872,9 @@ export default function TradingPlatform() {
                       )}
                     </div>
                   </div>
-                  )}
+                )}
+
+
                   </div>
 
                   {/* Validation Message */}
@@ -1757,13 +1893,13 @@ export default function TradingPlatform() {
                         <>
                           <Button 
                             onClick={() => {
-                              if (!conditionType && isInputValid && isOutputValid && isValidTotalPercentage) {
+                              if (isInputValid && isOutputValid && isValidTotalPercentage) {
                                 handleWrapHype()
                               }
                             }}
-                            disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
+                            disabled={!isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
                             className={`flex-1 ${
-                              (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
+                              (!isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
                                 ? 'bg-muted text-muted-foreground cursor-not-allowed' 
                                 : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
                             }`}
@@ -1783,14 +1919,14 @@ export default function TradingPlatform() {
                         <>
                           <Button 
                             onClick={() => {
-                              if (!conditionType && isInputValid && isOutputValid && isValidTotalPercentage && fromToken?.address) {
+                              if (isInputValid && isOutputValid && isValidTotalPercentage && fromToken?.address) {
                                 // For WHYPE approval after wrapping, we use WHYPE token approval
                                 handleApproveToken(fromToken.address, fromToken.symbol)
                               }
                             }}
-                            disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
+                            disabled={!isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
                             className={`flex-1 ${
-                              (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
+                              (!isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
                                 ? 'bg-muted text-muted-foreground cursor-not-allowed' 
                                 : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
                             }`}
@@ -1835,9 +1971,9 @@ export default function TradingPlatform() {
                               handleApproveToken(fromToken.address, fromToken.symbol)
                             }
                           }}
-                          disabled={!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
+                          disabled={!isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0}
                           className={`flex-1 ${
-                            (!!conditionType || !isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
+                            (!isInputValid || !isOutputValid || !isValidTotalPercentage || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || pendingTransactions.size > 0)
                               ? 'bg-muted text-muted-foreground cursor-not-allowed' 
                               : 'bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer'
                           }`}
@@ -1877,7 +2013,10 @@ export default function TradingPlatform() {
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-semibold text-foreground">Choose Condition Type</h3>
                         <button
-                          onClick={() => setIsConditionSelectionUnlocked(false)}
+                          onClick={() => {
+                            setIsConditionSelectionUnlocked(false)
+                            setConditionType("") // Clear the selected condition
+                          }}
                           className="text-muted-foreground hover:text-foreground p-1"
                         >
                           <X className="w-4 h-4" />
@@ -1978,11 +2117,22 @@ export default function TradingPlatform() {
                 Back
               </Button>
               
-              {/* Continue Button - Only appears when condition is selected AND swap UI is complete */}
+              {/* Continue Button - Only appears when condition is selected AND tokens are properly prepared AND swap UI is complete */}
               {conditionType && (
                 <Button 
                   onClick={() => setCurrentStep(4)} 
-                  disabled={!fromToken || toTokens.length === 0 || !isInputValid || !isOutputValid || (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || !isValidTotalPercentage}
+                  disabled={
+                    !fromToken || 
+                    toTokens.length === 0 || 
+                    !isInputValid || 
+                    !isOutputValid || 
+                    (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || 
+                    !isValidTotalPercentage ||
+                    // Token preparation requirements (same as instant swap)
+                    (fromToken?.symbol === 'HYPE' && !isHypeWrapped) ||
+                    (fromToken?.symbol === 'WHYPE' && !isWhypeApproved) ||
+                    (fromToken?.symbol !== 'HYPE' && fromToken?.symbol !== 'WHYPE' && !isTokenApproved)
+                  }
                   className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
                 >
                   Continue
@@ -2479,14 +2629,9 @@ export default function TradingPlatform() {
                             {/* Additional spot tokens */}
                             {[
                               { symbol: 'PUMP', name: 'Pump Fun' , icon: 'https://app.hyperliquid.xyz/coins/PUMP_USDC.svg'},
-                              { symbol: 'PURR', name: 'Purr' , icon: 'https://app.hyperliquid.xyz/coins/PURR_USDC.svg'},
-                              { symbol: 'HFUN', name: 'HFun' , icon: 'https://app.hyperliquid.xyz/coins/HFUN_USDC.svg'},
-                              { symbol: 'UMOG', name: 'Unit Mog' , icon: 'https://app.hyperliquid.xyz/coins/MOG_USDC.svg'},
-                              { symbol: 'UUUSPX', name: 'Unit Spx' , icon: 'https://app.hyperliquid.xyz/coins/SPX_USDC.svg'},
-                              { symbol: 'UFART', name: 'Unit Fartcoin' , icon: 'https://app.hyperliquid.xyz/coins/FARTCOIN_USDC.svg'},
-                              { symbol: 'JEFF', name: 'Jeff' , icon: 'https://app.hyperliquid.xyz/coins/JEFF_USDC.svg'},
-                              { symbol: 'UBONK', name: 'Unit Bonk' , icon: 'https://app.hyperliquid.xyz/coins/BONK_USDC.svg'},
-                              { symbol: 'BUDDY', name: 'Alright Buddy' , icon: 'https://app.hyperliquid.xyz/coins/BUDDY_USDC.svg'}
+
+
+
                                                           ].map((token) => (
                                 <SelectItem key={`spot-${token.symbol}`} value={`${token.symbol}/USDC`} className="cursor-pointer">
                                   <div className="flex items-center space-x-2">
@@ -2522,8 +2667,8 @@ export default function TradingPlatform() {
                             {/* Additional perps */}
                             {[
                               { symbol: 'PUMP', name: 'PumpFun' , icon: 'https://app.hyperliquid.xyz/coins/PUMP_USDC.svg'},
-                              { symbol: 'PURR', name: 'Purr' , icon: 'https://app.hyperliquid.xyz/coins/PURR_USDC.svg'},
-                              { symbol: 'BONK', name: 'Bonk' , icon: 'https://app.hyperliquid.xyz/coins/BONK_USDC.svg'},
+
+
                               { symbol: 'FARTCOIN', name: 'Fartcoin' , icon: 'https://app.hyperliquid.xyz/coins/FARTCOIN_USDC.svg'},
                               { symbol: 'XRP', name: 'XRP' , icon: 'https://app.hyperliquid.xyz/coins/XRP.svg'},
 
@@ -3745,114 +3890,95 @@ export default function TradingPlatform() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-card border border-border/50 rounded-xl p-8 max-w-2xl w-full mx-4 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-300">
             <div className="text-center space-y-6">
-              {/* Swap Flow Visualization */}
-              <div className="relative">
-                {/* Input Token at Top */}
-                <div className="flex items-center justify-center mb-8">
-                  <div className="flex items-center space-x-3 p-4 bg-muted/30 rounded-lg border border-border/50">
-                    <img 
-                      src={fromToken?.icon} 
-                      alt={fromToken?.symbol} 
-                      className="w-8 h-8 rounded-full"
-                    />
-                    <span className="text-lg font-semibold text-foreground">
-                      {fromToken?.symbol}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {fromAmount}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Green Lines (Water Pipes) */}
-                <div className="relative mb-8">
-                  {toTokens.map((token, index) => (
-                    <div key={token.symbol} className="relative">
-                      {/* Vertical Line */}
-                      <div 
-                        className="absolute left-1/2 transform -translate-x-1/2 w-1 bg-gradient-to-b from-green-400 to-green-600"
-                        style={{
-                          height: '80px',
-                          top: '0px',
-                          zIndex: 1
-                        }}
-                      />
-                      
-                      {/* Horizontal Line to Token */}
-                      <div 
-                        className="absolute top-20 w-24 h-1 bg-gradient-to-r from-green-400 to-green-600"
-                        style={{
-                          left: index === 0 ? 'calc(50% - 48px)' : 
-                                index === 1 ? 'calc(50% + 48px)' :
-                                index === 2 ? 'calc(50% - 96px)' :
-                                index === 3 ? 'calc(50% + 96px)' : '50%',
-                          zIndex: 1
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                {/* Output Tokens in Grid */}
-                <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-                  {toTokens.map((token, index) => (
-                    <div 
-                      key={token.symbol}
-                      className="flex items-center space-x-2 p-3 bg-muted/30 rounded-lg border border-border/50"
-                      style={{
-                        gridColumn: index === 0 ? '1' : 
-                                   index === 1 ? '2' : 
-                                   index === 2 ? '1' : 
-                                   index === 3 ? '2' : '1',
-                        gridRow: index < 2 ? '1' : '2'
-                      }}
-                    >
+              {/* PURR Logo - Processing or Success */}
+              <div className="mx-auto relative" style={{ 
+                width: isSwapProcessing ? '88px' : '97px', 
+                height: isSwapProcessing ? '88px' : '97px' 
+              }}>
+                {isSwapProcessing ? (
+                  /* Processing State - Spinning border */
+                  <>
+                    <div className="absolute inset-0 rounded-full border-transparent spinning-border"
+                         style={{
+                           borderWidth: '3px',
+                           borderTopColor: resolvedTheme === 'dark' ? '#01cba4' : '#017c67',
+                           borderRightColor: 'transparent',
+                           borderBottomColor: 'transparent', 
+                           borderLeftColor: 'transparent'
+                         }}></div>
+                    <div className="w-full h-full flex items-center justify-center p-2">
                       <img 
-                        src={token.icon} 
-                        alt={token.symbol} 
-                        className="w-6 h-6 rounded-full"
+                        src="/purr_distinguished.gif" 
+                        alt="Processing Swap" 
+                        className="w-full h-full object-contain"
                       />
-                      <div className="text-left">
-                        <div className="font-medium text-foreground">
-                          {token.symbol}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {((parseFloat(toPercentages[token.symbol] || '0') / 100) * parseFloat(fromAmount || '0')).toFixed(6)} {fromToken?.symbol}
-                        </div>
-                      </div>
                     </div>
-                  ))}
-                </div>
-
-                {/* Animated PURR Logo */}
-                <div className="mt-8 mx-auto relative" style={{ width: '88px', height: '88px' }}>
-                  {/* Spinning border with thickness animation */}
-                  <div className="absolute inset-0 rounded-full border-transparent spinning-border"
-                       style={{
-                         borderWidth: '3px',
-                         borderTopColor: resolvedTheme === 'dark' ? '#01cba4' : '#017c67',
-                         borderRightColor: 'transparent',
-                         borderBottomColor: 'transparent', 
-                         borderLeftColor: 'transparent'
-                       }}></div>
-                  {/* Inner content */}
-                  <div className="w-full h-full flex items-center justify-center p-2">
+                  </>
+                ) : (
+                  /* Success State - No spinning border, 10% bigger */
+                  <div className="w-full h-full flex items-center justify-center">
                     <img 
-                      src="/purr_distinguished.gif" 
-                      alt="Processing Swap" 
+                      src="/purr_success.gif" 
+                      alt="Swap Successful" 
                       className="w-full h-full object-contain"
                     />
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* Title */}
+              {/* Token Flow Display - Only show when not processing */}
+              {!isSwapProcessing && (
+                <div className="flex items-center justify-center space-x-4">
+                  {/* Input Token */}
+                  <div className="flex items-center space-x-2">
+                    <img 
+                      src={fromToken?.icon} 
+                      alt={fromToken?.symbol} 
+                      className="w-6 h-6 rounded-full"
+                    />
+                    <span className="font-medium text-foreground">
+                      {fromToken?.symbol}
+                    </span>
+                  </div>
+                  
+                  {/* Arrow */}
+                  <ArrowRight className="w-5 h-5 text-green-500" />
+                  
+                  {/* Output Tokens */}
+                  <div className="flex items-center space-x-2">
+                    {toTokens.map((token, index) => (
+                      <div key={index} className="flex items-center space-x-1">
+                        <img 
+                          src={token.icon} 
+                          alt={token.symbol} 
+                          className="w-6 h-6 rounded-full"
+                        />
+                        <span className="font-medium text-foreground">
+                          {token.symbol}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+                            {/* Title */}
               <div className="space-y-2">
                 <h3 className="text-2xl font-bold text-foreground">
-                  Processing Swap
+                  {isSwapProcessing 
+                    ? 'Processing Swap' 
+                    : swapResults.length > 0 
+                      ? 'Swap Successful!' 
+                      : 'Order Created!'
+                  }
                 </h3>
                 <p className="text-muted-foreground">
-                  Your swap is being processed. Please wait...
+                  {isSwapProcessing 
+                    ? 'Your swap is being processed. Please wait...' 
+                    : swapResults.length > 0
+                      ? 'Your instant swap has been completed successfully.'
+                      : 'Your instant swap order has been created and is being processed.'
+                  }
                 </p>
               </div>
 

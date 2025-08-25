@@ -2,7 +2,7 @@
 
 // Default contract address (if env variable not set)
 const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || 
-  "0x3BdAEE359F1F721B3Ff9f4484253C4fF35AD1040";
+  "0x07389a7F85B8F5d9a509ef4f607eFd41FEc8b129";
 
 // Minimal ERC20 ABI (allowance, approve, and decimals functions)
 const erc20Abi = [
