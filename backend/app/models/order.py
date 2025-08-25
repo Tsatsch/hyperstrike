@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 class OutputSplit(BaseModel):
     token: str
     percentage: float
+    output_received: Optional[float] = None  # Field to store simulated output amount
 
 
 class SwapData(BaseModel):
@@ -82,6 +83,11 @@ class OrderData(BaseModel):
     #to add later
 
 
+class ActualOutput(BaseModel):
+    token: str
+    amount: float
+
+
 class OrderCreateRequest(BaseModel):
     platform: Literal["hyperevm", "hypercore", "notifications"]
     wallet: str
@@ -103,6 +109,7 @@ class OrderOut(BaseModel):
     state: Literal["open", "successful", "failed", "deleted", "done_successful", "done_failed"] = "open"
     termination_message: Optional[str] = None
     created_at: Optional[str] = None
+    actual_outputs: Optional[List[Dict[str, Any]]] = None
 
     model_config = {
         "populate_by_name": True,
@@ -115,11 +122,6 @@ class DeleteOrderRequest(BaseModel):
     signature: Optional[str] = None
     order_id: int
 
-
-
-class ActualOutput(BaseModel):
-    token: str
-    amount: float
 
 
 class OrderTriggeredRequest(BaseModel):

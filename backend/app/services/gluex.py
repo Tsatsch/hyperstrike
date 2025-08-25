@@ -3,6 +3,9 @@ import requests
 import dotenv
 import json
 from web3 import Web3
+from web3.types import HexBytes
+import logging
+
 from eth_abi import decode
 
 dotenv.load_dotenv()
@@ -10,10 +13,12 @@ GLUEX_API_KEY = os.getenv("NEXT_PUBLIC_GLUEX_API_KEY")
 GLUEX_PID = os.getenv("NEXT_PUBLIC_GLUEX_PID")
 GLUEX_URL = "https://router.gluex.xyz"
 RPC_URL = os.getenv("NEXT_ETH_RPC_URL") or "https://rpc.hyperliquid.xyz/evm"
-PRIVATE_KEY = os.getenv("PRIVATE_KEY")
-PUBLIC_KEY = os.getenv("PUBLIC_KEY")
+PRIVATE_KEY = os.getenv("INTERMEDIATE_WALLET_PRIVATE_KEY")
+PUBLIC_KEY = os.getenv("INTERMEDIATE_WALLET_PUBLIC_KEY")
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
 NATIVE_TOKEN_ADDRESS = "0x2222222222222222222222222222222222222222"
+
+logger = logging.getLogger(__name__)
 
 class Gluex:
     def __init__(self, user_address, chain_id="hyperevm"):
@@ -24,6 +29,7 @@ class Gluex:
         self.api_key = GLUEX_API_KEY
         self.unique_pid = GLUEX_PID
         self.user_address = user_address
+        self.partner_address = PUBLIC_KEY or "0x7f752d65b046eaaa335dc1db55f3def2a419f694"
 
     def _headers(self):
         return {
@@ -39,13 +45,16 @@ class Gluex:
             "inputAmount": str(input_amount),
             "userAddress": self.user_address,
             "outputReceiver": output_receiver or self.user_address,
-            "uniquePID": self.unique_pid
+            "uniquePID": self.unique_pid,
+            "activateSurplusFee": True,
+            "partnerAddress": self.partner_address
         }
 
-    def get_price(self, input_token, output_token, input_amount, output_receiver=None):
+    async def get_price(self, input_token, output_token, input_amount, output_receiver=None):
         """
         Get a price from GlueX
         """
+        logger.info(f"Getting price for {input_token} to {output_token} with amount {input_amount} and receiver {output_receiver}")
         payload = self._build_payload(input_token, output_token, input_amount, output_receiver)
         try:
             response = requests.post(
@@ -59,10 +68,11 @@ class Gluex:
         except Exception as e:
             raise RuntimeError(f"Failed to fetch price: {e}")
 
-    def get_quote(self, input_token, output_token, input_amount, output_receiver=None):
+    async def get_quote(self, input_token, output_token, input_amount, output_receiver=None):
         """
         Get a quote from GlueX
         """
+        logger.info(f"Getting quote for {input_token} to {output_token} with amount {input_amount} and receiver {output_receiver}")
         payload = self._build_payload(input_token, output_token, input_amount, output_receiver)
         try:
             response = requests.post(
@@ -76,7 +86,7 @@ class Gluex:
         except Exception as e:
             raise RuntimeError(f"Failed to fetch quote: {e}")
         
-    def simulate_transaction(quote):
+    async def simulate_transaction(self, quote):
         """
         Simulate a transaction
         Args:
@@ -85,6 +95,7 @@ class Gluex:
             output_amount: The output amount
             gas_price: The gas price
         """
+        logger.info(f"Simulating transaction for {quote}")
         if not quote or quote.get("statusCode") != 200:
             print("Failed to fetch quote")
             return None, None
@@ -93,27 +104,27 @@ class Gluex:
         calldata = result["calldata"]
         router = Web3.to_checksum_address(result["router"])
         value = int(result.get("value", 0))
-        gas_price = int(web3.eth.gas_price * 2)
+        gas_price = max(web3.eth.gas_price * 2, 10000000000)
 
         tx = {
-            "from": web3.eth.account.from_key(PRIVATE_KEY).address,
+            "from": self.user_address,
             "to": router,
             "data": calldata,
             "value": value,
-            "gas": 1_000_000,
+            "gas": 1_500_000,
             "gasPrice": gas_price,
         }
 
         try:
             raw = web3.eth.call(tx, block_identifier="latest")
             output_amount = decode(['uint256'], raw)[0]
-            return output_amount, gas_price
+            return True, output_amount, gas_price
         except Exception as e:
             print(f"Simulation failed: {e}")
-            return None, gas_price
+            return False, None, gas_price
 
         
-    def send_transaction(quote, gas_price):
+    async def send_transaction(self, quote, gas_price):
         """
         Send a transaction
         Args:
@@ -127,12 +138,12 @@ class Gluex:
             print("Failed to fetch quote")
             return None
         calldata = quote["result"]["calldata"]
-        account = web3.eth.account.from_key(PRIVATE_KEY)
-        nonce = web3.eth.get_transaction_count(account.address, 'pending')
+        account = self.user_address
+        nonce = web3.eth.get_transaction_count(account, 'pending')
         router = Web3.to_checksum_address(quote["result"]["router"])
         value = int(quote["result"].get("inputAmount", 0)) if quote["result"]["inputToken"] == NATIVE_TOKEN_ADDRESS else 0
         tx = {
-            "from": account.address,
+            "from": account,
             "to": router,
             "data": calldata,
             "gas": 1_000_000,
@@ -140,9 +151,37 @@ class Gluex:
             "nonce": nonce,
             "value": value
         }
-        signed = web3.eth.account.sign_transaction(tx, account.key)
+        signed = web3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         tx_hash = web3.eth.send_raw_transaction(signed.raw_transaction)
-        return web3.eth.wait_for_transaction_receipt(tx_hash)
+        tx_receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+        tx_receipt_dict = dict_to_json_serializable(tx_receipt)
+        logger.info(f"Transaction sent: {tx_hash.hex()}")
+  
+        if tx_receipt.status == 1:
+            gas_used = 0
+            if "gasUsed" in tx_receipt_dict:
+                gas_used = tx_receipt_dict["gasUsed"]
+            return tx_hash.hex(), gas_used, gas_price
+        else:
+            return None, None, None
+    
+
+def dict_to_json_serializable(obj):
+    if isinstance(obj, HexBytes):
+        return '0x' + obj.hex() if not obj.hex().startswith('0x') else obj.hex()
+    elif isinstance(obj, bytes):
+        return '0x' + obj.hex()
+    elif hasattr(obj, '__dict__'):
+        return {k: dict_to_json_serializable(v) for k, v in obj.__dict__.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [dict_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: dict_to_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (int, float, str, bool, type(None))):
+        return obj
+    else:
+        return str(obj)
+
 
 
 

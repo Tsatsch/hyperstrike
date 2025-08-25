@@ -1,0 +1,30 @@
+[
+    {
+        "inputs": [{"type": "address"}, {"type": "address"}, {"type": "uint256"}],
+        "name": "withdrawOnTrigger",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{"type": "address"}, {"type": "address"}],
+        "name": "getApprovedAmount",
+        "outputs": [{"type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "owner",
+        "outputs": [{"type": "address"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "WITHDRAWAL_WALLET",
+        "outputs": [{"type": "address"}],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]
