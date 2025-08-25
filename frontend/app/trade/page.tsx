@@ -181,7 +181,6 @@ export default function TradingPlatform() {
   const [gainType, setGainType] = useState<"%" | "$">("%");
   const [lossType, setLossType] = useState<"%" | "$">("%");
   const [showContinueWarning, setShowContinueWarning] = useState(false);
-  const [tradeSide, setTradeSide] = useState<"long" | "short" | null>(null);
   const [isHypeWrapped, setIsHypeWrapped] = useState(false);
   const [tokenAllowance, setTokenAllowance] = useState<string>("0");
   const [isTokenApproved, setIsTokenApproved] = useState(false);
@@ -224,6 +223,9 @@ export default function TradingPlatform() {
           const whypeToken = tokens.find(t => t.symbol === 'WHYPE')
           if (whypeToken) {
             setFromToken(whypeToken)
+            // Reset WHYPE approval state since we're now using WHYPE
+            setIsWhypeApproved(false)
+            setWhypeAllowance("0")
           }
         } else if (tx.type === 'approval') {
           // Token approval succeeded
@@ -336,20 +338,26 @@ export default function TradingPlatform() {
 
   const availableBalanceUSD = getAvailableBalanceUSD()
   
-  // For HyperCore, position size is directly in USDC
-  const positionSizeUSD = positionSizeTokens
+  // Calculate position size in USD based on token amount
+  const getPositionSizeUSD = () => {
+    if (!tradingPairSymbol || !positionSizeTokens) return 0
+    const tokenPrice = priceCache[tradingPairSymbol]?.price || 0
+    return positionSizeTokens * tokenPrice
+  }
   
-  // Get available USDC balance for position sizing
-  const availableUSDC = coreAccount?.availableBalance || 0
+  const positionSizeUSD = getPositionSizeUSD()
+  
+  // Get available token balance for the selected trading pair
+  const availableTokens = tradingPairSymbol ? (hypercoreBalances[tradingPairSymbol] || 0) : 0
 
   // Set default position size when trading pair or balances change
   useEffect(() => {
-    if (availableUSDC > 0 && positionSizeTokens === 0) {
-      // Default to 10% of available USDC or 10 USDC, whichever is smaller
-      const defaultSize = Math.min(availableUSDC * 0.1, 10)
+    if (tradingPairSymbol && availableTokens > 0 && positionSizeTokens === 0) {
+      // Default to 10% of available tokens or 0.1 tokens, whichever is smaller
+      const defaultSize = Math.min(availableTokens * 0.1, 0.1)
       setPositionSizeTokens(defaultSize)
     }
-  }, [availableUSDC, positionSizeTokens])
+  }, [tradingPairSymbol, availableTokens, positionSizeTokens])
 
   // Trading calculations for HyperCore
   const calculateTradingMetrics = () => {
@@ -442,7 +450,7 @@ export default function TradingPlatform() {
       setWhypeAllowance("0")
       setIsWhypeApproved(false)
 
-      if (!authenticated || !user?.wallet?.address || !fromToken || fromToken.symbol !== 'WHYPE' || !isHypeWrapped) {
+      if (!authenticated || !user?.wallet?.address || !fromToken || fromToken.symbol !== 'WHYPE') {
         return
       }
 
@@ -1248,7 +1256,7 @@ export default function TradingPlatform() {
 
       // Create platform-specific payload
       const isHyperCore = selectedPlatform === 'hypercore'
-
+      
       const orderPayload = {
         platform: (selectedPlatform as 'hyperevm' | 'hypercore') || 'hyperevm',
         wallet: '0x0000000000000000000000000000000000000000',
@@ -1272,13 +1280,13 @@ export default function TradingPlatform() {
             } : null
           }
         } : {
-        swap_data: {
-          input_token: fromToken?.address || '0x0000000000000000000000000000000000000000',
-          input_amount: isFinite(inputAmountNum) ? inputAmountNum : 0,
-          // Legacy single-output fields populated from first split for compatibility
-          output_token: primaryOutputToken?.token || '0x0000000000000000000000000000000000000000',
-          // New percentage-based outputs for up to 4 tokens
-          outputs: selectedOutputs,
+          swap_data: {
+            input_token: fromToken?.address || '0x0000000000000000000000000000000000000000',
+            input_amount: isFinite(inputAmountNum) ? inputAmountNum : 0,
+            // Legacy single-output fields populated from first split for compatibility
+            output_token: primaryOutputToken?.token || '0x0000000000000000000000000000000000000000',
+            // New percentage-based outputs for up to 4 tokens
+            outputs: selectedOutputs,
           }
         }),
         order_data: {
@@ -1344,104 +1352,7 @@ export default function TradingPlatform() {
     }
   };
 
-  // Handle creating HyperCore conditional trade
-  const handleCreateHyperCoreOrder = async () => {
-    if (!authenticated || !user?.wallet?.address) {
-      console.error('User not authenticated');
-      return;
-    }
 
-    setIsCreating(true);
-    try {
-      // Prepare trigger data
-      const triggerData = {
-        value: parseFloat(targetValue || '0'),
-        condition: triggerWhen || 'above',
-        timeframe: timeframe || '1h',
-        source: source || 'close',
-        pair: triggerToken || 'HYPE-USDC'
-      };
-
-      // Prepare position data
-      const positionData = {
-        side: tradeSide || 'long',
-        size: positionSizeTokens || 0,
-        leverage: leverage || 20,
-        order_type: orderType || 'market',
-        limit_price: orderType === 'limit' && limitPrice ? parseFloat(limitPrice) : null,
-        take_profit: showTpSl && tpPrice ? {
-          price: parseFloat(tpPrice),
-          gain_value: parseFloat(gainValue) || null,
-          gain_type: gainType
-        } : null,
-        stop_loss: showTpSl && slPrice ? {
-          price: parseFloat(slPrice),
-          loss_value: parseFloat(lossValue) || null,
-          loss_type: lossType
-        } : null
-      };
-
-      const orderPayload = {
-        user_wallet: user.wallet.address,
-        trigger_data: triggerData,
-        position_data: positionData
-      };
-
-      // Ensure we have a backend JWT for authorized requests
-      let backendJwt = getBackendJwt();
-      if (!backendJwt && authenticated && user?.wallet?.address) {
-        backendJwt = await exchangePrivyForBackendJwt(getAccessToken, user.wallet.address) || null;
-      }
-      if (!backendJwt) {
-        console.error('Missing backend JWT. Please reconnect wallet.');
-        setIsCreating(false);
-        return;
-      }
-
-      const response = await fetch(`${config.apiUrl}/api/hypercore/pre-trigger-order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${backendJwt}`
-        },
-        body: JSON.stringify(orderPayload)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to create order: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      console.log('HyperCore order created:', result);
-      
-      // Show success and reset
-      setShowSuccessPage(true);
-      setTimeout(() => {
-        setShowSuccessPage(false);
-        setCurrentStep(1);
-        // Reset all form data
-        setSelectedPlatform(null);
-        setTriggerToken("HYPE-USDC");
-        setPositionSizeTokens(0);
-        setTradeSide(null);
-        setOrderType("market");
-        setLeverage(20);
-        setConditionType("");
-        setShowTpSl(false);
-        setTpPrice("");
-        setSlPrice("");
-        setGainValue("");
-        setLossValue("");
-        setLimitPrice("");
-      }, 3000);
-
-    } catch (error) {
-      console.error('Error creating HyperCore order:', error);
-      // Handle error (you might want to show a toast or error message)
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   const handleInstantSwap = async () => {
     // Reset state and show the swap flow visualization modal
@@ -2399,7 +2310,7 @@ export default function TradingPlatform() {
                     !isOutputValid || 
                     (selectedPlatform === 'hyperevm' && isBalanceInsufficient) || 
                     !isValidTotalPercentage ||
-                    // Token preparation requirements (same as instant swap)
+                    // Token preparation requirements - same as instant swap
                     (fromToken?.symbol === 'HYPE' && !isHypeWrapped) ||
                     (fromToken?.symbol === 'WHYPE' && !isWhypeApproved) ||
                     (fromToken?.symbol !== 'HYPE' && fromToken?.symbol !== 'WHYPE' && !isTokenApproved)
@@ -2622,7 +2533,16 @@ export default function TradingPlatform() {
                       </div>
                     </div>
                     <div className="text-[11px] text-muted-foreground">
-                      <div>USDC: {loadingCoreAccount ? 'Loading…' : (typeof coreAccount?.availableBalance === 'number' ? `${coreAccount.availableBalance.toFixed(2)}` : '0.00')}</div>
+                      {tradingPairSymbol && hypercoreBalances[tradingPairSymbol] && (
+                        <div>
+                          {tradingPairSymbol}: {hypercoreBalances[tradingPairSymbol].toFixed(4)} 
+                          {priceCache[tradingPairSymbol] && (
+                            <span className="ml-1 text-muted-foreground/70">
+                              (~${(hypercoreBalances[tradingPairSymbol] * priceCache[tradingPairSymbol].price).toFixed(2)})
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Order Type Selector */}
@@ -2683,24 +2603,10 @@ export default function TradingPlatform() {
 
                     {/* Buy/Sell Buttons */}
                     <div className="grid grid-cols-2 gap-2">
-                      <button 
-                        onClick={() => setTradeSide("long")}
-                        className={`px-3 py-2 text-xs font-medium rounded transition-colors ${
-                          tradeSide === "long"
-                            ? "bg-teal-600 text-white"
-                            : "bg-teal-600/20 text-teal-600 hover:bg-teal-600 hover:text-white"
-                        }`}
-                      >
+                      <button className="px-3 py-2 text-xs font-medium rounded bg-teal-600 text-white hover:bg-teal-700 transition-colors">
                         Buy / Long
                       </button>
-                      <button 
-                        onClick={() => setTradeSide("short")}
-                        className={`px-3 py-2 text-xs font-medium rounded transition-colors ${
-                          tradeSide === "short"
-                            ? "bg-red-600 text-white"
-                            : "bg-red-600/20 text-red-600 hover:bg-red-600 hover:text-white"
-                        }`}
-                      >
+                      <button className="px-3 py-2 text-xs font-medium rounded bg-red-600 text-white hover:bg-red-700 transition-colors">
                         Sell / Short
                       </button>
                     </div>
@@ -2712,7 +2618,7 @@ export default function TradingPlatform() {
                         <Input
                           type="text"
                           inputMode="decimal"
-                          placeholder="10.00"
+                          placeholder="0.1147"
                           className="flex-1 text-xs h-8"
                           value={positionSizeTokens === 0 ? '' : positionSizeTokens.toString()}
                           onChange={(e) => {
@@ -2723,13 +2629,13 @@ export default function TradingPlatform() {
                             if (isNaN(num) || normalized === '') {
                               setPositionSizeTokens(0)
                             } else {
-                              // Cap at available USDC balance
-                              setPositionSizeTokens(Math.min(num, availableUSDC))
+                              // Cap at available token balance
+                              setPositionSizeTokens(Math.min(num, availableTokens))
                             }
                           }}
                         />
                         <div className="flex items-center space-x-1 px-2 py-1 bg-muted rounded text-xs">
-                          <span className="font-medium">USDC</span>
+                          <span className="font-medium">{tradingPairSymbol || 'TOKEN'}</span>
                         </div>
                       </div>
                       
@@ -2739,7 +2645,7 @@ export default function TradingPlatform() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setPositionSizeTokens(availableUSDC * 0.25)}
+                            onClick={() => setPositionSizeTokens(availableTokens * 0.25)}
                             className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
                           >
                             25%
@@ -2747,7 +2653,7 @@ export default function TradingPlatform() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setPositionSizeTokens(availableUSDC * 0.5)}
+                            onClick={() => setPositionSizeTokens(availableTokens * 0.5)}
                             className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
                           >
                             50%
@@ -2755,7 +2661,7 @@ export default function TradingPlatform() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setPositionSizeTokens(availableUSDC)}
+                            onClick={() => setPositionSizeTokens(availableTokens)}
                             className="text-xs bg-transparent border border-gray-700 hover:bg-green-700 hover:border-green-700 hover:text-white cursor-pointer"
                           >
                             100%
@@ -2763,7 +2669,12 @@ export default function TradingPlatform() {
                         </div>
                       </div>
                       
-
+                      {/* USD Value Display */}
+                      {positionSizeUSD > 0 && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          ${positionSizeUSD.toFixed(2)}
+                        </div>
+                      )}
                     </div>
 
                     {/* Take Profit / Stop Loss */}
@@ -2851,17 +2762,17 @@ export default function TradingPlatform() {
 
                     {/* Action Button */}
                     {conditionType ? (
-                                              <Button 
-                          onClick={() => setCurrentStep(4)} 
-                          disabled={!positionSizeTokens || positionSizeTokens <= 0 || !tradeSide}
-                          className="w-full px-3 py-2 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
-                        >
-                          Configure Trigger
-                        </Button>
+                      <Button 
+                        onClick={() => setCurrentStep(4)} 
+                        disabled={!positionSizeTokens || positionSizeTokens <= 0}
+                        className="w-full px-3 py-2 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
+                      >
+                        Configure Trigger
+                      </Button>
                     ) : (
-                    <button className="w-full px-3 py-2 text-xs font-medium rounded bg-muted text-muted-foreground cursor-not-allowed">
+                      <button className="w-full px-3 py-2 text-xs font-medium rounded bg-muted text-muted-foreground cursor-not-allowed">
                         Select Condition First
-                    </button>
+                      </button>
                     )}
 
                     {/* Order Details */}
@@ -3854,158 +3765,116 @@ export default function TradingPlatform() {
           </Card>
         )}
 
-        {/* Step 5: Unified Review */}
+        {/* Step 5: Review */}
         {currentStep === 5 && (
-          <Card className="max-w-4xl mx-auto border-border/50 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-foreground">Review Conditional {selectedPlatform === "hypercore" ? "Trade" : "Swap"}</CardTitle>
-              <CardDescription>
-                Review your conditional {selectedPlatform === "hypercore" ? "trade" : "swap"} configuration before creating
+          <Card className="max-w-2xl mx-auto border-border/50 shadow-lg">
+            <CardHeader className="text-center pb-6">
+              <CardTitle className="text-2xl font-bold text-foreground">Review Your Conditional Swap</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Review your configuration before creating the conditional swap
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-medium text-foreground mb-2">Platform</h4>
-                  <div className="flex justify-center">
-                    <Badge variant="outline" className={selectedPlatform === "hypercore" ? "border-green-500/30 text-green-500" : "border-primary/30 text-primary"}>
-                      {selectedPlatform === "hyperevm" ? "HyperEVM" : "HyperCore"}
-                    </Badge>
-                  </div>
+              
+              {/* Platform Section */}
+              <div className="border-b border-border/50 pb-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-muted-foreground">Platform</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {selectedPlatform === "hyperevm" ? "HyperEVM" : "HyperCore"}
+                  </span>
                 </div>
+              </div>
 
-                <Separator />
-
-                {/* Platform-specific content */}
-                {selectedPlatform === "hypercore" ? (
-                  // HyperCore Trade Details
-                  <div>
-                    <h4 className="font-medium text-foreground mb-2">Trade Details</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <div className="text-sm text-muted-foreground">Pair</div>
-                        <div className="font-medium text-foreground">{triggerToken}</div>
+              {/* Swap Details Section */}
+              <div className="border-b border-border/50 pb-4">
+                <div className="mb-4">
+                  <span className="text-sm font-medium text-muted-foreground">Swap Details</span>
+                </div>
+                
+                <div className="flex items-center justify-center space-x-6">
+                  {/* Input Token */}
+                  <div className="text-center">
+                    <div className="flex items-center justify-center mb-2">
+                      <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-muted/20 border border-border/50">
+                        <img src={fromToken?.icon} alt={fromToken?.symbol} className="w-8 h-8 object-contain -mt-[-7%]" />
                       </div>
-                      <div className="space-y-2">
-                        <div className="text-sm text-muted-foreground">Side</div>
-                        <div className="font-medium text-foreground capitalize">{tradeSide}</div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-sm text-muted-foreground">Size</div>
-                        <div className="font-medium text-foreground">${positionSizeTokens.toFixed(2)} USDC</div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-sm text-muted-foreground">Leverage</div>
-                        <div className="font-medium text-foreground">{leverage}x</div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-sm text-muted-foreground">Order Type</div>
-                        <div className="font-medium text-foreground capitalize">{orderType}</div>
-                      </div>
-                      {orderType === "limit" && limitPrice && (
-                        <div className="space-y-2">
-                          <div className="text-sm text-muted-foreground">Limit Price</div>
-                          <div className="font-medium text-foreground">${parseFloat(limitPrice).toFixed(2)}</div>
-                        </div>
-                      )}
                     </div>
-
-                    {showTpSl && (tpPrice || slPrice) && (
-                      <>
-                        <Separator className="my-4" />
-                        <div>
-                          <h4 className="font-medium text-foreground mb-2">Take Profit / Stop Loss</h4>
-                          <div className="grid grid-cols-2 gap-4">
-                            {tpPrice && (
-                              <div className="space-y-2">
-                                <div className="text-sm text-muted-foreground">Take Profit</div>
-                                <div className="font-medium text-foreground">${parseFloat(tpPrice).toFixed(2)}</div>
-                                {gainValue && (
-                                  <div className="text-xs text-muted-foreground">Gain: {gainValue} {gainType}</div>
-                                )}
-                              </div>
-                            )}
-                            {slPrice && (
-                              <div className="space-y-2">
-                                <div className="text-sm text-muted-foreground">Stop Loss</div>
-                                <div className="font-medium text-foreground">${parseFloat(slPrice).toFixed(2)}</div>
-                                {lossValue && (
-                                  <div className="text-xs text-muted-foreground">Loss: {lossValue} {lossType}</div>
-                                )}
-                              </div>
-                            )}
+                    <div className="font-bold text-sm text-foreground">{fromToken?.symbol}</div>
+                    <div className="text-sm font-semibold text-primary mt-1">{fromAmount} {fromToken?.symbol}</div>
+                  </div>
+                  
+                  {/* Arrow and GlueX - Centered */}
+                  <div className="flex flex-col items-center justify-center space-y-3 min-h-[80px] ml-[10%] -mt-[3%]">
+                    <div className="flex items-center justify-center">
+                      <ArrowRight className="w-8 h-8 text-green-500" />
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <GlueXIcon width={48} height={12} className="text-muted-foreground" />
+                    </div>
+                  </div>
+                  
+                  {/* Output Tokens */}
+                  <div className="text-center min-w-[160px]">
+                    <div className="space-y-2">
+                      {toTokens.map((token, index) => (
+                        <div key={token.symbol} className="text-center">
+                          <div className="flex items-center justify-center mb-1">
+                            <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-muted/20 border border-border/50">
+                              <img src={token.icon} alt={token.symbol} className="w-8 h-8 object-contain" />
+                            </div>
+                          </div>
+                          <div className="font-bold text-sm text-foreground">{token.symbol}</div>
+                          <div className="text-sm font-semibold text-primary mt-1">
+                            {toPercentages[token.symbol] || "0"}%
                           </div>
                         </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  // HyperEVM Swap Details
-                  <div>
-                    <h4 className="font-medium text-foreground mb-2">Swap Pair</h4>
-                    <div className="flex items-center justify-center space-x-4">
-                      <div className="text-center">
-                        <div className="font-medium text-foreground">{fromToken?.symbol}</div>
-                        <div className="text-sm text-muted-foreground">{fromToken?.name}</div>
-                        <div className="text-sm text-muted-foreground">{fromAmount} {fromToken?.symbol}</div>
-                      </div>
-                      <div className="flex flex-col items-center space-y-1">
-                        <GlueXIcon width={48} height={12} className="text-blue-500" />
-                        <span className="text-xs text-muted-foreground font-medium">via GlueX</span>
-                      </div>
-                      <div className="text-center">
-                        <div className="space-y-2">
-                          {toTokens.map((token) => (
-                            <div key={token.symbol} className="text-center">
-                              <div className="font-medium text-foreground">{token.symbol}</div>
-                              <div className="text-sm text-muted-foreground">{token.name}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {toPercentages[token.symbol] || "0"}% allocation
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <Separator />
-
-                <div>
-                  <h4 className="font-medium text-foreground mb-2">Condition</h4>
-                  <div className="flex flex-col items-center space-y-2">
-                    <Badge variant="outline" className="border-primary/30 text-primary">
-                      {conditionTypes.find((c) => c.id === conditionType)?.name}
-                    </Badge>
-                    <div className="text-sm text-muted-foreground text-center">
-                      {triggerToken && source && timeframe && triggerWhen && targetValue ? (
-                        <span>
-                          {source.charAt(0).toUpperCase() + source.slice(1)} goes {triggerWhen} {targetValue} on {timeframe} chart of {triggerToken}
-                          <br />
-                          <span className="text-xs">Order will expire after {orderLifetime}</span>
-                        </span>
-                      ) : (
-                        <span>{conditionTypes.find((c) => c.id === conditionType)?.description}</span>
-                      )}
+                      ))}
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <Separator />
-
-                <div>
-                  <h4 className="font-medium text-foreground mb-2">Estimated Fees</h4>
-                  <div className="text-sm text-muted-foreground">
-                    <div className="flex justify-between">
-                      <span>Platform Fee:</span>
-                      <span>{selectedPlatform === "hypercore" ? "0.045%" : "0.1%"}</span>
+              {/* Condition Section */}
+              <div className="border-b border-border/50 pb-4">
+                <div className="mb-4">
+                  <span className="text-sm font-medium text-muted-foreground">Condition</span>
+                </div>
+                
+                <div className="text-center space-y-3">
+                  <div className="flex items-center justify-center space-x-3 mb-3">
+                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                      {(() => {
+                        const Icon = conditionTypes.find((c) => c.id === conditionType)?.icon;
+                        return Icon ? <Icon className="w-5 h-5 text-muted-foreground" /> : <Target className="w-5 h-5 text-muted-foreground" />;
+                      })()}
                     </div>
-                    <div className="flex justify-between">
-                      <span>Network Fee:</span>
-                      <span>{selectedPlatform === "hypercore" ? "~$1.20" : "~$2.50"}</span>
-                    </div>
+                    <Badge variant="outline" className="border-border/50 text-foreground px-4 py-2 text-base">
+                      {conditionTypes.find((c) => c.id === conditionType)?.name}
+                    </Badge>
                   </div>
+                  
+                  <div className="text-muted-foreground">
+                    {triggerToken && source && timeframe && triggerWhen ? (
+                      <div className="space-y-2">
+                        <div className="text-base font-medium text-foreground">
+                          {source.charAt(0).toUpperCase() + source.slice(1)} goes {triggerWhen} {secondSourceType === "value" && secondSourceValue ? secondSourceValue : source} on {triggerToken} {timeframe} chart
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-base">
+                        {conditionTypes.find((c) => c.id === conditionType)?.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Fees Section */}
+              <div className="pb-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-muted-foreground">Protocol Fee</span>
+                  <span className="text-sm font-semibold text-foreground">0.5%</span>
                 </div>
               </div>
 
@@ -4014,11 +3883,11 @@ export default function TradingPlatform() {
                   Back
                 </Button>
                 <Button 
-                  onClick={selectedPlatform === "hypercore" ? handleCreateHyperCoreOrder : handleCreateSwap}
+                  onClick={handleCreateSwap}
                   disabled={isCreating}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg cursor-pointer"
                 >
-                  {isCreating ? "Creating..." : `Create Conditional ${selectedPlatform === "hypercore" ? "Trade" : "Swap"}`}
+                  {isCreating ? "Creating..." : "Create Conditional Swap"}
                 </Button>
               </div>
             </CardContent>

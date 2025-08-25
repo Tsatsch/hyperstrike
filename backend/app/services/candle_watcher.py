@@ -13,6 +13,7 @@ import os
 import dotenv
 dotenv.load_dotenv()
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from app.services.swap import register_swap
 from app.models.order import OhlcvTriggerData, OrderTriggeredRequest, UpdateOrderStateRequest, ActualOutput, OrderOut
 import httpx
 
@@ -574,16 +575,28 @@ class CandleMonitor:
                         f"🔥 Trigger fired for {trig.pair} {trig.timeframe}: "
                         f"{lhs} {trig.trigger_when} {rhs}"
                     )
-                    
-                    # TODO: action: swap, update db
-                    triggered_order = OrderTriggeredRequest(
-                        order_id=self.order.id,
-                        input_value_usd=100, #to change later
-                        triggered_price=float(candle["c"]), # to change later
-                        actual_outputs=[] #to change later
-                    )
-                    await order_triggered(triggered_order, key, rt)
+                    order = await register_swap(self.order)
+                    if order is None:
+                        logger.info(f"Order {self.order.id} is not registered")
+                        continue
+                    actual_outputs = order.actual_outputs if order.actual_outputs else []
+                    #logger.info(f"Actual outputs: {actual_outputs}")
+                    if actual_outputs and len(actual_outputs) > 0:
+                        input_value_usd = 0
+                        for output in actual_outputs:
+                            if "input_amount_usd" in output:
+                                input_value_usd += output["input_amount_usd"]
+                        # TODO: action: swap, update db
+                        triggered_order = OrderTriggeredRequest(
+                            order_id=self.order.id,
+                            input_value_usd=input_value_usd, #to change later
+                            triggered_price=0, # to change later
+                            actual_outputs=None #to change later
+                        )
+                        await order_triggered(triggered_order, key, rt)
                     # await notify_trigger(trig, candle)
+                    else:
+                        logger.info(f"No actual outputs for order {self.order.id}")
 
                 #print out the current info of the source1 and source2
                 else:
@@ -593,6 +606,7 @@ class CandleMonitor:
             logger.error(f"Error processing closed candle: {e}")
 
 async def order_triggered(triggered_order: OrderTriggeredRequest, key: Tuple[str, str], rt: RuntimeTrigger):
+    logger.info(f"Updating order state to triggered for order {triggered_order.order_id}")
     active_triggers[key].remove(rt)
     async with httpx.AsyncClient() as client:
         await client.post(f"{os.getenv('BACKEND_URL')}/api/order/triggered", json=triggered_order.model_dump(), headers={"Authorization": f"Bearer {BACKEND_JWT}"})

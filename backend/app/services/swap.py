@@ -1,5 +1,6 @@
-from typing import List
+
 import logging
+from typing import List, Dict
 import os
 import sys
 import httpx
@@ -47,42 +48,37 @@ BACKEND_JWT = os.getenv("BACKEND_JWT") or ""
 
 ##orderOut has input amount in ether!
 
+async def finalize_swap(order: OrderOut, output_results: List[Dict]
+                        ):
+    logger.info(f"Finalizing swap for order: {order}")
+    try:
+        updated_order = order.model_copy()
+        updated_order.state = "done_successful"
+        updated_order.termination_message = "Instant swap completed"
+        actual_outputs = output_results
+        logger.info(f"Actual outputs: {actual_outputs}")
+        updated_order.actual_outputs = actual_outputs
+        return updated_order
+    except Exception as e:
+        logger.error(f"Error finalizing swap: {e}")
+        updated_order.state = "done_failed"
+        updated_order.termination_message = f"Instant swap failed: {str(e)}"
+        return updated_order
 
 
-
-async def register_swap(order: OrderOut) -> OrderOut:
+async def register_swap(order: OrderOut):
     logger.info(f"Registering instant swap for order: {order}")
     
     # For instant swaps, process immediately and return the updated order
-    if order.order_data.type == "instant_swap":
-        logger.info(f"Processing instant swap for order: {order}")
-        try:
-            output_results = await swap(order)
-            logger.info(json.dumps(output_results, indent=4))
-            
-            # Store the full output data in actual_outputs for frontend display
-            # We'll store the raw output data instead of converting to ActualOutput
-            actual_outputs = output_results
-            
-            # Create a new OrderOut with the actual_outputs populated
-            updated_order = order.model_copy()
-            updated_order.actual_outputs = actual_outputs
-            updated_order.state = "done_successful"
-            updated_order.termination_message = "Instant swap completed"
-            
-            return updated_order
-            
-        except Exception as e:
-            logger.error(f"Error processing instant swap: {e}")
-            # Return the original order with error state
-            error_order = order.model_copy()
-            error_order.state = "done_failed"
-            error_order.termination_message = f"Instant swap failed: {str(e)}"
-            return error_order
-    else:
-        # For conditional swaps, use the queue as before
-        await swap_requests_queue.put(order)
-        return order
+
+    try:
+        output_results = await swap(order)
+        return await finalize_swap(order, output_results)
+    # For conditional swaps, use the queue as before
+    except Exception as e:
+        logger.error(f"Error processing swap: {e}")
+        return None
+ 
 
 async def process_swaps():
     try:
@@ -91,7 +87,8 @@ async def process_swaps():
             logger.info(f"Processing instant swap for order: {order}")
             try:
                 output_results = await swap(order)
-                logger.info(json.dumps(output_results, indent=4))
+                updated_order = await finalize_swap(order, output_results)
+                return updated_order
             except Exception as e:
                 logger.error(f"Error processing swap: {e}")
             finally:
