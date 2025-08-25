@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { usePrivy } from '@privy-io/react-auth'
-import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, getUserXp, setOrderState } from '@/lib/api'
+import { exchangePrivyForBackendJwt, getBackendJwt, listOrders, listHyperCoreOrders, deleteHyperCoreOrder, getUserXp, setOrderState } from '@/lib/api'
 import { fetchTokenBalances, fetchHYPEBalance } from '@/lib/token-balances'
 import { HYPERLIQUID_TOKENS, DEFAULT_TOKEN_PRICES, getNativeToken, getTokenBySymbol } from '@/lib/tokens'
 import { updateAllTokenPrices } from '@/lib/hyperliquid-prices'
@@ -92,6 +92,37 @@ interface OrderOut {
   termination_message?: string
 }
 
+interface HyperCoreOrder {
+  id: number
+  user_id: number
+  user_wallet: string
+  trigger_data: {
+    value: number
+    condition: string
+    timeframe: string
+    source: string
+    pair: string
+  }
+  position_data: {
+    side: string
+    size: number
+    leverage: number
+    order_type: string
+    limit_price?: number
+    take_profit?: {
+      price: number
+      gain_value: number
+      gain_type: string
+    }
+    stop_loss?: {
+      price: number
+      loss_value: number
+      loss_type: string
+    }
+  }
+  created_at: string
+}
+
 // Using centralized token configuration
 const TOKENS = HYPERLIQUID_TOKENS
 const HYPE_ADDRESS = getNativeToken().address
@@ -147,6 +178,7 @@ function useEphemeralDoneState(orders: OrderOut[]) {
 export default function DashboardPage() {
   const { ready, authenticated, user, getAccessToken, login } = usePrivy()
   const [orders, setOrders] = useState<OrderOut[]>([])
+  const [hyperCoreOrders, setHyperCoreOrders] = useState<HyperCoreOrder[]>([])
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [balances, setBalances] = useState<Record<string, string>>({})
   const [loadingBalances, setLoadingBalances] = useState(false)
@@ -182,10 +214,18 @@ export default function DashboardPage() {
         // Ensure backend JWT exists
         const jwt = getBackendJwt() || await exchangePrivyForBackendJwt(getAccessToken, user.wallet.address)
         if (!jwt) throw new Error('Missing backend auth')
-        const data = await listOrders() as OrderOut[]
-        setOrders(Array.isArray(data) ? data : [])
+        
+        // Fetch both HyperEVM and HyperCore orders
+        const [evmData, coreData] = await Promise.all([
+          listOrders().catch(() => []),
+          listHyperCoreOrders().catch(() => [])
+        ])
+        
+        setOrders(Array.isArray(evmData) ? evmData : [])
+        setHyperCoreOrders(Array.isArray(coreData) ? coreData : [])
       } catch (e) {
         setOrders([])
+        setHyperCoreOrders([])
       } finally {
         setLoadingOrders(false)
       }
@@ -323,16 +363,24 @@ export default function DashboardPage() {
   }, [])
 
   const categorized = useMemo(() => {
-    const open: OrderOut[] = []
-    const done: OrderOut[] = []
-    const closed: OrderOut[] = []
+    const open: (OrderOut | HyperCoreOrder)[] = []
+    const done: (OrderOut | HyperCoreOrder)[] = []
+    const closed: (OrderOut | HyperCoreOrder)[] = []
+    
+    // Categorize HyperEVM orders
     for (const o of orders) {
       if (o.state === 'open') open.push(o)
       else if (o.state === 'done_successful' || o.state === 'done_failed') done.push(o)
       else if (o.state === 'successful' || o.state === 'failed') closed.push(o)
     }
+    
+    // Add HyperCore orders (all are considered "open" since they're pre-trigger)
+    for (const o of hyperCoreOrders) {
+      open.push(o)
+    }
+    
     return { open, done, closed }
-  }, [orders])
+  }, [orders, hyperCoreOrders])
 
   const handleMoveOneToClosed = async (orderId: number) => {
     try {
@@ -391,6 +439,27 @@ export default function DashboardPage() {
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, state: 'failed', termination_message: 'Canceled' } : o))
         // Fire-and-forget placeholder for future on-chain action
         requestOnChainAllowanceDecrease(order)
+      }
+    } finally {
+      setCancellingIds(prev => {
+        const next = new Set(prev)
+        next.delete(order.id)
+        return next
+      })
+      setConfirmCancelIds(prev => {
+        const next = new Set(prev)
+        next.delete(order.id)
+        return next
+      })
+    }
+  }
+
+  const handleDeleteHyperCoreOrder = async (order: HyperCoreOrder) => {
+    try {
+      setCancellingIds(prev => new Set(prev).add(order.id))
+      const ok = await deleteHyperCoreOrder(order.id)
+      if (ok) {
+        setHyperCoreOrders(prev => prev.filter(o => o.id !== order.id))
       }
     } finally {
       setCancellingIds(prev => {
@@ -477,7 +546,24 @@ export default function DashboardPage() {
 
   // Countdown is computed inline per order using created_at + timeframe
 
-  const formatOrderSummary = (o: OrderOut) => {
+  const formatOrderSummary = (o: OrderOut | HyperCoreOrder) => {
+    // Handle HyperCore orders
+    if ('trigger_data' in o) {
+      const hc = o as HyperCoreOrder
+      return {
+        inAmt: hc.position_data.size,
+        inSym: 'USDC',
+        outText: `${hc.position_data.side.toUpperCase()} ${hc.trigger_data.pair}`,
+        ruleText: `${hc.trigger_data.source} ${hc.trigger_data.condition} ${hc.trigger_data.value}`,
+        tfLabel: hc.trigger_data.timeframe,
+        whenText: 'Trigger',
+        lifetime: '24h',
+        platform: 'HyperCore'
+      }
+    }
+    
+    // Handle HyperEVM orders
+    const evm = o as OrderOut
     const inSym = addressToSymbol(o.swap_data?.input_token)
     const inAmt = o.swap_data?.input_amount
 
@@ -902,12 +988,26 @@ export default function DashboardPage() {
                 <div className="space-y-2">
                   {categorized.open.map(o => {
                     const s = formatOrderSummary(o)
+                    const isHyperCore = 'trigger_data' in o
+                    const platformBadge = isHyperCore ? (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                        HyperCore
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                        HyperEVM
+                      </span>
+                    )
+                    
                     return (
-                      <div key={o.id} className="relative group border rounded-lg p-3 bg-blue-500/10 border-blue-500/20">
-                        <div className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-blue-500/30 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+                      <div key={o.id} className={`relative group border rounded-lg p-3 ${isHyperCore ? 'bg-green-500/10 border-green-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
+                        <div className={`pointer-events-none absolute inset-0 rounded-lg ring-2 ${isHyperCore ? 'ring-green-500/30' : 'ring-blue-500/30'} opacity-0 transition-opacity duration-150 group-hover:opacity-100`} />
                         <div className="flex items-center justify-between">
-                          <div className="text-foreground font-medium">
-                            {formatAmount(s.inAmt)} {s.inSym} → {s.outText}
+                          <div className="flex items-center gap-2">
+                            <div className="text-foreground font-medium">
+                              {formatAmount(s.inAmt)} {s.inSym} → {s.outText}
+                            </div>
+                            {platformBadge}
                           </div>
                           {(s.ruleText || s.tfLabel) && (
                             <div className="text-xs text-muted-foreground mt-1">
@@ -915,24 +1015,47 @@ export default function DashboardPage() {
                               {s.tfLabel ? (s.ruleText ? ' • ' : '') + `TF ${s.tfLabel}` : null}
                             </div>
                           )}
-                          <Button
-                            variant={confirmCancelIds.has(o.id) ? "destructive" : "outline"}
-                            size="sm"
-                            onClick={() => {
-                              if (confirmCancelIds.has(o.id)) {
-                                handleCancelOpenOrder(o)
-                              } else {
-                                setConfirmCancelIds(prev => new Set(prev).add(o.id))
-                              }
-                            }}
-                            disabled={cancellingIds.has(o.id)}
-                            className="cursor-pointer"
-                          >
-                            {cancellingIds.has(o.id) ? 'Canceling…' : (confirmCancelIds.has(o.id) ? 'Confirm cancel' : 'Cancel')}
-                          </Button>
+                          {!isHyperCore ? (
+                            <Button
+                              variant={confirmCancelIds.has(o.id) ? "destructive" : "outline"}
+                              size="sm"
+                              onClick={() => {
+                                if (confirmCancelIds.has(o.id)) {
+                                  handleCancelOpenOrder(o as OrderOut)
+                                } else {
+                                  setConfirmCancelIds(prev => new Set(prev).add(o.id))
+                                }
+                              }}
+                              disabled={cancellingIds.has(o.id)}
+                              className="cursor-pointer"
+                            >
+                              {cancellingIds.has(o.id) ? 'Canceling…' : (confirmCancelIds.has(o.id) ? 'Confirm cancel' : 'Cancel')}
+                            </Button>
+                          ) : (
+                            <Button
+                              variant={confirmCancelIds.has(o.id) ? "destructive" : "outline"}
+                              size="sm"
+                              onClick={() => {
+                                if (confirmCancelIds.has(o.id)) {
+                                  handleDeleteHyperCoreOrder(o as HyperCoreOrder)
+                                } else {
+                                  setConfirmCancelIds(prev => new Set(prev).add(o.id))
+                                }
+                              }}
+                              disabled={cancellingIds.has(o.id)}
+                              className="cursor-pointer"
+                            >
+                              {cancellingIds.has(o.id) ? 'Deleting…' : (confirmCancelIds.has(o.id) ? 'Confirm delete' : 'Delete')}
+                            </Button>
+                          )}
                         </div>
                         <div className="text-[11px] text-muted-foreground mt-1">
                           {(() => {
+                            if (isHyperCore) {
+                              const hc = o as HyperCoreOrder
+                              return `#${o.id} • ${hc.position_data.leverage}x • ${hc.position_data.order_type} • Created ${formatDate(new Date(hc.created_at).getTime())}`
+                            }
+                            
                             const lifetimeMs = timeframeToMs(s.lifetime)
                             if (!lifetimeMs) return `#${o.id} • ${s.whenText}`
                             const created = normalizeTimestamp(o.time)

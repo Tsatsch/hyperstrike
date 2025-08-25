@@ -109,7 +109,8 @@ export function MarketInfo({ symbol, triggerToken, setTriggerToken, tokens, clas
   // Extract base symbol for display
   const baseSymbol = symbol.includes('-') ? symbol.split('-')[0] : 
                     symbol.includes('/') ? symbol.split('/')[0] : symbol
-  const displaySymbol = symbol.includes('/') ? symbol : `${baseSymbol}-USDT`
+  // Use the actual selected symbol instead of hardcoding USDT
+  const displaySymbol = symbol
   const isPerp = symbol.includes('-') || (!symbol.includes('/'))
 
   return (

@@ -49,6 +49,33 @@ export async function listOrders(): Promise<unknown> {
   return response.json();
 }
 
+export async function listHyperCoreOrders(): Promise<unknown> {
+  const jwt = getBackendJwt();
+  if (!jwt) throw new Error('Missing backend JWT');
+  
+  // Get user info to get user_id
+  const userMe = await getUserMe();
+  if (!userMe) throw new Error('Failed to get user info');
+  
+  const response = await fetch(`${config.apiUrl}/api/hypercore/pre-trigger-orders/${userMe.user_id}`, {
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+    },
+  });
+  if (!response.ok) throw new Error('Failed to fetch HyperCore orders');
+  return response.json();
+}
+
+export async function deleteHyperCoreOrder(orderId: number): Promise<boolean> {
+  const jwt = getBackendJwt();
+  if (!jwt) return false;
+  const response = await fetch(`${config.apiUrl}/api/hypercore/pre-trigger-orders/${orderId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  return response.ok;
+}
+
 export async function expireOrder(orderId: number, reason = "time ran out"): Promise<boolean> {
   const jwt = getBackendJwt();
   if (!jwt) return false;

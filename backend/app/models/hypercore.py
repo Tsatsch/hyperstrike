@@ -46,7 +46,7 @@ class PreTriggerOrder(BaseModel):
 
 class PreTriggerOrderCreate(BaseModel):
     """Create pre-trigger order request"""
-    user_id: int
+    user_id: Optional[int] = None
     user_wallet: str
     trigger_data: Dict[str, Any]
     position_data: Dict[str, Any]
