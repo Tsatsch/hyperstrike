@@ -3,6 +3,7 @@ from app.db.sb import supabase
 from app.models.order import OrderCreateRequest, OrderOut, OhlcvTriggerData
 import asyncio
 import logging
+from app.services.swap import register_swap
 from app.services.candle_watcher import register_ohlcv_trigger
 
 logger = logging.getLogger(__name__)
@@ -43,9 +44,15 @@ async def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet:
         if (saved.get("order_data") and 
             saved["order_data"].get("type") == "ohlcv_trigger" and
             saved["order_data"].get("ohlcv_trigger")):
-            trigger = OhlcvTriggerData(**saved["order_data"]["ohlcv_trigger"])
+           
             await register_ohlcv_trigger(OrderOut(**saved))
-        
+            return OrderOut(**saved)
+        elif (saved.get("order_data") and 
+              saved["order_data"].get("type") == "instant_swap"):
+          
+            # For instant swaps, wait for the processing to complete and return the updated order
+            updated_order = await register_swap(OrderOut(**saved))
+            return updated_order
         # elif (saved.get("order_data") and 
         #     saved["order_data"].get("type") == "wallet_activity"):
         #     trigger = saved["order_data"]["wallet_activity"]
@@ -59,7 +66,8 @@ async def create_order(order_req: OrderCreateRequest, user_id: int, user_wallet:
         #to extend later 
         logger.warning(f"Failed to subscribe to market data for new order: {e}")
     
-    return OrderOut(**saved)
+    
+
 
 
 async def _subscribe_to_market_data(symbol: str, timeframe: str):

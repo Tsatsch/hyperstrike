@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Set, Tuple
 from app.services.orders import get_all_open_orders
+from app.services.swap import process_swaps
 from app.services.candle_watcher import ensure_subscription
 import time
 import os
@@ -137,6 +138,7 @@ async def start_background_tasks():
     try:
         logger.info("Starting background tasks...")
         await StartupService.run_startup_tasks()
+        asyncio.create_task(process_swaps())
         logger.info("Background tasks started successfully")
     except Exception as e:
         logger.error(f"Error starting background tasks: {e}")
