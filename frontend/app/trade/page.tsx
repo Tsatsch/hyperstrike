@@ -72,7 +72,7 @@ const initialTokens: Token[] = HYPERLIQUID_TOKENS.map(token => ({
 const conditionTypes = [
   {
     id: "ohlcv_trigger",
-    name: "OHLCV Trigger",
+    name: "Technical Analysis",
     description: "Execute based on OHLCV data of a token",
     icon: TrendingUp,
     popular: true,
@@ -85,10 +85,17 @@ const conditionTypes = [
     popular: true,
   },
   {
-    id: "time_based",
-    name: "Time Based",
-    description: "Execute at a specific time or interval",
+    id: "twap",
+    name: "TWAP",
+    description: "Execute based on Time-Weighted Average Price",
     icon: Clock,
+    popular: false,
+  },
+  {
+    id: "gridbot",
+    name: "Gridbot",
+    description: "Execute grid trading strategy",
+    icon: BarChart3,
     popular: false,
   },
   {
@@ -4785,7 +4792,7 @@ export default function TradingPlatform() {
                             <div className={`text-xs mt-1 ${
                               isDisabled ? "text-muted-foreground/30" : "text-muted-foreground"
                             }`}>
-                              {isOHLCV ? condition.description : "Coming Soon"}
+                              {isOHLCV ? condition.description : "Not Tested"}
                             </div>
                           </div>
                         </div>
@@ -4795,7 +4802,7 @@ export default function TradingPlatform() {
                       <p className="text-sm">
                         {isOHLCV 
                           ? condition.description
-                          : "Coming Soon"
+                          : "Not Tested"
                         }
                       </p>
                     </TooltipContent>
