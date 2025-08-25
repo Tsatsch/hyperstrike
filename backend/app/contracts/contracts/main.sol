@@ -30,7 +30,7 @@ contract Main is Ownable, ReentrancyGuard, Pausable {
     uint256 public protocolFee = 50;
     uint256 public constant MAX_FEE = 500;
     
-    address public withdrawalWallet = 0x9E02783Ad42C5A94a0De60394f2996E44458B782;
+    address public withdrawalWallet = 0xBf879877e05430aC14fcEF6fE102DF29e264b114;
     string public name = "Hypertick";
     
     modifier onlyOwnerOrAuthorized() {

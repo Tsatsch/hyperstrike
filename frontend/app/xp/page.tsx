@@ -6,8 +6,8 @@ import { useEffect, useState } from 'react'
 import { exchangePrivyForBackendJwt, getBackendJwt, getUserXp, getOrCreateUser, getUserMe, getLeaderboard, claimDailyXp, getDailyEligibility, UserMe } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronRight } from "lucide-react"
-import { Activity, Wallet } from "lucide-react"
+import { ChevronDown, ChevronRight, Users } from "lucide-react"
+import { Wallet } from "lucide-react"
 import { WalletButton } from "@/components/WalletButton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { XpButton } from "@/components/XpButton"
@@ -166,8 +166,8 @@ export default function XpPage() {
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center space-x-4">
             <a href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-              <Activity className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold">HyperTrade</span>
+              <img src="/logo.svg" alt="Hypertick" className="h-6 w-6" />
+              <span className="text-xl font-bold">Hypertick</span>
             </a>
             <nav className="hidden md:flex items-center space-x-6 text-sm">
               <a href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
@@ -232,7 +232,13 @@ export default function XpPage() {
 
           <Card className="border-border/50 md:col-span-2">
             <CardHeader>
-              <CardTitle className="text-foreground">Leaderboard</CardTitle>
+              <CardTitle className="text-foreground flex items-center justify-between">
+                <span>Leaderboard</span>
+                <div className="flex items-center text-xs text-muted-foreground bg-muted/30 px-2 py-1 rounded-md">
+                  <Users className="w-3 h-3 mr-1" />
+                  <span>with .hl names</span>
+                </div>
+              </CardTitle>
               <CardDescription>Top users by XP</CardDescription>
             </CardHeader>
             <CardContent>
@@ -242,15 +248,39 @@ export default function XpPage() {
                 <div className="space-y-2">
                   {leaders.map((u, idx) => {
                     const key = u.wallet_address.toLowerCase()
-                    const displayName = hlNames[key] || shortenAddress(u.wallet_address)
-                    const hasHlName = !!hlNames[key]
                     const profile = hlProfiles[key]
+                    const hlName = hlNames[key]
+                    const hasHlName = !!hlName
                     const avatarUrl = profile?.avatarUrl || ''
                     const isExpanded = !!expanded[key]
-                    // pick up to two non-avatar records from texts
+                    
+                    // Determine display name with priority: Name value > .hl name > shortened address
+                    let displayName: string
+                    let hasNameRecord = false
+                    if (profile?.texts?.Name) {
+                      // Priority 1: Show Name value prominently, then .hl name if available
+                      hasNameRecord = true
+                      if (hlName) {
+                        // Render with styled components for visual distinction
+                        displayName = `${profile.texts.Name} (${hlName})`
+                      } else {
+                        displayName = profile.texts.Name
+                      }
+                    } else if (hlName) {
+                      // Priority 2: .hl name only
+                      displayName = hlName
+                    } else {
+                      // Priority 3: Shortened address
+                      displayName = shortenAddress(u.wallet_address)
+                    }
+                    
+                    // Filter out Name key and avatar-related entries from expandable texts
                     const entries = profile ? Object.entries(profile.texts) : []
-                    const nonAvatarEntries = entries.filter(([k]) => !k.toLowerCase().includes('avatar'))
+                    const nonAvatarEntries = entries.filter(([k]) => 
+                      !k.toLowerCase().includes('avatar') && k !== 'Name'
+                    )
                     const firstTwo = nonAvatarEntries.slice(0, 2)
+                    
                     return (
                       <div key={u.user_id} className="border border-border/50 rounded-lg px-3 py-2">
                         <div className="flex items-center justify-between">
@@ -260,15 +290,29 @@ export default function XpPage() {
                               <AvatarImage src={(avatarUrl && avatarUrl.startsWith('https://')) ? avatarUrl : '/placeholder-user.jpg'} alt={displayName} />
                               <AvatarFallback>{(displayName || 'U')[0]?.toUpperCase()}</AvatarFallback>
                             </Avatar>
-                            <span className="text-foreground text-sm font-medium">{displayName}</span>
+                            <span className="text-foreground text-sm font-medium">
+                              {hasNameRecord && hlName ? (
+                                <>
+                                  <span>{profile!.texts.Name}</span>
+                                  <span className="text-xs text-muted-foreground ml-1">({hlName})</span>
+                                </>
+                              ) : (
+                                displayName
+                              )}
+                            </span>
                             {hasHlName && (
-                              <button
-                                aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                                className="text-muted-foreground hover:text-foreground transition-colors"
-                                onClick={() => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))}
-                              >
-                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                              </button>
+                              <>
+                                <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-md">.hl</span>
+                                {firstTwo.length > 0 && (
+                                  <button
+                                    aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    onClick={() => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))}
+                                  >
+                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                           <div className="text-foreground text-sm font-semibold">{u.xp}</div>
