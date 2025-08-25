@@ -119,11 +119,11 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
         
         {/* Cute floating cat */}
-        <div className="absolute top-20 left-8 md:left-20 z-10 hidden md:block">
+        <div className="absolute top-20 left-8 z-10 hidden md:block">
           <img 
             src="/purr_success.png" 
             alt="Success cat" 
-            className="w-16 h-16 md:w-20 md:h-20 opacity-80 hover:opacity-100 transition-opacity"
+            className="w-20 h-auto opacity-80 hover:opacity-100 transition-opacity"
           />
         </div>
         
