@@ -106,7 +106,7 @@ export default function LandingPage() {
           <div className="ml-auto flex items-center space-x-4">
             <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
               <a href="/dashboard" className="flex items-center">
-                Launch d'App
+                Launch dApp
               </a>
             </Button>
             <ThemeToggle />
@@ -359,7 +359,7 @@ export default function LandingPage() {
             <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
               <a href="/dashboard" className="flex items-center">
                 <Play className="w-4 h-4 mr-2" />
-                Launch d'App
+                Launch dApp
               </a>
             </Button>
           </div>
