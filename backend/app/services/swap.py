@@ -149,7 +149,9 @@ async def swap(order: OrderOut):
             output_split.token = w3.to_checksum_address(output_split.token)
         
         input_token_decimals = await get_token_decimals(input_token)
+        
         input_amount_wei = int(input_amount * (10 ** input_token_decimals))
+        input_amount_wei = int(input_amount_wei*0.9999)
 
 
 
@@ -255,12 +257,13 @@ async def swap(order: OrderOut):
             # Simulate transaction
             simulation_success, output_amount, gas_price = await user_gluex_object.simulate_transaction(quote_result)
             if not simulation_success:
-                logger.error(f"❌ Simulation failed for {input_token} to {output_token.token} with amount {amount_to_swap}")
+                logger.error(f"❌ Simulation failed for {input_token} to {output_token.token} with amount {amount_to_swap} to amount {output_amount}")
                 continue
                 
-            logger.info(f"✅ Simulation successful for {input_token} to {output_token.token} with amount {amount_to_swap}")
+            logger.info(f"✅ Simulation successful for {input_token} to {output_token.token} with amount {amount_to_swap} to amount {output_amount}")
             
             # Send transaction
+            
             txn_hash, gas_used, gas_price = await user_gluex_object.send_transaction(quote_result, gas_price)
             if txn_hash is None:
                 logger.error(f"❌ Transaction failed for {input_token} to {output_token.token} with amount {amount_to_swap}")
