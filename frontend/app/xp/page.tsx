@@ -353,7 +353,7 @@ export default function XpPage() {
                   </div>
                   <div className="border border-border/50 rounded-lg p-3">
                     <div className="font-medium text-foreground">Invite friends</div>
-                    <div className="text-muted-foreground">Earn 200 XP when your invitee places their first order.</div>
+                    <div className="text-muted-foreground">Earn %10 of your invitee's triggered orders.</div>
                   </div>
                   <div className="border border-border/50 rounded-lg p-3">
                     <div className="font-medium text-foreground">Daily visit</div>
