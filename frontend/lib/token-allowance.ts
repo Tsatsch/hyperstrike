@@ -1,23 +1,33 @@
-// Dynamic import of ethers to avoid build issues
+// Dynamic import of ethers to avoid build issues for HyperEVM (Chain ID: 999)
 
-// Default contract address (if env variable not set)
+// Default contract address on HyperEVM (if env variable not set)
 const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || 
   "0x07389a7F85B8F5d9a509ef4f607eFd41FEc8b129";
 
-// Minimal ERC20 ABI (allowance, approve, and decimals functions)
+
+const HYPEREVM_CHAIN_ID = 999;
+const HYPEREVM_RPC_URL = "https://rpc.hyperliquid.xyz/evm";
+
 const erc20Abi = [
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
   "function decimals() view returns (uint8)"
 ];
 
-// Provider function to get ethers provider dynamically
+
 const getProvider = async () => {
   const { ethers } = await import('ethers');
-  return new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_ETH_RPC_URL || "https://rpc.hyperliquid.xyz/evm");
+  const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_ETH_RPC_URL || HYPEREVM_RPC_URL);
+  
+  // Verify we're connecting to HyperEVM
+  const network = await provider.getNetwork();
+  if (network.chainId !== BigInt(HYPEREVM_CHAIN_ID)) {
+    throw new Error(`Wrong network! Expected HyperEVM (Chain ID: ${HYPEREVM_CHAIN_ID}), got Chain ID: ${network.chainId}`);
+  }
+  
+  return provider;
 };
 
-// Check allowance
 export const checkAllowance = async (
   tokenAddress: string,
   ownerAddress: string,
@@ -48,14 +58,20 @@ export const getTokenDecimals = async (tokenAddress: string) => {
   }
 };
 
-// Approve token spending
+// Approve token spending on HyperEVM
 export const approveToken = async (
   tokenAddress: string,
   inputAmount: string,
-  signer: any // ethers signer from user's wallet
+  signer: any 
 ) => {
   try {
     const { ethers } = await import('ethers');
+    
+    // Ensure we're on HyperEVM chain
+    const network = await signer.provider.getNetwork();
+    if (network.chainId !== BigInt(HYPEREVM_CHAIN_ID)) {
+      throw new Error(`Wrong network! Expected HyperEVM (Chain ID: ${HYPEREVM_CHAIN_ID}), got Chain ID: ${network.chainId}`);
+    }
     
     // Get token decimals
     const decimals = await getTokenDecimals(tokenAddress);
@@ -76,7 +92,7 @@ export const approveToken = async (
     // Return transaction for user to confirm
     return tx;
   } catch (err) {
-    console.error("Error approving token:", err);
+    console.error("Error approving token on HyperEVM:", err);
     throw err;
   }
 };

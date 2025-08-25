@@ -1,4 +1,5 @@
 "use client"
+// Trading platform for HyperEVM (Chain ID: 999) - not Ethereum mainnet
 
 import { useState, useEffect } from "react"
 import './slider-styles.css'
@@ -37,6 +38,8 @@ import { wrapHype, WHYPE_CONTRACT_ADDRESS } from "@/lib/wrap"
 import { TransactionMonitor } from "@/components/TransactionMonitor"
 import { useTransactionMonitor } from "@/hooks/use-transaction-monitor"
 import { useGlueXPrices } from "@/hooks/use-gluex-prices"
+import { useToast } from "@/hooks/use-toast"
+import { Toaster } from "@/components/ui/toaster"
 import { MarketInfo } from "@/components/MarketInfo"
 
 interface Token {
@@ -203,6 +206,96 @@ export default function TradingPlatform() {
   // Transaction confirmation states
   const [pendingTransactions, setPendingTransactions] = useState<Set<string>>(new Set());
   
+  // Function to check if user is on HyperEVM network
+  const checkHyperEVMNetwork = async (provider: any) => {
+    try {
+      const network = await provider.getNetwork();
+      if (network.chainId !== BigInt(999)) {
+        // Show toast notification to switch networks
+        toast({
+          title: "Wrong Network",
+          description: `You're on Chain ID ${network.chainId}. Please switch to HyperEVM (Chain ID: 999) to continue.`,
+          action: (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={switchToHyperEVM}
+              className="ml-2"
+            >
+              Switch to HyperEVM
+            </Button>
+          ),
+        });
+        return false; // Not on HyperEVM
+      }
+      
+      return true; // On HyperEVM
+    } catch (error) {
+      console.error('Error checking network:', error);
+      return false;
+    }
+  };
+  
+  // Function to switch to HyperEVM network
+  const switchToHyperEVM = async () => {
+    try {
+      if ((window as any).ethereum) {
+        await (window as any).ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x3e7' }], // 999 in hex
+        });
+        
+        // Show success toast
+        toast({
+          title: "Network Switched!",
+          description: "Successfully switched to HyperEVM network. You can now proceed with your transaction.",
+        });
+      }
+    } catch (error: any) {
+      // If the network doesn't exist, add it
+      if (error.code === 4902) {
+        try {
+          await (window as any).ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x3e7', // 999 in hex
+              chainName: 'HyperEVM',
+              nativeCurrency: {
+                name: 'HYPE',
+                symbol: 'HYPE',
+                decimals: 18,
+              },
+              rpcUrls: ['https://rpc.hyperliquid.xyz/evm'],
+              blockExplorerUrls: ['https://explorer.hyperliquid.xyz'],
+            }],
+          });
+          
+          // Show success toast for adding network
+          toast({
+            title: "Network Added!",
+            description: "HyperEVM network has been added to your wallet. You can now proceed with your transaction.",
+          });
+        } catch (addError) {
+          console.error('Error adding HyperEVM network:', addError);
+          
+          // Show error toast
+          toast({
+            title: "Network Error",
+            description: "Failed to add HyperEVM network. Please try again or add it manually.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        // Show error toast for other errors
+        toast({
+          title: "Network Error",
+          description: "Failed to switch to HyperEVM network. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+  
   // GlueX price monitoring (background only - no UI display)
   useGlueXPrices({
     fromToken,
@@ -211,6 +304,9 @@ export default function TradingPlatform() {
     userAddress: user?.wallet?.address,
     isEnabled: authenticated && currentStep === 2 && selectedPlatform === 'hyperevm' && !!fromToken && toTokens.length > 0
   });
+  
+  // Toast notifications
+  const { toast } = useToast();
   
   // Monitor transaction status changes to update UI state
   useEffect(() => {
@@ -1502,6 +1598,12 @@ export default function TradingPlatform() {
       }
       
       const ethersProvider = new BrowserProvider((window as any).ethereum)
+      
+      // Ensure we're on HyperEVM (Chain ID: 999)
+      if (!(await checkHyperEVMNetwork(ethersProvider))) {
+        return; // Don't proceed with the transaction
+      }
+      
       const signer = await ethersProvider.getSigner()
 
       // Call wrap function with popup transaction
@@ -1555,6 +1657,12 @@ export default function TradingPlatform() {
       }
       
       const ethersProvider = new BrowserProvider((window as any).ethereum)
+      
+      // Ensure we're on HyperEVM (Chain ID: 999)
+      if (!(await checkHyperEVMNetwork(ethersProvider))) {
+        return; // Don't proceed with the transaction
+      }
+      
       const signer = await ethersProvider.getSigner()
 
       // Call approve function with popup transaction
@@ -4322,6 +4430,9 @@ export default function TradingPlatform() {
         transactions={transactions}
         onRemoveTransaction={removeTransaction}
       />
+      
+      {/* Toast Notifications */}
+      <Toaster />
     </div>
   )
 } 
